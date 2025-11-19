@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { toggleMaintenanceMode } from '../../store/authSlice';
-import { addUser, deleteUser, changePassword } from '../../store/usersSlice';
+import { addUser, deleteUser, changePassword, changeUserRole } from '../../store/usersSlice';
 import { RootState } from '../../store/store';
 import { Shield, Power, Users, Trash2, KeyRound, UserPlus } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -49,6 +49,13 @@ export function AdminDashboard() {
     }));
     setChangePassUsername('');
     setChangePassNew('');
+  };
+
+  const handleChangeUserRole = (username: string, newRole: 'admin' | 'staff' | 'user') => {
+    dispatch(changeUserRole({
+      username: username,
+      role: newRole,
+    }));
   };
 
   return (
@@ -116,10 +123,10 @@ export function AdminDashboard() {
                   <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-zinc-800 border-zinc-700">
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="staff">Staff</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                  <SelectContent className="bg-black border-zinc-700">
+                    <SelectItem value="user" className="text-white hover:bg-zinc-800 focus:bg-zinc-800">User</SelectItem>
+                    <SelectItem value="staff" className="text-white hover:bg-zinc-800 focus:bg-zinc-800">Staff</SelectItem>
+                    <SelectItem value="admin" className="text-white hover:bg-zinc-800 focus:bg-zinc-800">Admin</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -191,14 +198,26 @@ export function AdminDashboard() {
                       )}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteUser(user.username)}
-                    className="text-red-500 hover:text-red-400 hover:bg-red-950"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Select value={user.role} onValueChange={(val: any) => handleChangeUserRole(user.username, val)}>
+                      <SelectTrigger className="bg-zinc-700 border-zinc-600 text-white w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-black border-zinc-600">
+                        <SelectItem value="user" className="text-white hover:bg-zinc-800 focus:bg-zinc-800 cursor-pointer">User</SelectItem>
+                        <SelectItem value="staff" className="text-white hover:bg-zinc-800 focus:bg-zinc-800 cursor-pointer">Staff</SelectItem>
+                        <SelectItem value="admin" className="text-white hover:bg-zinc-800 focus:bg-zinc-800 cursor-pointer">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteUser(user.username)}
+                      className="text-red-500 hover:text-red-400 hover:bg-red-950"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

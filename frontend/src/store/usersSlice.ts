@@ -71,8 +71,14 @@ const usersSlice = createSlice({
         user.avatarUrl = action.payload.avatarUrl;
       }
     },
+    changeUserRole: (state, action: PayloadAction<{ username: string; role: 'admin' | 'staff' | 'user' }>) => {
+      const user = state.allUsers.find(u => u.username === action.payload.username);
+      if (user) {
+        user.role = action.payload.role;
+      }
+    },
   },
 });
 
-export const { addUser, deleteUser, changePassword, banUser, unbanUser, warnUser, clearWarnings, updateUserDisplayName, updateUserAvatar } = usersSlice.actions;
+export const { addUser, deleteUser, changePassword, banUser, unbanUser, warnUser, clearWarnings, updateUserDisplayName, updateUserAvatar, changeUserRole } = usersSlice.actions;
 export default usersSlice.reducer;

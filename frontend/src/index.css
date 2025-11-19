@@ -756,6 +756,10 @@
     width: calc(var(--spacing) * 24);
   }
 
+  .w-\[120px\] {
+    width: 120px;
+  }
+
   .w-fit {
     width: fit-content;
   }
@@ -1123,6 +1127,10 @@
     .bg-yellow-900\/20 {
       background-color: color-mix(in oklab, var(--color-yellow-900) 20%, transparent);
     }
+  }
+
+  .bg-zinc-700 {
+    background-color: var(--color-zinc-700);
   }
 
   .bg-zinc-800 {
@@ -1651,6 +1659,10 @@
 
   .focus\:bg-accent:focus {
     background-color: var(--accent);
+  }
+
+  .focus\:bg-zinc-800:focus {
+    background-color: var(--color-zinc-800);
   }
 
   .focus\:text-accent-foreground:focus {
