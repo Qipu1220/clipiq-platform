@@ -1,8 +1,10 @@
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../store/authSlice';
 import { RootState } from '../store/store';
-import { Play, LogOut, User } from 'lucide-react';
+import { Play, LogOut, User, Bell } from 'lucide-react';
 import { Button } from './ui/button';
+import { useState } from 'react';
+import { NotificationPanel } from './NotificationPanel';
 
 interface HeaderProps {
   onNavigate: (page: string) => void;
@@ -12,9 +14,18 @@ interface HeaderProps {
 export function Header({ onNavigate, currentPage }: HeaderProps) {
   const dispatch = useDispatch();
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
+  const notifications = useSelector((state: RootState) => state.notifications.notifications);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleLogout = () => {
     dispatch(logout());
+  };
+
+  const handleVideoClick = (videoId: string) => {
+    setShowNotifications(false);
+    onNavigate('home');
   };
 
   return (
@@ -86,6 +97,30 @@ export function Header({ onNavigate, currentPage }: HeaderProps) {
             <span className="text-sm">{currentUser?.username}</span>
             <span className="text-xs text-zinc-500">({currentUser?.role})</span>
           </div>
+
+          {currentUser?.role === 'user' && (
+            <>
+              <div 
+                className="relative"
+                onClick={() => setShowNotifications(!showNotifications)}
+              >
+                <Bell className="w-4 h-4 text-white cursor-pointer" />
+                {unreadCount > 0 && (
+                  <div className="absolute top-0 right-0 bg-red-500 text-white text-xs px-1 rounded-full">
+                    {unreadCount}
+                  </div>
+                )}
+              </div>
+
+              {showNotifications && (
+                <div className="absolute top-16 right-4">
+                  <NotificationPanel
+                    onVideoClick={handleVideoClick}
+                  />
+                </div>
+              )}
+            </>
+          )}
 
           <Button
             variant="ghost"

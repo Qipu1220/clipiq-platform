@@ -3,7 +3,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import { likeVideo, addComment, incrementViews } from '../../store/videosSlice';
 import { addVideoReport } from '../../store/reportsSlice';
-import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User } from 'lucide-react';
+import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
+import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User, Bell, BellOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
@@ -37,6 +38,10 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
 
   // Find the uploader info from users
   const uploaderInfo = video ? users.find(u => u.username === video.uploader) : null;
+
+  // Check if user is subscribed to the uploader
+  const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
+  const isSubscribed = currentUser ? subscriptions[currentUser.username]?.includes(video.uploader) : false;
 
   useEffect(() => {
     // Increment views only once when component mounts with this videoId
@@ -91,6 +96,22 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
     if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
     if (views >= 1000) return `${(views / 1000).toFixed(1)}K`;
     return views.toString();
+  };
+
+  const handleSubscribe = () => {
+    if (!currentUser || currentUser.username === video.uploader) return;
+    
+    if (isSubscribed) {
+      dispatch(unsubscribeFromUser({
+        follower: currentUser.username,
+        following: video.uploader,
+      }));
+    } else {
+      dispatch(subscribeToUser({
+        follower: currentUser.username,
+        following: video.uploader,
+      }));
+    }
   };
 
   return (
@@ -176,24 +197,49 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
               </div>
 
               <div className="p-4 bg-zinc-900 rounded-lg">
-                <div 
-                  className="flex items-center gap-3 mb-2 cursor-pointer hover:opacity-80 transition-opacity w-fit"
-                  onClick={() => onViewUserProfile?.(video.uploader)}
-                >
-                  {uploaderInfo?.avatarUrl ? (
-                    <img 
-                      src={uploaderInfo.avatarUrl} 
-                      alt={video.uploader}
-                      className="w-10 h-10 rounded-full object-cover border-2 border-red-600"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-zinc-800 border-2 border-red-600 flex items-center justify-center">
-                      <User className="w-5 h-5 text-red-600" />
-                    </div>
+                <div className="flex items-center justify-between mb-3">
+                  <div 
+                    className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => onViewUserProfile?.(video.uploader)}
+                  >
+                    {uploaderInfo?.avatarUrl ? (
+                      <img 
+                        src={uploaderInfo.avatarUrl} 
+                        alt={video.uploader}
+                        className="w-10 h-10 rounded-full object-cover border-2 border-red-600"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-zinc-800 border-2 border-red-600 flex items-center justify-center">
+                        <User className="w-5 h-5 text-red-600" />
+                      </div>
+                    )}
+                    <p className="text-white hover:text-red-500 transition-colors">
+                      {uploaderInfo?.displayName || video.uploader}
+                    </p>
+                  </div>
+                  
+                  {currentUser.username !== video.uploader && (
+                    <Button
+                      onClick={handleSubscribe}
+                      className={isSubscribed 
+                        ? "bg-zinc-700 hover:bg-zinc-600 text-white"
+                        : "bg-red-600 hover:bg-red-700 text-white"
+                      }
+                      size="sm"
+                    >
+                      {isSubscribed ? (
+                        <>
+                          <BellOff className="w-4 h-4 mr-2" />
+                          Subscribed
+                        </>
+                      ) : (
+                        <>
+                          <Bell className="w-4 h-4 mr-2" />
+                          Subscribe
+                        </>
+                      )}
+                    </Button>
                   )}
-                  <p className="text-white hover:text-red-500 transition-colors">
-                    {uploaderInfo?.displayName || video.uploader}
-                  </p>
                 </div>
                 <p className="text-zinc-400">{video.description}</p>
               </div>

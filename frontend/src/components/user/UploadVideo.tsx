@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { addVideo } from '../../store/videosSlice';
+import { addNotification } from '../../store/notificationsSlice';
 import { RootState } from '../../store/store';
 import { Upload, Video } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -16,6 +17,7 @@ interface UploadVideoProps {
 export function UploadVideo({ onUploadComplete }: UploadVideoProps) {
   const dispatch = useDispatch();
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
+  const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -24,8 +26,10 @@ export function UploadVideo({ onUploadComplete }: UploadVideoProps) {
   const handleUpload = () => {
     if (!title.trim() || !currentUser) return;
 
+    const videoId = Date.now().toString();
+
     dispatch(addVideo({
-      id: Date.now().toString(),
+      id: videoId,
       title,
       description,
       uploader: currentUser.username,
@@ -36,6 +40,19 @@ export function UploadVideo({ onUploadComplete }: UploadVideoProps) {
       uploadDate: Date.now(),
       comments: [],
     }));
+
+    // Send notifications to all followers
+    Object.entries(subscriptions).forEach(([follower, following]) => {
+      if (Array.isArray(following) && following.includes(currentUser.username)) {
+        dispatch(addNotification({
+          type: 'new_video',
+          uploaderUsername: currentUser.username,
+          videoId: videoId,
+          videoTitle: title,
+          timestamp: Date.now(),
+        }));
+      }
+    });
 
     setTitle('');
     setDescription('');

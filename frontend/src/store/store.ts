@@ -3,6 +3,7 @@ import authReducer from './authSlice';
 import videosReducer from './videosSlice';
 import usersReducer from './usersSlice';
 import reportsReducer from './reportsSlice';
+import notificationsReducer from './notificationsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -10,6 +11,7 @@ export const store = configureStore({
     videos: videosReducer,
     users: usersReducer,
     reports: reportsReducer,
+    notifications: notificationsReducer,
   },
 });
 
