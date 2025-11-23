@@ -1,0 +1,18 @@
+[
+  {
+    "username": "admin",
+    "email": "admin@clipiq.com",
+    "password": "Admin@123456",
+    "role": "admin",
+    "display_name": "System Administrator",
+    "bio": "Main system administrator account"
+  },
+  {
+    "username": "staff",
+    "email": "staff@clipiq.com",
+    "password": "Staff@123456",
+    "role": "staff",
+    "display_name": "Content Moderator",
+    "bio": "Content moderation and user support"
+  }
+]

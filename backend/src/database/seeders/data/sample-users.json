@@ -1,0 +1,37 @@
+[
+  {
+    "username": "johndoe",
+    "email": "john@example.com",
+    "password": "Test@123456",
+    "display_name": "John Doe",
+    "bio": "Tech enthusiast and content creator"
+  },
+  {
+    "username": "janedoe",
+    "email": "jane@example.com",
+    "password": "Test@123456",
+    "display_name": "Jane Doe",
+    "bio": "Gaming and tutorial videos"
+  },
+  {
+    "username": "bobsmith",
+    "email": "bob@example.com",
+    "password": "Test@123456",
+    "display_name": "Bob Smith",
+    "bio": "Music and art content"
+  },
+  {
+    "username": "alicewang",
+    "email": "alice@example.com",
+    "password": "Test@123456",
+    "display_name": "Alice Wang",
+    "bio": "Educational content creator"
+  },
+  {
+    "username": "charliejones",
+    "email": "charlie@example.com",
+    "password": "Test@123456",
+    "display_name": "Charlie Jones",
+    "bio": "Vlog and lifestyle videos"
+  }
+]

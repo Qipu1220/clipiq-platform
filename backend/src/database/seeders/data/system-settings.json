@@ -1,0 +1,102 @@
+[
+  {
+    "key": "site_name",
+    "value": "ClipIQ Platform",
+    "description": "Name of the platform displayed in UI"
+  },
+  {
+    "key": "site_description",
+    "value": "Video sharing platform for creative content",
+    "description": "Platform description for SEO"
+  },
+  {
+    "key": "max_upload_size_mb",
+    "value": "500",
+    "description": "Maximum video upload size in megabytes"
+  },
+  {
+    "key": "max_video_duration_seconds",
+    "value": "3600",
+    "description": "Maximum video duration in seconds (1 hour)"
+  },
+  {
+    "key": "allowed_video_formats",
+    "value": "mp4,webm,mov,avi",
+    "description": "Comma-separated list of allowed video formats"
+  },
+  {
+    "key": "maintenance_mode",
+    "value": "false",
+    "description": "Enable/disable maintenance mode (true/false)"
+  },
+  {
+    "key": "allow_user_registration",
+    "value": "true",
+    "description": "Allow new user registrations (true/false)"
+  },
+  {
+    "key": "require_email_verification",
+    "value": "true",
+    "description": "Require email verification for new accounts"
+  },
+  {
+    "key": "default_videos_per_page",
+    "value": "20",
+    "description": "Default number of videos per page in listings"
+  },
+  {
+    "key": "enable_comments",
+    "value": "true",
+    "description": "Enable/disable comments globally"
+  },
+  {
+    "key": "enable_likes",
+    "value": "true",
+    "description": "Enable/disable likes globally"
+  },
+  {
+    "key": "auto_ban_threshold",
+    "value": "3",
+    "description": "Number of warnings before automatic ban"
+  },
+  {
+    "key": "report_review_required",
+    "value": "true",
+    "description": "Require staff review for all reports"
+  },
+  {
+    "key": "max_comment_length",
+    "value": "1000",
+    "description": "Maximum comment length in characters"
+  },
+  {
+    "key": "thumbnail_quality",
+    "value": "80",
+    "description": "JPEG quality for auto-generated thumbnails (0-100)"
+  },
+  {
+    "key": "video_processing_enabled",
+    "value": "true",
+    "description": "Enable automatic video processing (transcoding, thumbnails)"
+  },
+  {
+    "key": "minio_bucket_videos",
+    "value": "videos",
+    "description": "MinIO bucket name for video files"
+  },
+  {
+    "key": "minio_bucket_thumbnails",
+    "value": "thumbnails",
+    "description": "MinIO bucket name for thumbnail images"
+  },
+  {
+    "key": "minio_bucket_avatars",
+    "value": "avatars",
+    "description": "MinIO bucket name for user avatars"
+  },
+  {
+    "key": "session_timeout_minutes",
+    "value": "60",
+    "description": "User session timeout in minutes"
+  }
+]

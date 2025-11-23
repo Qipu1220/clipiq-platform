@@ -25,52 +25,98 @@ Nền tảng chia sẻ video (YouTube Clone) với hệ thống phân quyền 3 
 
 ## 🔧 Cài đặt và Chạy
 
-### 1. Clone repository
-```bash
-git clone <repository-url>
-cd clipiq-platform
-```
+### Khởi động hệ thống
 
-### 2. Chạy tất cả services với Docker Compose
 ```bash
+# Khởi động tất cả services (tự động migrate & seed)
+make up
+
+# Hoặc dùng docker-compose trực tiếp
 docker-compose up -d
 ```
 
-Lệnh này sẽ tự động:
+### ✨ Auto-Initialization
+
+Mỗi lần chạy `docker-compose up`, hệ thống sẽ **tự động**:
 - ✅ Khởi động PostgreSQL database (port 5432)
 - ✅ Khởi động MinIO S3 storage (port 9000, 9001)
 - ✅ Tạo các buckets: clipiq-videos, clipiq-thumbnails, clipiq-avatars
+- ✅ Chạy database migrations (tạo tables)
+- ✅ **Seed 62 accounts** (2 admin + 10 staff + 50 users)
+- ✅ **Upload 100 videos** từ sample-videos/ (2 videos/user)
 - ✅ Khởi động Backend API (port 5000)
 - ✅ Khởi động Frontend (port 5173)
-- ✅ Tự động cài đặt dependencies cho cả frontend và backend
 
-### 3. Truy cập ứng dụng
+**Thời gian khởi động**: ~5-10 phút (bao gồm upload videos)
+
+> **📝 Lưu ý**: Seeders sẽ chạy mỗi lần khởi động. Nếu data đã tồn tại, seeders sẽ skip hoặc update. Để reset hoàn toàn database, dùng `make reset-db`.
+
+### Truy cập ứng dụng
 
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:5000/api/v1
 - **MinIO Console**: http://localhost:9001 (minioadmin/minioadmin)
 - **PostgreSQL**: localhost:5432 (clipiq_user/clipiq_password)
 
-### 4. Chạy migrations và seed data (lần đầu)
+## 👥 Tài khoản mặc định (Auto-seeded)
 
-```bash
-# Chạy migrations
-docker exec clipiq_backend npm run migrate
+Hệ thống tự động tạo **62 accounts** khi chạy lần đầu:
 
-# Seed initial data
-docker exec clipiq_backend npm run seed
+### Administrators (2)
+```
+Email: admin@clipiq.com
+Password: Admin@123456
+
+Email: admin2@clipiq.com
+Password: Admin@123456
 ```
 
-## 👥 Tài khoản mặc định
+### Staff (10)
+```
+Email: mod1@clipiq.com đến mod10@clipiq.com
+Password: Staff@123456
+```
 
-Sau khi seed data:
-- **Admin**: admin001 / 123456
-- **Staff**: staff001 / 123456
-- **User**: user001 / 123456
-- **User**: user002 / 123456
-- **Creator**: creator123 / 123456
+### Regular Users (50)
+```
+Email: user001@test.com đến user050@test.com
+Password: User@123456
+```
 
-## 🛠️ Lệnh Docker hữu ích
+**⚠️ Lưu ý**: Đổi password trong production!
+
+## 📹 Sample Videos
+
+- **100 videos** tự động upload từ Pixabay
+- **Phân bổ**: Mỗi user có 2 videos
+- **Categories**: Tech, Gaming, Cooking, Fitness, DIY, Music, Travel, v.v.
+
+## 🛠️ Makefile Commands
+
+```bash
+# Quick Start
+make up              # Khởi động (auto-migrate & seed)
+make down            # Dừng tất cả
+make restart         # Restart
+make status          # Xem trạng thái
+
+# Logs
+make logs            # Tất cả logs
+make logs-backend    # Backend logs
+make logs-db         # Database logs
+
+# Database
+make migrate         # Chạy migrations thủ công
+make seed            # Seed data thủ công
+make shell-db        # Mở PostgreSQL shell
+make reset-db        # Xóa tất cả + seed lại (⚠️ Cẩn thận!)
+
+# Cleanup
+make clean           # Xóa containers (giữ data)
+make rebuild         # Rebuild images
+```
+
+## 🛠️ Docker Commands (Manual)
 
 ```bash
 # Xem logs

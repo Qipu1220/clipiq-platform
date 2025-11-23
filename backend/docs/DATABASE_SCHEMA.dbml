@@ -1,0 +1,289 @@
+// ClipIQ Database Schema - REVISED with UUID PKs
+// View diagram: https://dbdiagram.io/
+// Updated: 2025-11-23
+
+Table users {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  username        varchar(50) [unique, not null]
+  email           varchar(255) [unique, not null, note: 'For password recovery']
+  role            varchar(20) [not null, default: 'user', note: 'admin | staff | user']
+  password        varchar(255) [not null, note: 'Bcrypt hashed']
+  banned          boolean [default: false]
+  ban_expiry      timestamp [null, note: 'NULL = permanent ban']
+  ban_reason      text [null, note: 'Reason for ban']
+  warnings        int [default: 0]
+  display_name    varchar(100) [null]
+  bio             text [null, note: 'User biography/description']
+  avatar_url      varchar(500) [null, note: 'MinIO S3 URL']
+  created_at      timestamp [default: `now()`]
+  updated_at      timestamp [default: `now()`]
+
+  indexes {
+    username [unique]
+    email [unique]
+    role
+    (banned, ban_expiry) [note: 'For checking active bans']
+  }
+
+  Note: 'Users - supports admin, staff, and regular users'
+}
+
+Table videos {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  title           varchar(255) [not null]
+  description     text [null]
+  uploader_id     uuid [not null, ref: > users.id]
+  thumbnail_url   varchar(500) [null, note: 'MinIO S3 URL']
+  video_url       varchar(500) [not null, note: 'MinIO S3 key']
+  duration        int [null, note: 'Video duration in seconds']
+  views           int [default: 0]
+  status          varchar(20) [default: 'active', note: 'active | deleted | flagged']
+  upload_date     timestamp [default: `now()`]
+  created_at      timestamp [default: `now()`]
+  updated_at      timestamp [default: `now()`]
+
+  indexes {
+    uploader_id
+    upload_date [note: 'For sorting by date']
+    views [note: 'For trending videos']
+    status
+    title [note: 'For text search']
+  }
+
+  Note: 'Videos - metadata stored in DB, files in MinIO S3'
+}
+
+Table likes {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  user_id         uuid [not null, ref: > users.id]
+  video_id        uuid [not null, ref: > videos.id]
+  created_at      timestamp [default: `now()`]
+
+  indexes {
+    (user_id, video_id) [unique, note: 'Prevent duplicate likes']
+    video_id [note: 'For counting likes per video']
+    created_at
+  }
+
+  Note: 'Likes - Many-to-Many between users and videos'
+}
+
+Table comments {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  video_id        uuid [not null, ref: > videos.id]
+  user_id         uuid [not null, ref: > users.id]
+  parent_id       uuid [null, ref: > comments.id, note: 'For nested replies']
+  text            text [not null]
+  edited          boolean [default: false]
+  created_at      timestamp [default: `now()`]
+  updated_at      timestamp [default: `now()`]
+
+  indexes {
+    video_id
+    user_id
+    parent_id [note: 'For threaded comments']
+    created_at
+  }
+
+  Note: 'Comments - supports nested replies via parent_id'
+}
+
+Table user_reports {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  reported_user_id uuid [not null, ref: > users.id]
+  reported_by_id  uuid [not null, ref: > users.id]
+  reason          text [not null]
+  evidence_url    varchar(500) [null, note: 'Optional evidence (screenshot)']
+  status          varchar(20) [default: 'pending', note: 'pending | reviewed | resolved']
+  reviewed_by_id  uuid [null, ref: > users.id, note: 'Staff who reviewed']
+  reviewed_at     timestamp [null]
+  resolution_note text [null, note: 'Staff notes on resolution']
+  created_at      timestamp [default: `now()`]
+
+  indexes {
+    status
+    reported_user_id
+    reported_by_id
+    created_at
+  }
+
+  Note: 'User reports - Staff moderation'
+}
+
+Table video_reports {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  video_id        uuid [not null, ref: > videos.id]
+  reported_by_id  uuid [not null, ref: > users.id]
+  reason          text [not null]
+  evidence_url    varchar(500) [null]
+  status          varchar(20) [default: 'pending', note: 'pending | reviewed | resolved']
+  reviewed_by_id  uuid [null, ref: > users.id]
+  reviewed_at     timestamp [null]
+  resolution_note text [null]
+  created_at      timestamp [default: `now()`]
+
+  indexes {
+    status
+    video_id
+    reported_by_id
+    created_at
+  }
+
+  Note: 'Video reports - Staff moderation'
+}
+
+Table appeals {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  user_id         uuid [not null, ref: > users.id]
+  reason          text [not null]
+  status          varchar(20) [default: 'pending', note: 'pending | approved | denied']
+  reviewed_by_id  uuid [null, ref: > users.id, note: 'Staff/admin who reviewed']
+  reviewed_at     timestamp [null]
+  resolution_note text [null]
+  created_at      timestamp [default: `now()`]
+
+  indexes {
+    status
+    user_id
+    created_at
+  }
+
+  Note: 'Ban appeals - Users appeal their bans'
+}
+
+Table subscriptions {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  follower_id     uuid [not null, ref: > users.id, note: 'User who follows']
+  following_id    uuid [not null, ref: > users.id, note: 'Channel being followed']
+  created_at      timestamp [default: `now()`]
+
+  indexes {
+    (follower_id, following_id) [unique, note: 'Prevent duplicate subscriptions']
+    following_id [note: 'For counting followers']
+    created_at
+  }
+
+  Note: 'Subscriptions - Self-referencing M:N'
+}
+
+Table notifications {
+  id                uuid [primary key, default: `gen_random_uuid()`]
+  type              varchar(50) [not null, note: 'new_video | new_comment | new_like | etc']
+  receiver_id       uuid [not null, ref: > users.id]
+  actor_id          uuid [null, ref: > users.id, note: 'User who triggered notification']
+  video_id          uuid [null, ref: > videos.id]
+  comment_id        uuid [null, ref: > comments.id]
+  message           text [null, note: 'Notification message']
+  read              boolean [default: false]
+  created_at        timestamp [default: `now()`]
+
+  indexes {
+    receiver_id
+    (receiver_id, read) [note: 'For unread notifications']
+    created_at
+    type
+  }
+
+  Note: 'Notifications - Flexible design for multiple event types'
+}
+
+Table view_history {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  user_id         uuid [not null, ref: > users.id]
+  video_id        uuid [not null, ref: > videos.id]
+  watch_duration  int [null, note: 'Seconds watched']
+  completed       boolean [default: false]
+  created_at      timestamp [default: `now()`]
+
+  indexes {
+    user_id
+    video_id
+    (user_id, video_id) [note: 'For tracking user watch history']
+    created_at
+  }
+
+  Note: 'View history - Track user video views and watch time'
+}
+
+Table playlists {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  user_id         uuid [not null, ref: > users.id]
+  name            varchar(255) [not null]
+  description     text [null]
+  visibility      varchar(20) [default: 'public', note: 'public | unlisted | private']
+  created_at      timestamp [default: `now()`]
+  updated_at      timestamp [default: `now()`]
+
+  indexes {
+    user_id
+    visibility
+    created_at
+  }
+
+  Note: 'Playlists - User-created video collections'
+}
+
+Table playlist_videos {
+  id              uuid [primary key, default: `gen_random_uuid()`]
+  playlist_id     uuid [not null, ref: > playlists.id]
+  video_id        uuid [not null, ref: > videos.id]
+  position        int [not null, note: 'Order in playlist']
+  added_at        timestamp [default: `now()`]
+
+  indexes {
+    playlist_id
+    (playlist_id, video_id) [unique]
+    (playlist_id, position) [unique, note: 'Ensure unique positions']
+  }
+
+  Note: 'Playlist videos - M:N between playlists and videos'
+}
+
+// System configuration table (optional)
+Table system_settings {
+  key             varchar(100) [primary key]
+  value           text [not null]
+  description     text [null]
+  updated_at      timestamp [default: `now()`]
+
+  Note: 'System settings - Global configuration'
+}
+
+// ===================
+// Relationships Summary
+// ===================
+
+// Users
+Ref: videos.uploader_id > users.id [delete: cascade]
+Ref: likes.user_id > users.id [delete: cascade]
+Ref: comments.user_id > users.id [delete: cascade]
+Ref: user_reports.reported_user_id > users.id [delete: cascade]
+Ref: user_reports.reported_by_id > users.id [delete: cascade]
+Ref: user_reports.reviewed_by_id > users.id [delete: set null]
+Ref: video_reports.reported_by_id > users.id [delete: cascade]
+Ref: video_reports.reviewed_by_id > users.id [delete: set null]
+Ref: appeals.user_id > users.id [delete: cascade]
+Ref: appeals.reviewed_by_id > users.id [delete: set null]
+Ref: subscriptions.follower_id > users.id [delete: cascade]
+Ref: subscriptions.following_id > users.id [delete: cascade]
+Ref: notifications.receiver_id > users.id [delete: cascade]
+Ref: notifications.actor_id > users.id [delete: set null]
+Ref: view_history.user_id > users.id [delete: cascade]
+Ref: playlists.user_id > users.id [delete: cascade]
+
+// Videos
+Ref: likes.video_id > videos.id [delete: cascade]
+Ref: comments.video_id > videos.id [delete: cascade]
+Ref: video_reports.video_id > videos.id [delete: cascade]
+Ref: notifications.video_id > videos.id [delete: set null]
+Ref: view_history.video_id > videos.id [delete: cascade]
+Ref: playlist_videos.video_id > videos.id [delete: cascade]
+
+// Comments (self-referencing for nested replies)
+Ref: comments.parent_id > comments.id [delete: cascade]
+
+// Playlists
+Ref: playlist_videos.playlist_id > playlists.id [delete: cascade]
+
+// Notifications (optional references)
+Ref: notifications.comment_id > comments.id [delete: set null]
