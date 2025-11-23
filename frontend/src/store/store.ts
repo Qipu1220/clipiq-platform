@@ -4,6 +4,8 @@ import videosReducer from './videosSlice';
 import usersReducer from './usersSlice';
 import reportsReducer from './reportsSlice';
 import notificationsReducer from './notificationsSlice';
+import playlistsReducer from './playlistsSlice';
+import viewHistoryReducer from './viewHistorySlice';
 
 export const store = configureStore({
   reducer: {
@@ -12,6 +14,8 @@ export const store = configureStore({
     users: usersReducer,
     reports: reportsReducer,
     notifications: notificationsReducer,
+    playlists: playlistsReducer,
+    viewHistory: viewHistoryReducer,
   },
 });
 

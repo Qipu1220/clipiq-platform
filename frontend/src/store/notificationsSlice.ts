@@ -1,18 +1,22 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 export interface Notification {
-  id: string;
-  type: 'new_video';
-  uploaderUsername: string;
-  videoId: string;
-  videoTitle: string;
+  id: string;  // UUID
+  type: 'new_video' | 'new_comment' | 'new_like' | 'new_subscriber' | 'system';  // NEW: Multiple types
+  receiverId: string;  // NEW: User ID receiving notification
+  actorId?: string;  // NEW: User ID who triggered notification
+  actorUsername?: string;  // Denormalized
+  videoId?: string;  // Optional video reference
+  videoTitle?: string;  // Denormalized
+  commentId?: string;  // NEW: Optional comment reference
+  message?: string;  // NEW: Custom message for system notifications
   timestamp: number;
   read: boolean;
 }
 
 interface NotificationsState {
   notifications: Notification[];
-  subscriptions: { [username: string]: string[] }; // username -> array of usernames they follow
+  subscriptions: { [userId: string]: string[] }; // userId -> array of userIds they follow
 }
 
 const initialState: NotificationsState = {
@@ -24,19 +28,19 @@ const notificationsSlice = createSlice({
   name: 'notifications',
   initialState,
   reducers: {
-    subscribeToUser: (state, action: PayloadAction<{ follower: string; following: string }>) => {
-      const { follower, following } = action.payload;
-      if (!state.subscriptions[follower]) {
-        state.subscriptions[follower] = [];
+    subscribeToUser: (state, action: PayloadAction<{ followerId: string; followingId: string }>) => {
+      const { followerId, followingId } = action.payload;
+      if (!state.subscriptions[followerId]) {
+        state.subscriptions[followerId] = [];
       }
-      if (!state.subscriptions[follower].includes(following)) {
-        state.subscriptions[follower].push(following);
+      if (!state.subscriptions[followerId].includes(followingId)) {
+        state.subscriptions[followerId].push(followingId);
       }
     },
-    unsubscribeFromUser: (state, action: PayloadAction<{ follower: string; following: string }>) => {
-      const { follower, following } = action.payload;
-      if (state.subscriptions[follower]) {
-        state.subscriptions[follower] = state.subscriptions[follower].filter(u => u !== following);
+    unsubscribeFromUser: (state, action: PayloadAction<{ followerId: string; followingId: string }>) => {
+      const { followerId, followingId } = action.payload;
+      if (state.subscriptions[followerId]) {
+        state.subscriptions[followerId] = state.subscriptions[followerId].filter(u => u !== followingId);
       }
     },
     addNotification: (state, action: PayloadAction<Omit<Notification, 'id' | 'read'>>) => {

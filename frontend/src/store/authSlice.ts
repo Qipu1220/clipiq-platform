@@ -1,14 +1,20 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 export interface User {
+  id: string;  // UUID
   username: string;
+  email: string;  // NEW: Required for registration
   role: 'admin' | 'staff' | 'user';
   password: string;
   banned?: boolean;
   banExpiry?: number;
+  banReason?: string;  // NEW: Reason for ban
   warnings: number;
   displayName?: string;
+  bio?: string;  // NEW: User biography
   avatarUrl?: string;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 interface AuthState {
@@ -48,8 +54,13 @@ const authSlice = createSlice({
         state.currentUser.avatarUrl = action.payload;
       }
     },
+    updateBio: (state, action: PayloadAction<string>) => {
+      if (state.currentUser) {
+        state.currentUser.bio = action.payload;
+      }
+    },
   },
 });
 
-export const { login, logout, toggleMaintenanceMode, updateDisplayName, updateAvatar } = authSlice.actions;
+export const { login, logout, toggleMaintenanceMode, updateDisplayName, updateAvatar, updateBio } = authSlice.actions;
 export default authSlice.reducer;

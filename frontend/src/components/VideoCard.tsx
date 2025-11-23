@@ -1,6 +1,7 @@
 import { Video } from '../store/videosSlice';
 import { Eye, Heart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { formatCount, formatTimeAgo, formatDuration } from '../utils/formatters';
 
 interface VideoCardProps {
   video: Video;
@@ -8,22 +9,6 @@ interface VideoCardProps {
 }
 
 export function VideoCard({ video, onClick }: VideoCardProps) {
-  const formatViews = (views: number) => {
-    if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
-    if (views >= 1000) return `${(views / 1000).toFixed(1)}K`;
-    return views.toString();
-  };
-
-  const formatDate = (timestamp: number) => {
-    const diff = Date.now() - timestamp;
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days} days ago`;
-    if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
-    return `${Math.floor(days / 30)} months ago`;
-  };
-
   return (
     <div 
       className="cursor-pointer group"
@@ -35,23 +20,38 @@ export function VideoCard({ video, onClick }: VideoCardProps) {
           alt={video.title}
           className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
         />
+        {video.duration && (
+          <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
+            {formatDuration(video.duration)}
+          </div>
+        )}
+        {video.status === 'flagged' && (
+          <div className="absolute top-2 left-2 bg-yellow-600 text-white text-xs px-2 py-1 rounded">
+            Flagged
+          </div>
+        )}
+        {video.status === 'deleted' && (
+          <div className="absolute top-2 left-2 bg-red-600 text-white text-xs px-2 py-1 rounded">
+            Deleted
+          </div>
+        )}
       </div>
       
       <div className="space-y-1">
         <h3 className="text-white line-clamp-2 group-hover:text-red-500 transition-colors">
           {video.title}
         </h3>
-        <p className="text-zinc-400 text-sm">{video.uploader}</p>
+        <p className="text-zinc-400 text-sm">{video.uploaderUsername}</p>
         <div className="flex items-center gap-3 text-zinc-500 text-sm">
           <span className="flex items-center gap-1">
             <Eye className="w-3 h-3" />
-            {formatViews(video.views)}
+            {formatCount(video.views)}
           </span>
           <span className="flex items-center gap-1">
             <Heart className="w-3 h-3" />
-            {video.likes.length}
+            {formatCount(video.likes.length)}
           </span>
-          <span>{formatDate(video.uploadDate)}</span>
+          <span>{formatTimeAgo(video.uploadDate)}</span>
         </div>
       </div>
     </div>
