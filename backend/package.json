@@ -1,0 +1,29 @@
+{
+  "name": "clipiq-backend",
+  "version": "1.0.0",
+  "description": "Backend API for ClipIQ - YouTube Clone Platform",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "migrate": "node src/database/migrate.js",
+    "seed": "node src/database/seeders/index.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
+  },
+  "keywords": [
+    "clipiq",
+    "video",
+    "platform",
+    "nodejs",
+    "express",
+    "postgresql",
+    "minio"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

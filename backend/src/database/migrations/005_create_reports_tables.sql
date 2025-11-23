@@ -1,0 +1,1 @@
+-- Create video_reports, user_reports, appeals tables

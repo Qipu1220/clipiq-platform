@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: clipiq_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: clipiq_user
+      POSTGRES_PASSWORD: clipiq_password
+      POSTGRES_DB: clipiq_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clipiq_user -d clipiq_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clipiq_network
+
+  # MinIO S3 Storage
+  minio:
+    image: minio/minio:latest
+    container_name: clipiq_minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"      # API
+      - "9001:9001"      # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - clipiq_network
+
+  # MinIO Client - Create buckets on startup
+  minio-setup:
+    image: minio/mc:latest
+    container_name: clipiq_minio_setup
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb myminio/clipiq-videos --ignore-existing;
+      /usr/bin/mc mb myminio/clipiq-thumbnails --ignore-existing;
+      /usr/bin/mc mb myminio/clipiq-avatars --ignore-existing;
+      /usr/bin/mc anonymous set download myminio/clipiq-videos;
+      /usr/bin/mc anonymous set download myminio/clipiq-thumbnails;
+      /usr/bin/mc anonymous set download myminio/clipiq-avatars;
+      exit 0;
+      "
+    networks:
+      - clipiq_network
+
+  # Backend API
+  backend:
+    image: node:18-alpine
+    container_name: clipiq_backend
+    working_dir: /app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - DATABASE_URL=postgresql://clipiq_user:clipiq_password@postgres:5432/clipiq_db
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=clipiq_user
+      - DB_PASSWORD=clipiq_password
+      - DB_NAME=clipiq_db
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_USE_SSL=false
+      - MINIO_BUCKET_VIDEOS=clipiq-videos
+      - MINIO_BUCKET_THUMBNAILS=clipiq-thumbnails
+      - MINIO_BUCKET_AVATARS=clipiq-avatars
+      - JWT_SECRET=clipiq-super-secret-jwt-key-change-in-production
+      - JWT_EXPIRE=7d
+      - JWT_REFRESH_SECRET=clipiq-refresh-token-secret
+      - JWT_REFRESH_EXPIRE=30d
+      - CORS_ORIGIN=http://localhost:5173
+    command: sh -c "npm install && npm run dev"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - clipiq_network
+
+  # Frontend
+  frontend:
+    image: node:18-alpine
+    container_name: clipiq_frontend
+    working_dir: /app
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:5000/api/v1
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend
+    stdin_open: true
+    tty: true
+    networks:
+      - clipiq_network
+
+volumes:
+  postgres_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  clipiq_network:
+    driver: bridge

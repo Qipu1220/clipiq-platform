@@ -1,0 +1,1 @@
+-- Create notifications table

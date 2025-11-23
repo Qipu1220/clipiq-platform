@@ -1,0 +1,1 @@
+-- Create system_settings table

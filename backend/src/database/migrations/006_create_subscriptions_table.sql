@@ -1,0 +1,1 @@
+-- Create subscriptions table
