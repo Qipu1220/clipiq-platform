@@ -8,7 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Minio from 'minio';
+import * as Minio from 'minio';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -217,7 +217,7 @@ export async function seed(client) {
       
       // Check if video already exists in database
       const existingVideo = await client.query(
-        'SELECT id FROM videos WHERE minio_object_name = $1',
+        'SELECT id FROM videos WHERE video_url = $1',
         [videoFile]
       );
       
@@ -242,29 +242,24 @@ export async function seed(client) {
         // Insert video record
         const result = await client.query(
           `INSERT INTO videos (
-            user_id,
+            uploader_id,
             title,
             description,
-            minio_bucket,
-            minio_object_name,
-            thumbnail_path,
+            video_url,
+            thumbnail_url,
             duration,
-            file_size_bytes,
             status,
-            views,
-            reported
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, false)
+            views
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0)
           RETURNING id, title`,
           [
             user.id,
             metadata.title,
             metadata.description,
-            bucketName,
-            videoFile,
+            videoFile, // Store just filename, MinIO bucket is in env config
             getThumbnailPath(videoFile),
             Math.floor(Math.random() * 600) + 30, // Random duration 30-630 seconds
-            fileSizeBytes,
-            'published' // All videos are published
+            'active' // All videos are active
           ]
         );
         

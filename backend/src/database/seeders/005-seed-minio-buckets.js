@@ -4,7 +4,7 @@
  * Initialize MinIO buckets and optionally upload sample files.
  */
 
-import Minio from 'minio';
+import * as Minio from 'minio';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
