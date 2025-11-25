@@ -2,6 +2,7 @@
  * ClipIQ Platform - Backend Server
  * 
  * Main Express server with authentication and API routes
+ * Following best practices with proper error handling and middleware
  */
 
 import 'dotenv/config';
@@ -10,6 +11,9 @@ import cors from 'cors';
 
 // Import routes
 import authRoutes from './routes/auth.routes.js';
+
+// Import middleware
+import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -51,70 +55,15 @@ app.get('/health', (req, res) => {
 // API v1 routes
 app.use('/api/v1/auth', authRoutes);
 
+// ===========================================
+// Error Handling
+// ===========================================
+
 // 404 handler - Must be after all routes
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Not Found',
-    code: 'ROUTE_NOT_FOUND',
-    message: `Cannot ${req.method} ${req.path}`,
-    availableRoutes: {
-      auth: [
-        'POST /api/v1/auth/login',
-        'POST /api/v1/auth/logout',
-        'POST /api/v1/auth/refresh',
-        'GET /api/v1/auth/me'
-      ]
-    }
-  });
-});
+app.use(notFoundHandler);
 
-// ===========================================
-// Global Error Handler
-// ===========================================
-
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
-
-  // Handle specific error types
-  if (err.name === 'ValidationError') {
-    return res.status(400).json({
-      success: false,
-      error: 'Validation Error',
-      code: 'VALIDATION_ERROR',
-      message: err.message,
-      details: err.errors
-    });
-  }
-
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
-      success: false,
-      error: 'Invalid Token',
-      code: 'TOKEN_INVALID',
-      message: 'The provided token is invalid'
-    });
-  }
-
-  if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({
-      success: false,
-      error: 'Token Expired',
-      code: 'TOKEN_EXPIRED',
-      message: 'Your token has expired',
-      expiredAt: err.expiredAt
-    });
-  }
-
-  // Default error response
-  res.status(err.statusCode || 500).json({
-    success: false,
-    error: err.name || 'Internal Server Error',
-    code: err.code || 'SERVER_ERROR',
-    message: err.message || 'An unexpected error occurred',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
+// Global error handler - Must be last
+app.use(errorHandler);
 
 // ===========================================
 // Server Startup

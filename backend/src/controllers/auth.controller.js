@@ -1,27 +1,14 @@
 /**
  * Authentication Controller
  * 
- * Handles authentication-related operations: login, logout, refresh token, etc.
+ * Thin HTTP layer that handles requests/responses
+ * Delegates business logic to auth.service.js
+ * 
+ * Following SOLID principles and separation of concerns
  */
 
-import pg from 'pg';
-import { generateTokenPair } from '../utils/jwt.util.js';
-import { verifyPassword } from '../utils/password.util.js';
-import { verifyRefreshToken } from '../utils/jwt.util.js';
-
-const { Pool } = pg;
-
-// Create PostgreSQL pool
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  database: process.env.DB_NAME || 'clipiq',
-});
-
-// In-memory refresh token store (use Redis or database in production)
-const refreshTokenStore = new Set();
+import * as authService from '../services/auth.service.js';
+import ApiError from '../utils/apiError.js';
 
 /**
  * Login Controller
@@ -47,109 +34,26 @@ const refreshTokenStore = new Set();
  *   }
  * }
  */
-export async function login(req, res) {
+export async function login(req, res, next) {
   try {
     const { login, password } = req.body;
 
-    // Validate input
-    if (!login || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Validation failed',
-        code: 'MISSING_CREDENTIALS',
-        message: 'Email/username and password are required'
-      });
-    }
-
-    // Find user by email or username
-    const query = `
-      SELECT id, username, email, password, role, banned, ban_expiry, ban_reason
-      FROM users
-      WHERE email = $1 OR username = $1
-      LIMIT 1
-    `;
-    
-    const result = await pool.query(query, [login]);
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication failed',
-        code: 'INVALID_CREDENTIALS',
-        message: 'Invalid email/username or password'
-      });
-    }
-
-    const user = result.rows[0];
-
-    // Check if user is banned
-    if (user.banned) {
-      const isBanActive = !user.ban_expiry || new Date(user.ban_expiry) > new Date();
-      
-      if (isBanActive) {
-        return res.status(403).json({
-          success: false,
-          error: 'Account suspended',
-          code: 'ACCOUNT_BANNED',
-          message: 'Your account has been suspended',
-          banReason: user.ban_reason,
-          banExpiry: user.ban_expiry,
-          isPermanent: !user.ban_expiry
-        });
-      }
-    }
-
-    // Verify password
-    const isPasswordValid = await verifyPassword(password, user.password);
-
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication failed',
-        code: 'INVALID_CREDENTIALS',
-        message: 'Invalid email/username or password'
-      });
-    }
-
-    // Generate tokens
-    const userPayload = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role
-    };
-
-    const tokens = generateTokenPair(userPayload);
-
-    // Store refresh token
-    refreshTokenStore.add(tokens.refreshToken);
-
-    // Update last login timestamp (optional)
-    await pool.query('UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+    // Delegate to service layer
+    const { user, tokens } = await authService.authenticateUser(login, password);
 
     // Return success response
     return res.status(200).json({
       success: true,
       message: 'Login successful',
       data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role
-        },
-        tokens: tokens
+        user,
+        tokens
       }
     });
 
   } catch (error) {
-    console.error('Login error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      code: 'SERVER_ERROR',
-      message: 'An error occurred during login'
-    });
+    // Pass error to error handling middleware
+    next(error);
   }
 }
 
@@ -171,13 +75,12 @@ export async function login(req, res) {
  *   "message": "Logout successful"
  * }
  */
-export async function logout(req, res) {
+export async function logout(req, res, next) {
   try {
     const { refreshToken } = req.body;
 
-    if (refreshToken && refreshTokenStore.has(refreshToken)) {
-      refreshTokenStore.delete(refreshToken);
-    }
+    // Delegate to service layer
+    await authService.logoutUser(refreshToken);
 
     return res.status(200).json({
       success: true,
@@ -185,13 +88,7 @@ export async function logout(req, res) {
     });
 
   } catch (error) {
-    console.error('Logout error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      code: 'SERVER_ERROR',
-      message: 'An error occurred during logout'
-    });
+    next(error);
   }
 }
 
@@ -218,110 +115,21 @@ export async function logout(req, res) {
  *   }
  * }
  */
-export async function refreshToken(req, res) {
+export async function refreshToken(req, res, next) {
   try {
     const { refreshToken } = req.body;
 
-    // Validate input
-    if (!refreshToken) {
-      return res.status(400).json({
-        success: false,
-        error: 'Validation failed',
-        code: 'MISSING_REFRESH_TOKEN',
-        message: 'Refresh token is required'
-      });
-    }
-
-    // Check if refresh token exists in store
-    if (!refreshTokenStore.has(refreshToken)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Invalid refresh token',
-        code: 'REFRESH_TOKEN_INVALID',
-        message: 'The provided refresh token is invalid or has been revoked'
-      });
-    }
-
-    // Verify refresh token
-    const decoded = await verifyRefreshToken(refreshToken);
-
-    // Get user from database
-    const result = await pool.query(
-      'SELECT id, username, email, role, banned FROM users WHERE id = $1',
-      [decoded.userId]
-    );
-
-    if (result.rows.length === 0) {
-      // User not found - remove invalid refresh token
-      refreshTokenStore.delete(refreshToken);
-      return res.status(404).json({
-        success: false,
-        error: 'User not found',
-        code: 'USER_NOT_FOUND',
-        message: 'The user associated with this token no longer exists'
-      });
-    }
-
-    const user = result.rows[0];
-
-    // Check if user is banned
-    if (user.banned) {
-      refreshTokenStore.delete(refreshToken);
-      return res.status(403).json({
-        success: false,
-        error: 'Account suspended',
-        code: 'ACCOUNT_BANNED',
-        message: 'Your account has been suspended'
-      });
-    }
-
-    // Generate new access token
-    const { accessToken, expiresIn, tokenType } = generateTokenPair(user);
+    // Delegate to service layer
+    const tokens = await authService.refreshAccessToken(refreshToken);
 
     return res.status(200).json({
       success: true,
       message: 'Token refreshed successfully',
-      data: {
-        accessToken,
-        expiresIn,
-        tokenType
-      }
+      data: tokens
     });
 
   } catch (error) {
-    console.error('Refresh token error:', error);
-
-    // Handle specific errors
-    if (error.code === 'REFRESH_TOKEN_EXPIRED') {
-      const { refreshToken } = req.body;
-      if (refreshToken) {
-        refreshTokenStore.delete(refreshToken);
-      }
-
-      return res.status(401).json({
-        success: false,
-        error: 'Refresh token expired',
-        code: 'REFRESH_TOKEN_EXPIRED',
-        message: 'Your refresh token has expired. Please login again.',
-        expiredAt: error.expiredAt
-      });
-    }
-
-    if (error.code === 'REFRESH_TOKEN_INVALID') {
-      return res.status(403).json({
-        success: false,
-        error: 'Invalid refresh token',
-        code: 'REFRESH_TOKEN_INVALID',
-        message: 'The provided refresh token is invalid'
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      code: 'SERVER_ERROR',
-      message: 'An error occurred while refreshing token'
-    });
+    next(error);
   }
 }
 
@@ -341,56 +149,20 @@ export async function refreshToken(req, res) {
  *   }
  * }
  */
-export async function getMe(req, res) {
+export async function getMe(req, res, next) {
   try {
     const userId = req.user.userId;
 
-    const result = await pool.query(
-      `SELECT id, username, email, role, display_name, bio, avatar_url, 
-              banned, ban_expiry, ban_reason, warnings, created_at, updated_at
-       FROM users 
-       WHERE id = $1`,
-      [userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found',
-        code: 'USER_NOT_FOUND',
-        message: 'Your user account could not be found'
-      });
-    }
-
-    const user = result.rows[0];
+    // Delegate to service layer
+    const user = await authService.getUserProfile(userId);
 
     return res.status(200).json({
       success: true,
-      data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          displayName: user.display_name,
-          bio: user.bio,
-          avatarUrl: user.avatar_url,
-          banned: user.banned,
-          warnings: user.warnings,
-          createdAt: user.created_at,
-          updatedAt: user.updated_at
-        }
-      }
+      data: { user }
     });
 
   } catch (error) {
-    console.error('Get me error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      code: 'SERVER_ERROR',
-      message: 'An error occurred while fetching user profile'
-    });
+    next(error);
   }
 }
 
