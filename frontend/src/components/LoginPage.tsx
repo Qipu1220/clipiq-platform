@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { login } from '../store/authSlice';
-import { RootState } from '../store/store';
-import { Play, Sparkles, Video } from 'lucide-react';
+import { loginThunk, clearError } from '../store/authSlice';
+import { RootState, AppDispatch } from '../store/store';
+import { Video } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -11,44 +11,23 @@ import { RegisterPage } from './RegisterPage';
 export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [showRegister, setShowRegister] = useState(false);
   
-  const dispatch = useDispatch();
-  const allUsers = useSelector((state: RootState) => state.users.allUsers);
+  const dispatch = useDispatch<AppDispatch>();
+  const { loading, error } = useSelector((state: RootState) => state.auth);
 
   if (showRegister) {
     return <RegisterPage onBackToLogin={() => setShowRegister(false)} />;
   }
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-
-    // Allow login with username or email
-    const user = allUsers.find(
-      u => (u.username === username || u.email === username) && u.password === password
-    );
-
-    if (!user) {
-      setError('Tên đăng nhập/email hoặc mật khẩu không đúng');
-      return;
-    }
-
-    if (user.banned) {
-      if (user.banExpiry && user.banExpiry < Date.now()) {
-        // Ban expired, allow login
-        dispatch(login(user));
-      } else {
-        const banMessage = user.banReason 
-          ? `Tài khoản của bạn đã bị cấm. Lý do: ${user.banReason}`
-          : 'Tài khoản của bạn đã bị cấm';
-        setError(banMessage);
-        return;
-      }
-    } else {
-      dispatch(login(user));
-    }
+    
+    // Clear any previous errors
+    dispatch(clearError());
+    
+    // Dispatch login thunk with 'login' field (username or email)
+    await dispatch(loginThunk({ login: username, password }));
   };
 
   return (
@@ -100,6 +79,7 @@ export function LoginPage() {
                   onChange={(e) => setUsername(e.target.value)}
                   className="bg-zinc-900/50 border-zinc-800/50 text-white h-12 rounded-xl focus:border-[#ff3b5c]/50 transition-all"
                   placeholder="Nhập tên đăng nhập hoặc email"
+                  disabled={loading}
                 />
               </div>
               
@@ -114,6 +94,7 @@ export function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="bg-zinc-900/50 border-zinc-800/50 text-white h-12 rounded-xl focus:border-[#ff3b5c]/50 transition-all"
                   placeholder="Nhập mật khẩu"
+                  disabled={loading}
                 />
               </div>
 
@@ -126,8 +107,9 @@ export function LoginPage() {
               <Button
                 type="submit"
                 className="w-full h-12 bg-[#ff3b5c] hover:bg-[#ff3b5c]/90 text-white rounded-xl shadow-lg transition-all duration-200 mt-6"
+                disabled={loading}
               >
-                <span>Đăng nhập</span>
+                <span>{loading ? 'Đang đăng nhập...' : 'Đăng nhập'}</span>
               </Button>
             </form>
 
@@ -138,6 +120,7 @@ export function LoginPage() {
                 <button
                   onClick={() => setShowRegister(true)}
                   className="text-[#ff3b5c] hover:text-[#ff6b87] transition-colors"
+                  disabled={loading}
                 >
                   Đăng ký ngay
                 </button>
@@ -154,19 +137,19 @@ export function LoginPage() {
               </div>
               <div className="space-y-2 text-xs text-zinc-500 font-mono">
                 <div className="flex justify-between items-center p-2 bg-zinc-900/30 rounded-lg">
-                  <span>admin001</span>
+                  <span>admin</span>
                   <span className="text-zinc-600">•</span>
-                  <span>123456</span>
+                  <span>Admin@123456</span>
                 </div>
                 <div className="flex justify-between items-center p-2 bg-zinc-900/30 rounded-lg">
-                  <span>staff001</span>
+                  <span>staff_mod1</span>
                   <span className="text-zinc-600">•</span>
-                  <span>123456</span>
+                  <span>Staff@123456</span>
                 </div>
                 <div className="flex justify-between items-center p-2 bg-zinc-900/30 rounded-lg">
                   <span>user001</span>
                   <span className="text-zinc-600">•</span>
-                  <span>123456</span>
+                  <span>User@123456</span>
                 </div>
               </div>
             </div>

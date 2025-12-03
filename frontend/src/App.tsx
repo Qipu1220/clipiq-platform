@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Provider, useSelector } from 'react-redux';
-import { store, RootState } from './store/store';
+import { useState, useEffect } from 'react';
+import { Provider, useSelector, useDispatch } from 'react-redux';
+import { store, RootState, AppDispatch } from './store/store';
+import { restoreSessionThunk } from './store/authSlice';
 import { LoginPage } from './components/LoginPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
 import { Header } from './components/Header';
@@ -16,13 +17,29 @@ import { PublicUserProfile } from './components/user/PublicUserProfile';
 import { Toaster } from 'sonner@2.0.3';
 
 function AppContent() {
+  const dispatch = useDispatch<AppDispatch>();
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const maintenanceMode = useSelector((state: RootState) => state.auth.maintenanceMode);
+  const loading = useSelector((state: RootState) => state.auth.loading);
 
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
+
+  // Restore session on app load
+  useEffect(() => {
+    dispatch(restoreSessionThunk());
+  }, [dispatch]);
+
+  // Show loading screen while checking session
+  if (loading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white text-xl">Đang tải...</div>
+      </div>
+    );
+  }
 
   // Show login page if not authenticated
   if (!isAuthenticated) {

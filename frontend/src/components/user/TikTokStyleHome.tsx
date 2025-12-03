@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../../store/store';
+import { RootState, AppDispatch } from '../../store/store';
 import { likeVideo, addComment, incrementViews } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
-import { logout } from '../../store/authSlice';
+import { logoutThunk } from '../../store/authSlice';
 import { 
   Play, Search, Home, Compass, Users, Video, MessageCircle, 
   Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check, LogOut, ChevronDown,
@@ -869,7 +869,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   <button
                     onClick={() => {
                       setShowUserMenu(false);
-                      dispatch(logout());
+                      dispatch(logoutThunk());
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-red-400 hover:bg-zinc-800 transition-colors text-left group"
                   >
@@ -1423,7 +1423,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                     </button>
                     <button
                       onClick={() => {
-                        dispatch(logout());
+                        dispatch(logoutThunk());
                         setShowUserMenu(false);
                       }}
                       className="w-full flex items-center gap-2 px-3 py-2.5 text-red-400 hover:bg-zinc-800 transition-colors text-sm"

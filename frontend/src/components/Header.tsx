@@ -1,6 +1,6 @@
 import { useDispatch, useSelector } from 'react-redux';
-import { logout } from '../store/authSlice';
-import { RootState } from '../store/store';
+import { logoutThunk } from '../store/authSlice';
+import { RootState, AppDispatch } from '../store/store';
 import { Play, LogOut, User, Bell, ChevronDown } from 'lucide-react';
 import { Button } from './ui/button';
 import { useState, useRef, useEffect } from 'react';
@@ -40,7 +40,7 @@ export function Header({ onNavigate, currentPage }: HeaderProps) {
   }, [showUserMenu]);
 
   const handleLogout = () => {
-    dispatch(logout());
+    dispatch(logoutThunk());
   };
 
   const handleVideoClick = (videoId: string) => {

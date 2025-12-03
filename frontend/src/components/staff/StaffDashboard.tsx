@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../../store/store';
+import { RootState, AppDispatch } from '../../store/store';
 import { resolveVideoReport, resolveUserReport, updateAppealStatus } from '../../store/reportsSlice';
 import { banUser, unbanUser, warnUser, clearWarnings } from '../../store/usersSlice';
 import { deleteVideo } from '../../store/videosSlice';
-import { logout } from '../../store/authSlice';
+import { logoutThunk } from '../../store/authSlice';
 import { 
   Shield, AlertTriangle, Flag, MessageSquare, UserX, Trash2, CheckCircle, 
   Eye, UserCircle, Play, Search, Home, BarChart3, Users, Video, User,
@@ -464,7 +464,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                   <button
                     onClick={() => {
                       setShowUserMenu(false);
-                      dispatch(logout());
+                      dispatch(logoutThunk());
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-[#ff3b5c] hover:bg-zinc-900/40 transition-colors text-left"
                   >

@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../../store/store';
+import { RootState, AppDispatch } from '../../store/store';
 import { 
   banUserByUsername, 
   unbanUserByUsername, 
   deleteUserByUsername, 
   updateUserRole 
 } from '../../store/usersSlice';
-import { logout } from '../../store/authSlice';
+import { logoutThunk } from '../../store/authSlice';
 import { toggleMaintenanceMode } from '../../store/systemSlice';
 import { 
   Shield, Users, Settings, Activity, TrendingUp, Eye, UserX, Trash2,
@@ -360,7 +360,7 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                   <button
                     onClick={() => {
                       setShowUserMenu(false);
-                      dispatch(logout());
+                      dispatch(logoutThunk());
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-[#ff3b5c] hover:bg-zinc-900/40 transition-colors text-left"
                   >
