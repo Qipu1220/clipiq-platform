@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Play, Mail, User, Lock } from 'lucide-react';
+import { Play, Mail, User, Lock, Sparkles, ArrowLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -53,42 +53,42 @@ export function RegisterPage({ onBackToLogin }: RegisterPageProps) {
 
     // Validation
     if (!formData.username || !formData.email || !formData.password || !formData.confirmPassword) {
-      setError('All fields are required');
+      setError('Tất cả các trường là bắt buộc');
       return;
     }
 
     if (!validateUsername(formData.username)) {
-      setError('Username must be 3-50 characters, alphanumeric and underscore only');
+      setError('Tên đăng nhập phải có 3-50 ký tự, chỉ bao gồm chữ cái, số và gạch dưới');
       return;
     }
 
     if (allUsers.some(u => u.username === formData.username)) {
-      setError('Username already exists');
+      setError('Tên đăng nhập đã tồn tại');
       return;
     }
 
     if (!validateEmail(formData.email)) {
-      setError('Invalid email format');
+      setError('Định dạng email không hợp lệ');
       return;
     }
 
     if (allUsers.some(u => u.email === formData.email)) {
-      setError('Email already registered');
+      setError('Email đã được đăng ký');
       return;
     }
 
     if (!validatePassword(formData.password)) {
-      setError('Password must be at least 8 characters with uppercase, lowercase, and number');
+      setError('Mật khẩu phải có ít nhất 8 ký tự bao gồm chữ hoa, chữ thường và số');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      setError('Mật khẩu không khớp');
       return;
     }
 
     if (!agreedToTerms) {
-      setError('You must agree to Terms & Conditions');
+      setError('Bạn phải đồng ý với Điều khoản & Điều kiện');
       return;
     }
 
@@ -115,16 +115,24 @@ export function RegisterPage({ onBackToLogin }: RegisterPageProps) {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center px-4">
-        <div className="bg-zinc-900 p-8 rounded-lg border border-zinc-800 max-w-md w-full text-center">
-          <div className="bg-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center px-4">
+        {/* Subtle background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div
+            className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-10"
+            style={{ background: '#ff3b5c' }}
+          />
+        </div>
+
+        <div className="backdrop-blur-md bg-zinc-950/80 p-10 rounded-3xl border border-zinc-900/50 max-w-md w-full text-center relative z-10">
+          <div className="bg-green-500 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-white text-xl mb-2">Registration Successful!</h2>
-          <p className="text-zinc-400 text-sm">
-            Your account has been created. Redirecting to login...
+          <h2 className="text-white text-2xl mb-2">Đăng ký thành công!</h2>
+          <p className="text-zinc-500 text-sm">
+            Tài khoản của bạn đã được tạo. Đang chuyển hướng đến trang đăng nhập...
           </p>
         </div>
       </div>
@@ -132,120 +140,138 @@ export function RegisterPage({ onBackToLogin }: RegisterPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-4">
-      <div className="bg-zinc-900 p-8 rounded-lg border border-zinc-800 max-w-md w-full">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          <div className="bg-red-600 p-2 rounded">
-            <Play className="w-6 h-6 text-white fill-white" />
-          </div>
-          <h1 className="text-white text-2xl">clipiq</h1>
-        </div>
+    <div className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center px-4 py-8">
+      {/* Subtle background accent */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div
+          className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-10"
+          style={{ background: '#ff3b5c' }}
+        />
+        <div
+          className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl opacity-8"
+          style={{ background: '#ff3b5c' }}
+        />
+      </div>
 
-        <h2 className="text-white text-xl mb-2 text-center">Create Account</h2>
-        <p className="text-zinc-400 text-sm mb-6 text-center">
-          Join clipiq to start sharing and watching videos
-        </p>
-
-        {error && (
-          <div className="bg-red-900/50 border border-red-600 text-red-200 p-3 rounded mb-4 text-sm">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label className="text-zinc-300">Username</Label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <Input
-                type="text"
-                placeholder="username"
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                className="bg-zinc-800 border-zinc-700 text-white pl-10"
-              />
-            </div>
-            <p className="text-zinc-500 text-xs mt-1">3-50 characters, letters, numbers, underscore</p>
-          </div>
-
-          <div>
-            <Label className="text-zinc-300">Email</Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <Input
-                type="email"
-                placeholder="email@example.com"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="bg-zinc-800 border-zinc-700 text-white pl-10"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label className="text-zinc-300">Password</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <Input
-                type="password"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="bg-zinc-800 border-zinc-700 text-white pl-10"
-              />
-            </div>
-            <p className="text-zinc-500 text-xs mt-1">Min 8 chars, uppercase, lowercase, number</p>
-          </div>
-
-          <div>
-            <Label className="text-zinc-300">Confirm Password</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <Input
-                type="password"
-                placeholder="••••••••"
-                value={formData.confirmPassword}
-                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className="bg-zinc-800 border-zinc-700 text-white pl-10"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2">
-            <Checkbox
-              checked={agreedToTerms}
-              onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
-              className="mt-1"
-            />
-            <label className="text-zinc-400 text-sm cursor-pointer" onClick={() => setAgreedToTerms(!agreedToTerms)}>
-              I agree to the Terms & Conditions and Privacy Policy
-            </label>
-          </div>
-
-          <Button
-            type="submit"
-            className="w-full bg-red-600 hover:bg-red-700 text-white"
-          >
-            Sign Up
-          </Button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-zinc-400 text-sm">
-            Already have an account?{' '}
+      <div className="w-full max-w-md relative z-10">
+        <div className="backdrop-blur-md bg-zinc-950/80 rounded-3xl border border-zinc-900/50 shadow-2xl overflow-hidden">
+          <div className="p-10">
+            {/* Back button */}
             <button
               onClick={onBackToLogin}
-              className="text-red-500 hover:text-red-400 hover:underline"
+              className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors mb-8 -mt-2"
             >
-              Sign In
+              <ArrowLeft className="w-4 h-4" />
+              <span className="text-sm">Quay lại đăng nhập</span>
             </button>
-          </p>
-        </div>
 
-        <div className="mt-6 pt-6 border-t border-zinc-800">
-          <p className="text-zinc-500 text-xs text-center">
-            Demo accounts: admin001, staff001, user001 (password: 123456)
-          </p>
+            {/* Logo section */}
+            <div className="flex flex-col items-center gap-6 mb-8">
+              <div className="flex justify-center">
+                <img 
+                  src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png" 
+                  alt="ShortV Logo" 
+                  className="w-16 h-16 object-contain"
+                />
+              </div>
+              
+              <div className="text-center">
+                <h1 className="text-white text-4xl tracking-tight logo-text">
+                  shortv
+                </h1>
+              </div>
+            </div>
+
+            {error && (
+              <div className="bg-[#ff3b5c]/10 border border-[#ff3b5c]/20 text-[#ff9fb3] p-3.5 rounded-xl text-sm mb-5">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label className="text-zinc-400 block mb-2 text-sm">Tên đăng nhập</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <Input
+                    type="text"
+                    placeholder="tendangnhap"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    className="bg-zinc-900/50 border-zinc-800/50 text-white pl-10 h-12 rounded-xl focus:border-[#ff3b5c]/50 transition-all"
+                  />
+                </div>
+                <p className="text-zinc-600 text-xs mt-1.5">3-50 ký tự, chữ cái, số, gạch dưới</p>
+              </div>
+
+              <div>
+                <Label className="text-zinc-400 block mb-2 text-sm">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <Input
+                    type="email"
+                    placeholder="email@example.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="bg-zinc-900/50 border-zinc-800/50 text-white pl-10 h-12 rounded-xl focus:border-[#ff3b5c]/50 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-zinc-400 block mb-2 text-sm">Mật khẩu</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="bg-zinc-900/50 border-zinc-800/50 text-white pl-10 h-12 rounded-xl focus:border-[#ff3b5c]/50 transition-all"
+                  />
+                </div>
+                <p className="text-zinc-600 text-xs mt-1.5">Tối thiểu 8 ký tự, chữ hoa, chữ thường, số</p>
+              </div>
+
+              <div>
+                <Label className="text-zinc-400 block mb-2 text-sm">Xác nhận mật khẩu</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    className="bg-zinc-900/50 border-zinc-800/50 text-white pl-10 h-12 rounded-xl focus:border-[#ff3b5c]/50 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 pt-2">
+                <Checkbox
+                  checked={agreedToTerms}
+                  onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
+                  className="mt-0.5"
+                />
+                <label className="text-zinc-500 text-xs cursor-pointer leading-relaxed" onClick={() => setAgreedToTerms(!agreedToTerms)}>
+                  Tôi đồng ý với Điều khoản & Điều kiện và Chính sách Bảo mật
+                </label>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-12 bg-[#ff3b5c] hover:bg-[#ff3b5c]/90 text-white rounded-xl shadow-lg transition-all duration-200 mt-6"
+              >
+                <span>Đăng ký</span>
+              </Button>
+            </form>
+
+            <div className="mt-8 pt-6 border-t border-zinc-900/50">
+              <p className="text-zinc-600 text-xs text-center">
+                Tài khoản demo: admin001, staff001, user001 (mật khẩu: 123456)
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

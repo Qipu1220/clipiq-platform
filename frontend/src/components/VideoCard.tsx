@@ -31,7 +31,7 @@ export function VideoCard({ video, onClick }: VideoCardProps) {
           </div>
         )}
         {video.status === 'deleted' && (
-          <div className="absolute top-2 left-2 bg-red-600 text-white text-xs px-2 py-1 rounded">
+          <div className="absolute top-2 left-2 bg-clipiq text-white text-xs px-2 py-1 rounded">
             Deleted
           </div>
         )}

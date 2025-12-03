@@ -32,6 +32,24 @@ export interface UserReport {
   resolutionNote?: string;  // NEW: Staff notes
 }
 
+export interface CommentReport {
+  id: string;  // UUID
+  commentId: string;
+  commentText: string;
+  commentUsername: string;
+  videoId: string;
+  videoTitle: string;
+  reportedBy: string;  // User ID
+  reportedByUsername: string;  // Denormalized
+  reason: string;
+  timestamp: number;
+  status: 'pending' | 'reviewed' | 'resolved';
+  reviewedBy?: string;
+  reviewedByUsername?: string;
+  reviewedAt?: number;
+  resolutionNote?: string;
+}
+
 export interface Appeal {
   id: string;  // UUID
   userId: string;  // UUID
@@ -48,6 +66,7 @@ export interface Appeal {
 interface ReportsState {
   videoReports: VideoReport[];
   userReports: UserReport[];
+  commentReports: CommentReport[];
   appeals: Appeal[];
 }
 
@@ -76,6 +95,7 @@ const initialState: ReportsState = {
       status: 'pending',
     },
   ],
+  commentReports: [],
   appeals: [],
 };
 
@@ -88,6 +108,9 @@ const reportsSlice = createSlice({
     },
     addUserReport: (state, action: PayloadAction<UserReport>) => {
       state.userReports.push(action.payload);
+    },
+    addCommentReport: (state, action: PayloadAction<CommentReport>) => {
+      state.commentReports.push(action.payload);
     },
     addAppeal: (state, action: PayloadAction<Appeal>) => {
       state.appeals.push(action.payload);
@@ -122,6 +145,21 @@ const reportsSlice = createSlice({
         report.resolutionNote = action.payload.resolutionNote;
       }
     },
+    resolveCommentReport: (state, action: PayloadAction<{ 
+      id: string; 
+      reviewedBy: string;
+      reviewedByUsername: string;
+      resolutionNote?: string;
+    }>) => {
+      const report = state.commentReports.find(r => r.id === action.payload.id);
+      if (report) {
+        report.status = 'resolved';
+        report.reviewedBy = action.payload.reviewedBy;
+        report.reviewedByUsername = action.payload.reviewedByUsername;
+        report.reviewedAt = Date.now();
+        report.resolutionNote = action.payload.resolutionNote;
+      }
+    },
     updateAppealStatus: (state, action: PayloadAction<{ 
       id: string; 
       status: 'approved' | 'denied';
@@ -144,9 +182,11 @@ const reportsSlice = createSlice({
 export const { 
   addVideoReport, 
   addUserReport, 
+  addCommentReport,
   addAppeal, 
   resolveVideoReport, 
   resolveUserReport, 
+  resolveCommentReport,
   updateAppealStatus 
 } = reportsSlice.actions;
 export default reportsSlice.reducer;

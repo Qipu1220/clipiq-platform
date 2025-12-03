@@ -8,6 +8,17 @@ import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
+import { toast } from 'sonner';
 
 export function ReportUser() {
   const dispatch = useDispatch();
@@ -17,24 +28,33 @@ export function ReportUser() {
   const [reportedUser, setReportedUser] = useState('');
   const [reason, setReason] = useState('');
   const [success, setSuccess] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const otherUsers = allUsers.filter(u => u.username !== currentUser?.username && u.role === 'user');
 
   const handleSubmit = () => {
-    if (!reportedUser || !reason.trim() || !currentUser) return;
+    if (!reportedUser || !reason.trim() || !currentUser) {
+      toast.error('Vui lòng điền đầy đủ thông tin');
+      return;
+    }
+    setShowConfirm(true);
+  };
 
+  const confirmSubmit = () => {
     dispatch(addUserReport({
       id: Date.now().toString(),
       reportedUser,
-      reportedBy: currentUser.username,
+      reportedBy: currentUser!.username,
       reason,
       timestamp: Date.now(),
       status: 'pending',
     }));
 
+    toast.success('Báo cáo người dùng đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
     setReportedUser('');
     setReason('');
     setSuccess(true);
+    setShowConfirm(false);
     setTimeout(() => setSuccess(false), 3000);
   };
 
@@ -105,6 +125,37 @@ export function ReportUser() {
           </Card>
         </div>
       </div>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <Flag className="w-5 h-5 text-red-500" />
+              Xác nhận báo cáo người dùng
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              Bạn có chắc chắn muốn báo cáo người dùng <strong className="text-white">{reportedUser}</strong> không? Hành động này không thể hoàn tác.
+              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <p className="text-yellow-500 text-sm">
+                  ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai sự thật có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn. Staff sẽ xem xét kỹ lưỡng báo cáo này.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700">
+              Hủy bỏ
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmSubmit}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Xác nhận gửi báo cáo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

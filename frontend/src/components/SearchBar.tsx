@@ -27,18 +27,18 @@ export function SearchBar({ onSearch }: SearchBarProps) {
       <div className="flex items-center gap-4 mb-4">
         <div className="flex gap-2">
           <Button
-            variant={mode === 'nor' ? 'default' : 'outline'}
+            variant="outline"
             size="sm"
             onClick={() => setMode('nor')}
-            className={mode === 'nor' ? 'bg-red-600 hover:bg-red-700 text-white' : 'border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800'}
+            className={mode === 'nor' ? 'bg-clipiq hover:bg-clipiq text-white' : 'border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800'}
           >
             Nor
           </Button>
           <Button
-            variant={mode === 'em' ? 'default' : 'outline'}
+            variant="outline"
             size="sm"
             onClick={() => setMode('em')}
-            className={mode === 'em' ? 'bg-red-600 hover:bg-red-700 text-white' : 'border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800'}
+            className={mode === 'em' ? 'bg-clipiq hover:bg-clipiq text-white' : 'border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800'}
           >
             Em
           </Button>
@@ -55,7 +55,7 @@ export function SearchBar({ onSearch }: SearchBarProps) {
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             className="bg-zinc-800 border-zinc-700 text-white flex-1"
           />
-          <Button onClick={handleSearch} className="bg-red-600 hover:bg-red-700">
+          <Button onClick={handleSearch} className="bg-clipiq hover:bg-clipiq">
             <Search className="w-4 h-4" />
           </Button>
         </div>

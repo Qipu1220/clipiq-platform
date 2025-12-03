@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { login } from '../store/authSlice';
 import { RootState } from '../store/store';
-import { Play } from 'lucide-react';
+import { Play, Sparkles, Video } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -31,7 +31,7 @@ export function LoginPage() {
     );
 
     if (!user) {
-      setError('Invalid username/email or password');
+      setError('Tên đăng nhập/email hoặc mật khẩu không đúng');
       return;
     }
 
@@ -41,8 +41,8 @@ export function LoginPage() {
         dispatch(login(user));
       } else {
         const banMessage = user.banReason 
-          ? `Your account has been banned. Reason: ${user.banReason}`
-          : 'Your account has been banned';
+          ? `Tài khoản của bạn đã bị cấm. Lý do: ${user.banReason}`
+          : 'Tài khoản của bạn đã bị cấm';
         setError(banMessage);
         return;
       }
@@ -52,68 +52,125 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-4">
-      <div className="w-full max-w-md p-8 bg-zinc-900 rounded-lg border border-zinc-800">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="bg-red-600 p-2 rounded">
-            <Play className="w-8 h-8 text-white fill-white" />
-          </div>
-          <h1 className="text-white text-3xl">clipiq</h1>
-        </div>
-        
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <Label htmlFor="username" className="text-zinc-300">Username or Email</Label>
-            <Input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-white"
-              placeholder="Enter username or email"
-            />
-          </div>
-          
-          <div>
-            <Label htmlFor="password" className="text-zinc-300">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-white"
-              placeholder="Enter password"
-            />
-          </div>
+    <div className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center px-4">
+      {/* Subtle background accent - minimal */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div
+          className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-10"
+          style={{ background: '#ff3b5c' }}
+        />
+        <div
+          className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl opacity-8"
+          style={{ background: '#ff3b5c' }}
+        />
+      </div>
 
-          {error && (
-            <div className="bg-red-900/50 border border-red-600 text-red-200 p-3 rounded text-sm">
-              {error}
+      {/* Main login card */}
+      <div className="w-full max-w-md relative z-10">
+        {/* Clean minimal card */}
+        <div className="backdrop-blur-md bg-zinc-950/80 rounded-3xl border border-zinc-900/50 shadow-2xl overflow-hidden">
+          <div className="p-10">
+            {/* Logo section - clean & centered */}
+            <div className="flex flex-col items-center gap-6 mb-10">
+              <div className="flex justify-center">
+                <img 
+                  src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png" 
+                  alt="ShortV Logo" 
+                  className="w-16 h-16 object-contain"
+                />
+              </div>
+              
+              <div className="text-center">
+                <h1 className="text-white text-4xl tracking-tight logo-text">
+                  shortv
+                </h1>
+              </div>
             </div>
-          )}
 
-          <Button type="submit" className="w-full bg-red-600 hover:bg-red-700">
-            Sign In
-          </Button>
-        </form>
+            {/* Login form */}
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <Label htmlFor="username" className="text-zinc-400 block mb-2 text-sm">
+                  Tên đăng nhập hoặc Email
+                </Label>
+                <Input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="bg-zinc-900/50 border-zinc-800/50 text-white h-12 rounded-xl focus:border-[#ff3b5c]/50 transition-all"
+                  placeholder="Nhập tên đăng nhập hoặc email"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="password" className="text-zinc-400 block mb-2 text-sm">
+                  Mật khẩu
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="bg-zinc-900/50 border-zinc-800/50 text-white h-12 rounded-xl focus:border-[#ff3b5c]/50 transition-all"
+                  placeholder="Nhập mật khẩu"
+                />
+              </div>
 
-        <div className="mt-6 text-center">
-          <p className="text-zinc-400 text-sm">
-            Don't have an account?{' '}
-            <button
-              onClick={() => setShowRegister(true)}
-              className="text-red-500 hover:text-red-400 hover:underline"
-            >
-              Sign Up
-            </button>
-          </p>
-        </div>
+              {error && (
+                <div className="bg-[#ff3b5c]/10 border border-[#ff3b5c]/20 text-[#ff9fb3] p-3.5 rounded-xl text-sm">
+                  {error}
+                </div>
+              )}
 
-        <div className="mt-6 p-4 bg-zinc-800 rounded text-sm text-zinc-400">
-          <p className="mb-2">Demo Accounts:</p>
-          <p>admin001 / 123456</p>
-          <p>staff001 / 123456</p>
-          <p>user001 / 123456</p>
+              <Button
+                type="submit"
+                className="w-full h-12 bg-[#ff3b5c] hover:bg-[#ff3b5c]/90 text-white rounded-xl shadow-lg transition-all duration-200 mt-6"
+              >
+                <span>Đăng nhập</span>
+              </Button>
+            </form>
+
+            {/* Register link */}
+            <div className="mt-6 text-center">
+              <p className="text-zinc-500 text-sm">
+                Chưa có tài khoản?{' '}
+                <button
+                  onClick={() => setShowRegister(true)}
+                  className="text-[#ff3b5c] hover:text-[#ff6b87] transition-colors"
+                >
+                  Đăng ký ngay
+                </button>
+              </p>
+            </div>
+
+            {/* Demo accounts - refined */}
+            <div className="mt-8 p-5 bg-zinc-900/30 rounded-2xl border border-zinc-900/50">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-6 h-6 rounded-lg bg-[#ff3b5c]/10 flex items-center justify-center">
+                  <Video className="w-3.5 h-3.5 text-[#ff3b5c]" />
+                </div>
+                <p className="text-sm text-zinc-400">Tài khoản Demo</p>
+              </div>
+              <div className="space-y-2 text-xs text-zinc-500 font-mono">
+                <div className="flex justify-between items-center p-2 bg-zinc-900/30 rounded-lg">
+                  <span>admin001</span>
+                  <span className="text-zinc-600">•</span>
+                  <span>123456</span>
+                </div>
+                <div className="flex justify-between items-center p-2 bg-zinc-900/30 rounded-lg">
+                  <span>staff001</span>
+                  <span className="text-zinc-600">•</span>
+                  <span>123456</span>
+                </div>
+                <div className="flex justify-between items-center p-2 bg-zinc-900/30 rounded-lg">
+                  <span>user001</span>
+                  <span className="text-zinc-600">•</span>
+                  <span>123456</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

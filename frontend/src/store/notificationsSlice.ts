@@ -28,19 +28,19 @@ const notificationsSlice = createSlice({
   name: 'notifications',
   initialState,
   reducers: {
-    subscribeToUser: (state, action: PayloadAction<{ followerId: string; followingId: string }>) => {
-      const { followerId, followingId } = action.payload;
-      if (!state.subscriptions[followerId]) {
-        state.subscriptions[followerId] = [];
+    subscribeToUser: (state, action: PayloadAction<{ follower: string; following: string }>) => {
+      const { follower, following } = action.payload;
+      if (!state.subscriptions[follower]) {
+        state.subscriptions[follower] = [];
       }
-      if (!state.subscriptions[followerId].includes(followingId)) {
-        state.subscriptions[followerId].push(followingId);
+      if (!state.subscriptions[follower].includes(following)) {
+        state.subscriptions[follower].push(following);
       }
     },
-    unsubscribeFromUser: (state, action: PayloadAction<{ followerId: string; followingId: string }>) => {
-      const { followerId, followingId } = action.payload;
-      if (state.subscriptions[followerId]) {
-        state.subscriptions[followerId] = state.subscriptions[followerId].filter(u => u !== followingId);
+    unsubscribeFromUser: (state, action: PayloadAction<{ follower: string; following: string }>) => {
+      const { follower, following } = action.payload;
+      if (state.subscriptions[follower]) {
+        state.subscriptions[follower] = state.subscriptions[follower].filter(u => u !== following);
       }
     },
     addNotification: (state, action: PayloadAction<Omit<Notification, 'id' | 'read'>>) => {

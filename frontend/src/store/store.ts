@@ -6,6 +6,7 @@ import reportsReducer from './reportsSlice';
 import notificationsReducer from './notificationsSlice';
 import playlistsReducer from './playlistsSlice';
 import viewHistoryReducer from './viewHistorySlice';
+import systemReducer from './systemSlice';
 
 export const store = configureStore({
   reducer: {
@@ -16,6 +17,7 @@ export const store = configureStore({
     notifications: notificationsReducer,
     playlists: playlistsReducer,
     viewHistory: viewHistoryReducer,
+    system: systemReducer,
   },
 });
 

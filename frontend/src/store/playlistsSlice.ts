@@ -17,7 +17,30 @@ interface PlaylistsState {
 }
 
 const initialState: PlaylistsState = {
-  playlists: [],
+  playlists: [
+    {
+      id: 'playlist-user001-saved',
+      userId: 'user-001',
+      username: 'user001',
+      name: 'Đã lưu',
+      description: 'Video đã lưu của tôi',
+      visibility: 'private',
+      videoIds: ['video-2', 'video-3', 'video-6', 'video-9'],
+      createdAt: Date.now() - 86400000 * 10,
+      updatedAt: Date.now() - 86400000 * 1,
+    },
+    {
+      id: 'playlist-user001-webdev',
+      userId: 'user-001',
+      username: 'user001',
+      name: 'Web Development',
+      description: 'Tutorials về phát triển web',
+      visibility: 'public',
+      videoIds: ['video-1', 'video-3'],
+      createdAt: Date.now() - 86400000 * 8,
+      updatedAt: Date.now() - 86400000 * 2,
+    },
+  ],
 };
 
 const playlistsSlice = createSlice({

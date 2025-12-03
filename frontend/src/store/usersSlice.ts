@@ -129,6 +129,46 @@ const usersSlice = createSlice({
         user.role = action.payload.role;
       }
     },
+    // Helper actions for username-based operations
+    banUserByUsername: (state, action: PayloadAction<{ username: string; duration?: number; reason?: string }>) => {
+      const user = state.allUsers.find(u => u.username === action.payload.username);
+      if (user) {
+        user.banned = true;
+        user.banReason = action.payload.reason;
+        if (action.payload.duration) {
+          user.banExpiry = Date.now() + action.payload.duration * 24 * 60 * 60 * 1000;
+        }
+      }
+    },
+    unbanUserByUsername: (state, action: PayloadAction<string>) => {
+      const user = state.allUsers.find(u => u.username === action.payload);
+      if (user) {
+        user.banned = false;
+        user.banExpiry = undefined;
+        user.banReason = undefined;
+      }
+    },
+    warnUserByUsername: (state, action: PayloadAction<string>) => {
+      const user = state.allUsers.find(u => u.username === action.payload);
+      if (user) {
+        user.warnings = (user.warnings || 0) + 1;
+      }
+    },
+    clearWarningsByUsername: (state, action: PayloadAction<string>) => {
+      const user = state.allUsers.find(u => u.username === action.payload);
+      if (user) {
+        user.warnings = 0;
+      }
+    },
+    deleteUserByUsername: (state, action: PayloadAction<string>) => {
+      state.allUsers = state.allUsers.filter(u => u.username !== action.payload);
+    },
+    updateUserRole: (state, action: PayloadAction<{ username: string; role: 'admin' | 'staff' | 'user' }>) => {
+      const user = state.allUsers.find(u => u.username === action.payload.username);
+      if (user) {
+        user.role = action.payload.role;
+      }
+    },
   },
 });
 
@@ -143,6 +183,12 @@ export const {
   updateUserDisplayName, 
   updateUserAvatar, 
   updateUserBio,
-  changeUserRole 
+  changeUserRole,
+  banUserByUsername,
+  unbanUserByUsername,
+  warnUserByUsername,
+  clearWarningsByUsername,
+  deleteUserByUsername,
+  updateUserRole
 } = usersSlice.actions;
 export default usersSlice.reducer;

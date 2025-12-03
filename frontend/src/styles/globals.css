@@ -1,5 +1,8 @@
 @custom-variant dark (&:is(.dark *));
 
+/* Import Google Font - Poppins cho tên app */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&display=swap');
+
 :root {
   --font-size: 16px;
   --background: #ffffff;
@@ -39,6 +42,8 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --clipiq-red: #ff3b5c;
+  --clipiq-red-hover: #e6344f;
 }
 
 .dark {
@@ -126,6 +131,11 @@
 
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
+  }
+  
+  html {
+    overflow-x: hidden;
   }
 }
 
@@ -186,4 +196,66 @@
 
 html {
   font-size: var(--font-size);
+}
+
+/* ===== Modern Custom Scrollbar cho Clipiq ===== */
+/* WebKit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #18181b; /* zinc-900 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #52525b; /* zinc-600 */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ff3b5c; /* clipiq red */
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #e6344f; /* clipiq red hover */
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #52525b #18181b; /* thumb track */
+}
+
+/* Smooth scrolling cho toàn bộ app */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbar utility class */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Clipiq colors */
+.bg-clipiq {
+  background-color: #ff3b5c !important;
+}
+
+.bg-clipiq:hover,
+.hover\:bg-clipiq:hover {
+  background-color: #d63348 !important;
+}
+
+/* Logo text style */
+.logo-text {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }

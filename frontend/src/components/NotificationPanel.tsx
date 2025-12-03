@@ -35,7 +35,7 @@ export function NotificationPanel({ onVideoClick }: NotificationPanelProps) {
           <Bell className="w-5 h-5 text-red-600" />
           <h3 className="text-white">Notifications</h3>
           {unreadCount > 0 && (
-            <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">
+            <span className="bg-clipiq text-white text-xs px-2 py-0.5 rounded-full">
               {unreadCount}
             </span>
           )}
@@ -70,8 +70,8 @@ export function NotificationPanel({ onVideoClick }: NotificationPanelProps) {
                 onClick={() => handleNotificationClick(notification.id, notification.videoId)}
               >
                 <div className="flex items-start gap-3">
-                  <div className="bg-red-600/20 p-2 rounded-full flex-shrink-0">
-                    <Video className="w-4 h-4 text-red-600" />
+                  <div style={{ backgroundColor: 'rgba(255, 59, 92, 0.2)' }} className="p-2 rounded-full flex-shrink-0">
+                    <Video className="w-4 h-4" style={{ color: '#ff3b5c' }} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm">
