@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
-import { likeVideo, addComment, incrementViews } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount } from '../../store/videosSlice';
 import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User, Bell, BellOff, MoreVertical, Copy, X } from 'lucide-react';
@@ -105,7 +105,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
 
   useEffect(() => {
     // Increment views only once when component mounts with this videoId
-    dispatch(incrementViews(videoId));
+    dispatch(incrementViewCount(videoId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId, dispatch]);
 
@@ -117,7 +117,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
     );
   }
 
-  const isLiked = video.likes.includes(currentUser.username);
+  const isLiked = false; // Simplified for now - likes is a number, not tracking individual users
 
   const handleLike = () => {
     dispatch(likeVideo({ videoId, username: currentUser.username }));
@@ -199,10 +199,11 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
               <div className="bg-zinc-900 rounded-lg overflow-hidden aspect-video">
-                <ImageWithFallback
-                  src={video.thumbnailUrl || `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=450&fit=crop`}
-                  alt={video.title}
-                  className="w-full h-full object-cover"
+                <video
+                  src={video.videoUrl}
+                  poster={video.thumbnailUrl || `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=450&fit=crop`}
+                  controls
+                  className="w-full h-full"
                 />
               </div>
 
@@ -225,7 +226,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
                       className={`border-zinc-700 bg-zinc-900 ${isLiked ? 'text-red-500 border-red-500' : 'text-white'} hover:bg-zinc-800`}
                     >
                       <Heart className={`w-4 h-4 mr-2 ${isLiked ? 'fill-red-500' : ''}`} />
-                      {video.likes.length}
+                      {video.likes}
                     </Button>
 
                     <Dialog open={reportOpen} onOpenChange={setReportOpen}>
@@ -318,7 +319,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
               <div className="bg-zinc-900 rounded-lg p-4">
                 <h2 className="text-white mb-4 flex items-center gap-2">
                   <MessageCircle className="w-5 h-5" />
-                  {video.comments.length} Comments
+                  {video.comments} Comments
                 </h2>
 
                 <div className="space-y-3 mb-4">
@@ -335,53 +336,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
                 </div>
 
                 <div className="space-y-3">
-                  {video.comments.map(comment => (
-                    <div key={comment.id} className="p-3 bg-zinc-800 rounded group hover:bg-zinc-700/50 transition-colors relative">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-white">{comment.username}</p>
-                        <p className="text-xs text-zinc-500">
-                          {new Date(comment.timestamp).toLocaleString()}
-                        </p>
-                      </div>
-                      <p className="text-zinc-300 pr-8">{comment.text}</p>
-                      
-                      {/* More Options Button */}
-                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="p-1.5 hover:bg-zinc-600 rounded-lg transition-colors">
-                              <MoreVertical className="w-4 h-4 text-zinc-400" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
-                            <DropdownMenuItem 
-                              onClick={() => {
-                                copyToClipboard(comment.text);
-                              }}
-                              className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
-                            >
-                              <Copy className="w-4 h-4 mr-2" />
-                              Copy bình luận
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => {
-                                setSelectedComment({
-                                  id: comment.id,
-                                  text: comment.text,
-                                  username: comment.username
-                                });
-                                setShowCommentReportModal(true);
-                              }}
-                              className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
-                            >
-                              <Flag className="w-4 h-4 mr-2" />
-                              Báo cáo
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  ))}
+                  <p className="text-zinc-400 text-sm">Comments feature coming soon</p>
                 </div>
               </div>
             </div>

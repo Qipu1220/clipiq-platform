@@ -4,7 +4,8 @@ import { User, Video, ArrowLeft, Plus, Check, Flag, X, Eye, Heart } from 'lucide
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
-import { useState } from 'react';
+import { fetchUserVideosThunk } from '../../store/videosSlice';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { addUserReport } from '../../store/reportsSlice';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
@@ -18,18 +19,26 @@ interface PublicUserProfileProps {
 export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUserProfileProps) {
   const dispatch = useDispatch();
   const allUsers = useSelector((state: RootState) => state.users.allUsers);
-  const videos = useSelector((state: RootState) => state.videos.videos);
+  const userVideos = useSelector((state: RootState) => state.videos.userVideos);
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
-  
+
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportType, setReportType] = useState('spam');
   const [reportReason, setReportReason] = useState('');
-  
+
   const user = allUsers.find(u => u.username === username);
-  const userVideos = videos.filter(v => v.uploaderUsername === username);
-  
+
+  // const userVideos = videos.filter(v => v.uploaderUsername === username); // Removed: using state.videos.userVideos now
+
   const isSubscribed = currentUser && subscriptions[currentUser.username]?.includes(username);
+
+  useEffect(() => {
+    if (username) {
+      // @ts-ignore - dispatch type issue
+      dispatch(fetchUserVideosThunk(username));
+    }
+  }, [dispatch, username]);
 
   if (!user) {
     return (
@@ -47,7 +56,7 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
 
   const handleSubscribe = () => {
     if (!currentUser) return;
-    
+
     if (isSubscribed) {
       dispatch(unsubscribeFromUser({
         follower: currentUser.username,
@@ -93,8 +102,8 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-4">
               {user.avatarUrl ? (
-                <img 
-                  src={user.avatarUrl} 
+                <img
+                  src={user.avatarUrl}
                   alt={user.username}
                   className="w-20 h-20 rounded-full object-cover border-2"
                   style={{ borderColor: '#ff3b5c' }}
@@ -123,14 +132,14 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
                 </div>
               </div>
             </div>
-            
+
             {/* Action Buttons */}
             {currentUser && currentUser.username !== username && (
               <div className="flex gap-3">
                 <Button
                   onClick={handleSubscribe}
                   className="transition-all duration-300"
-                  style={{ 
+                  style={{
                     backgroundColor: isSubscribed ? '#16a34a' : '#ff3b5c',
                     color: 'white',
                     border: 'none'
@@ -165,7 +174,7 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
                 <Button
                   onClick={handleReport}
                   className="transition-all duration-300 border-0"
-                  style={{ 
+                  style={{
                     backgroundColor: '#dc2626',
                     color: 'white'
                   }}
@@ -207,10 +216,10 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                      
+
                       {/* Video info overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                      
+
                       {/* Bottom info */}
                       <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
                         <div className="flex items-center justify-between mb-1">

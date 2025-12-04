@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState, AppDispatch } from './store/store';
 import { restoreSessionThunk } from './store/authSlice';
+import { fetchVideosThunk } from './store/videosSlice';
 import { LoginPage } from './components/LoginPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
 import { Header } from './components/Header';
@@ -12,9 +13,7 @@ import { TikTokStyleHome } from './components/user/TikTokStyleHome';
 import { VideoPlayer } from './components/user/VideoPlayer';
 import { UploadVideo } from './components/user/UploadVideo';
 import { ReportUser } from './components/user/ReportUser';
-import { UserProfile } from './components/user/UserProfile';
 import { PublicUserProfile } from './components/user/PublicUserProfile';
-import { Toaster } from 'sonner@2.0.3';
 
 function AppContent() {
   const dispatch = useDispatch<AppDispatch>();
@@ -27,9 +26,17 @@ function AppContent() {
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
 
-  // Restore session on app load
+  // Restore session and fetch videos on app load
   useEffect(() => {
     dispatch(restoreSessionThunk());
+    // Fetch videos on app load
+    console.log('🚀 Dispatching fetchVideosThunk');
+    dispatch(fetchVideosThunk()).then((result: any) => {
+      console.log('✅ fetchVideosThunk result:', result);
+      console.log('📊 Redux state after dispatch:', store.getState().videos);
+    }).catch((error: any) => {
+      console.error('❌ fetchVideosThunk error:', error);
+    });
   }, [dispatch]);
 
   // Show loading screen while checking session
@@ -107,9 +114,6 @@ function AppContent() {
 
     // User routes
     if (currentUser?.role === 'user') {
-      if (currentPage === 'profile') {
-        return <UserProfile onVideoClick={handleVideoClick} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
-      }
       if (currentPage === 'upload') {
         return <UploadVideo onUploadComplete={handleUploadComplete} />;
       }
@@ -133,23 +137,6 @@ function AppContent() {
     <div className="h-screen bg-black overflow-hidden">
       {/* Header is now completely hidden - all roles have their own navigation */}
       {renderPage()}
-      <Toaster 
-        position="top-right"
-        toastOptions={{
-          style: {
-            background: '#18181b',
-            border: '1px solid #27272a',
-            color: '#fff',
-          },
-          className: 'toast-custom',
-          duration: 5000,
-        }}
-        theme="dark"
-        richColors
-        expand={true}
-        visibleToasts={5}
-        style={{ zIndex: 999999 }}
-      />
     </div>
   );
 }

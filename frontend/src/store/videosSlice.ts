@@ -1,274 +1,292 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import {
+  fetchVideosApi,
+  fetchVideoByIdApi,
+  searchVideosApi,
+  getTrendingVideosApi,
+  Video,
+  VideoResponse,
+} from '../api/videos';
 
-export interface Video {
-  id: string;  // UUID
-  title: string;
-  description: string;
-  uploaderId: string;  // UUID reference to user
-  uploaderUsername: string;  // Denormalized for display
-  thumbnailUrl: string;
-  videoUrl: string;
-  duration?: number;  // NEW: Video duration in seconds
-  views: number;
-  likes: string[];
-  status: 'active' | 'deleted' | 'flagged';  // NEW: Video status
-  uploadDate: number;
-  comments: Comment[];
-}
-
-export interface Comment {
-  id: string;  // UUID
-  userId: string;  // UUID
-  username: string;
-  text: string;
-  parentId?: string;  // NEW: For nested replies
-  edited?: boolean;  // NEW: Track if edited
-  timestamp: number;
-}
-
-interface VideosState {
+export interface VideosState {
   videos: Video[];
+  userVideos: Video[];
+  trendingVideos: Video[];
+  searchResults: Video[];
+  selectedVideo: Video | null;
+  loading: boolean;
+  error: string | null;
+  pagination: {
+    page: number;
+    hasMore: boolean;
+    total: number;
+  };
+  searchLoading: boolean;
+  searchError: string | null;
 }
 
 const initialState: VideosState = {
-  videos: [
-    {
-      id: 'video-1',
-      title: 'Getting Started with React',
-      description: 'Learn the basics of React in this comprehensive tutorial',
-      uploaderId: 'user-creator123',
-      uploaderUsername: 'creator123',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 1245,  // 20:45
-      views: 1250,
-      likes: ['user-001'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 2,
-      comments: [
-        { 
-          id: 'c1', 
-          userId: 'user-001',
-          username: 'user001', 
-          text: 'Great tutorial!', 
-          timestamp: Date.now() - 86400000 
-        }
-      ],
-    },
-    {
-      id: 'video-2',
-      title: 'Advanced TypeScript Techniques',
-      description: 'Deep dive into advanced TypeScript patterns',
-      uploaderId: 'user-002',
-      uploaderUsername: 'user002',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 2830,  // 47:10
-      views: 890,
-      likes: ['user-001'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 5,
-      comments: [],
-    },
-    {
-      id: 'video-3',
-      title: 'Building a Full Stack App',
-      description: 'Complete guide to building modern web applications',
-      uploaderId: 'user-creator123',
-      uploaderUsername: 'creator123',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 3600,  // 1:00:00
-      views: 2100,
-      likes: ['user-001', 'user-002'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 1,
-      comments: [
-        { 
-          id: 'c2', 
-          userId: 'user-002',
-          username: 'user002', 
-          text: 'Very helpful!', 
-          timestamp: Date.now() - 3600000 
-        }
-      ],
-    },
-    {
-      id: 'video-4',
-      title: 'CSS Grid Masterclass',
-      description: 'Master CSS Grid layout system',
-      uploaderId: 'user-001',
-      uploaderUsername: 'user001',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 1800,  // 30:00
-      views: 1580,
-      likes: ['user-002'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 3,
-      comments: [],
-    },
-    {
-      id: 'video-5',
-      title: 'Node.js Best Practices',
-      description: 'Learn industry best practices for Node.js development',
-      uploaderId: 'user-001',
-      uploaderUsername: 'user001',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 2400,  // 40:00
-      views: 920,
-      likes: ['user-002', 'creator123'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 7,
-      comments: [],
-    },
-    {
-      id: 'video-6',
-      title: 'Design Systems 101',
-      description: 'Introduction to building design systems',
-      uploaderId: 'user-002',
-      uploaderUsername: 'user002',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 1920,  // 32:00
-      views: 670,
-      likes: ['user-001'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 4,
-      comments: [],
-    },
-    {
-      id: 'video-7',
-      title: 'Responsive Web Design Tips',
-      description: 'Best practices for responsive layouts',
-      uploaderId: 'user-001',
-      uploaderUsername: 'user001',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 1560,  // 26:00
-      views: 1120,
-      likes: ['user-002', 'creator123'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 6,
-      comments: [],
-    },
-    {
-      id: 'video-8',
-      title: 'JavaScript ES6 Features',
-      description: 'Modern JavaScript features you should know',
-      uploaderId: 'user-001',
-      uploaderUsername: 'user001',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 2100,  // 35:00
-      views: 890,
-      likes: ['creator123'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 9,
-      comments: [],
-    },
-    {
-      id: 'video-9',
-      title: 'Tailwind CSS Tutorial',
-      description: 'Build beautiful UIs with Tailwind CSS',
-      uploaderId: 'user-002',
-      uploaderUsername: 'user002',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 2640,  // 44:00
-      views: 1450,
-      likes: ['user-001'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 8,
-      comments: [],
-    },
-    {
-      id: 'video-10',
-      title: 'Redux State Management',
-      description: 'Complete guide to Redux',
-      uploaderId: 'user-001',
-      uploaderUsername: 'user001',
-      thumbnailUrl: '',
-      videoUrl: '',
-      duration: 3180,  // 53:00
-      views: 2340,
-      likes: ['user-002'],
-      status: 'active',
-      uploadDate: Date.now() - 86400000 * 11,
-      comments: [],
-    },
-  ],
+  videos: [],
+  userVideos: [],
+  trendingVideos: [],
+  searchResults: [],
+  selectedVideo: null,
+  loading: false,
+  error: null,
+  pagination: {
+    page: 1,
+    hasMore: true,
+    total: 0,
+  },
+  searchLoading: false,
+  searchError: null,
 };
+
+// Async Thunks
+export const fetchVideosThunk = createAsyncThunk(
+  'videos/fetchVideos',
+  async (params: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
+    try {
+      console.log('🎬 fetchVideosThunk called with params:', params);
+      const response = await fetchVideosApi(params.page || 1, params.limit || 10);
+      console.log('🌐 API response:', response);
+      return response.data; // This is {videos: [], pagination: {...}}
+    } catch (error: any) {
+      console.error('💥 fetchVideosThunk error:', error);
+      return rejectWithValue(error.response?.data?.detail || 'Failed to fetch videos');
+    }
+  }
+);
+
+export const fetchUserVideosThunk = createAsyncThunk(
+  'videos/fetchUserVideos',
+  async (username: string, { rejectWithValue }) => {
+    try {
+      console.log('🎬 fetchUserVideosThunk called for username:', username);
+      const response = await fetchVideosApi(1, 50, username); // Fetch up to 50 videos for user profile
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.detail || 'Failed to fetch user videos');
+    }
+  }
+);
+
+export const fetchVideoByIdThunk = createAsyncThunk(
+  'videos/fetchVideoById',
+  async (videoId: string, { rejectWithValue }) => {
+    try {
+      const response = await fetchVideoByIdApi(videoId);
+      return response.data; // This is the Video object directly
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.detail || 'Failed to fetch video');
+    }
+  }
+);
+
+export const fetchTrendingVideosThunk = createAsyncThunk(
+  'videos/fetchTrendingVideos',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await getTrendingVideosApi();
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.detail || 'Failed to fetch trending videos');
+    }
+  }
+);
+
+export const searchVideosThunk = createAsyncThunk(
+  'videos/searchVideos',
+  async (params: { query: string; page?: number }, { rejectWithValue }) => {
+    try {
+      const response = await searchVideosApi(params.query, params.page || 1);
+      return response.data; // This is {videos: [], pagination: {...}}
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.detail || 'Failed to search videos');
+    }
+  }
+);
 
 const videosSlice = createSlice({
   name: 'videos',
   initialState,
   reducers: {
-    addVideo: (state, action: PayloadAction<Video>) => {
-      state.videos.unshift(action.payload);
+    setSelectedVideo: (state, action: PayloadAction<Video | null>) => {
+      state.selectedVideo = action.payload;
+    },
+    clearSearchResults: (state) => {
+      state.searchResults = [];
+      state.searchError = null;
+    },
+    likeVideo: (state, action: PayloadAction<string>) => {
+      const videoId = action.payload;
+      const video = state.videos.find((v) => v.id === videoId);
+      if (video) {
+        video.isLiked = true;
+        video.likes = (video.likes || 0) + 1;
+      }
+      const trendingVideo = state.trendingVideos.find((v) => v.id === videoId);
+      if (trendingVideo) {
+        trendingVideo.isLiked = true;
+        trendingVideo.likes = (trendingVideo.likes || 0) + 1;
+      }
+      if (state.selectedVideo?.id === videoId) {
+        state.selectedVideo.isLiked = true;
+        state.selectedVideo.likes = (state.selectedVideo.likes || 0) + 1;
+      }
+    },
+    unlikeVideo: (state, action: PayloadAction<string>) => {
+      const videoId = action.payload;
+      const video = state.videos.find((v) => v.id === videoId);
+      if (video) {
+        video.isLiked = false;
+        video.likes = Math.max(0, (video.likes || 0) - 1);
+      }
+      const trendingVideo = state.trendingVideos.find((v) => v.id === videoId);
+      if (trendingVideo) {
+        trendingVideo.isLiked = false;
+        trendingVideo.likes = Math.max(0, (trendingVideo.likes || 0) - 1);
+      }
+      if (state.selectedVideo?.id === videoId) {
+        state.selectedVideo.isLiked = false;
+        state.selectedVideo.likes = Math.max(0, (state.selectedVideo.likes || 0) - 1);
+      }
+    },
+    incrementViewCount: (state, action: PayloadAction<string>) => {
+      const videoId = action.payload;
+      const video = state.videos.find((v) => v.id === videoId);
+      if (video) {
+        video.views = (video.views || 0) + 1;
+      }
+      if (state.selectedVideo?.id === videoId) {
+        state.selectedVideo.views = (state.selectedVideo.views || 0) + 1;
+      }
+    },
+    addComment: (state, action: PayloadAction<{ videoId: string; count: number }>) => {
+      const video = state.videos.find((v) => v.id === action.payload.videoId);
+      if (video) {
+        video.comments = action.payload.count;
+      }
+      if (state.selectedVideo?.id === action.payload.videoId) {
+        state.selectedVideo.comments = action.payload.count;
+      }
     },
     deleteVideo: (state, action: PayloadAction<string>) => {
-      const video = state.videos.find(v => v.id === action.payload);
-      if (video) {
-        video.status = 'deleted';  // Soft delete
+      state.videos = state.videos.filter((v) => v.id !== action.payload);
+      state.trendingVideos = state.trendingVideos.filter((v) => v.id !== action.payload);
+      if (state.selectedVideo?.id === action.payload) {
+        state.selectedVideo = null;
       }
     },
-    updateVideoStatus: (state, action: PayloadAction<{ videoId: string; status: 'active' | 'deleted' | 'flagged' }>) => {
-      const video = state.videos.find(v => v.id === action.payload.videoId);
-      if (video) {
-        video.status = action.payload.status;
-      }
+    addVideo: (state, action: PayloadAction<any>) => {
+      state.videos.unshift(action.payload);
     },
-    likeVideo: (state, action: PayloadAction<{ videoId: string; userId: string }>) => {
-      const video = state.videos.find(v => v.id === action.payload.videoId);
-      if (video) {
-        if (video.likes.includes(action.payload.userId)) {
-          video.likes = video.likes.filter(u => u !== action.payload.userId);
+  },
+  extraReducers: (builder) => {
+    // Fetch Videos
+    builder
+      .addCase(fetchVideosThunk.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchVideosThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        console.log('📦 fetchVideosThunk fulfilled - action.payload:', action.payload);
+
+        const newVideos = action.payload.videos || [];
+        const page = action.payload.pagination?.page || 1;
+
+        if (page === 1) {
+          state.videos = newVideos;
         } else {
-          video.likes.push(action.payload.userId);
+          // Append new videos, avoiding duplicates
+          const existingIds = new Set(state.videos.map(v => v.id));
+          const uniqueNewVideos = newVideos.filter(v => !existingIds.has(v.id));
+          state.videos = [...state.videos, ...uniqueNewVideos];
         }
-      }
-    },
-    addComment: (state, action: PayloadAction<{ videoId: string; comment: Comment }>) => {
-      const video = state.videos.find(v => v.id === action.payload.videoId);
-      if (video) {
-        video.comments.push(action.payload.comment);
-      }
-    },
-    editComment: (state, action: PayloadAction<{ videoId: string; commentId: string; text: string }>) => {
-      const video = state.videos.find(v => v.id === action.payload.videoId);
-      if (video) {
-        const comment = video.comments.find(c => c.id === action.payload.commentId);
-        if (comment) {
-          comment.text = action.payload.text;
-          comment.edited = true;
-        }
-      }
-    },
-    deleteComment: (state, action: PayloadAction<{ videoId: string; commentId: string }>) => {
-      const video = state.videos.find(v => v.id === action.payload.videoId);
-      if (video) {
-        video.comments = video.comments.filter(c => c.id !== action.payload.commentId);
-      }
-    },
-    incrementViews: (state, action: PayloadAction<string>) => {
-      const video = state.videos.find(v => v.id === action.payload);
-      if (video) {
-        video.views += 1;
-      }
-    },
+
+        state.pagination = {
+          page: page,
+          hasMore: action.payload.pagination?.hasMore || false,
+          total: action.payload.pagination?.total || 0,
+        };
+      })
+      .addCase(fetchVideosThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Fetch User Videos
+    builder
+      .addCase(fetchUserVideosThunk.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchUserVideosThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.userVideos = action.payload.videos || [];
+      })
+      .addCase(fetchUserVideosThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Fetch Video by ID
+    builder
+      .addCase(fetchVideoByIdThunk.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchVideoByIdThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.selectedVideo = action.payload;
+      })
+      .addCase(fetchVideoByIdThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Fetch Trending Videos
+    builder
+      .addCase(fetchTrendingVideosThunk.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchTrendingVideosThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.trendingVideos = action.payload.videos || [];
+      })
+      .addCase(fetchTrendingVideosThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Search Videos
+    builder
+      .addCase(searchVideosThunk.pending, (state) => {
+        state.searchLoading = true;
+        state.searchError = null;
+      })
+      .addCase(searchVideosThunk.fulfilled, (state, action) => {
+        state.searchLoading = false;
+        state.searchResults = action.payload.videos || [];
+      })
+      .addCase(searchVideosThunk.rejected, (state, action) => {
+        state.searchLoading = false;
+        state.searchError = action.payload as string;
+      });
   },
 });
 
-export const { 
-  addVideo, 
-  deleteVideo, 
-  updateVideoStatus,
-  likeVideo, 
-  addComment, 
-  editComment,
-  deleteComment,
-  incrementViews 
+export const {
+  setSelectedVideo,
+  clearSearchResults,
+  likeVideo,
+  unlikeVideo,
+  incrementViewCount,
+  addComment,
+  deleteVideo,
+  addVideo,
 } = videosSlice.actions;
+
 export default videosSlice.reducer;

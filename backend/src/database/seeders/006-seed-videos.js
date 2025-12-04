@@ -165,7 +165,7 @@ export async function seed(client) {
   console.log('   Seeding 100 videos (2 per user)...');
   
   const minioClient = getMinioClient();
-  const bucketName = 'videos';
+  const bucketName = 'clipiq-videos'; // Must match docker-compose bucket name
   const videosDir = path.join(__dirname, 'data', 'sample-videos');
   
   // Check if sample videos directory exists
