@@ -39,6 +39,14 @@ function AppContent() {
     });
   }, [dispatch]);
 
+  // Refetch videos when user logs in to ensure like status is correct
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('🔄 User authenticated, refetching videos to update like status');
+      dispatch(fetchVideosThunk());
+    }
+  }, [isAuthenticated, dispatch]);
+
   // Show loading screen while checking session
   if (loading && !isAuthenticated) {
     return (

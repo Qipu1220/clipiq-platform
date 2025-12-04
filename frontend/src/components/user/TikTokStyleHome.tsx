@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount, fetchVideosThunk } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { logoutThunk } from '../../store/authSlice';
 import {
@@ -83,7 +83,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
-  const { pagination, loading } = useSelector((state: RootState) => state.videos);
+  const { pagination, loading, currentVideoComments } = useSelector((state: RootState) => state.videos);
 
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -159,11 +159,21 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     };
   }, [showUserMenu]);
 
+  // Refs for state accessed inside IntersectionObserver
+  const isSidebarOpenRef = useRef(isSidebarOpen);
+  const rightTabRef = useRef(rightTab);
+
+  // Update refs when state changes
+  useEffect(() => {
+    isSidebarOpenRef.current = isSidebarOpen;
+    rightTabRef.current = rightTab;
+  }, [isSidebarOpen, rightTab]);
+
   // IntersectionObserver to track which video is currently visible
   useEffect(() => {
     const options = {
       root: videoContainerRef.current,
-      threshold: 0.6, // Increased threshold slightly for better centering
+      threshold: 0.6,
     };
 
     const observer = new IntersectionObserver((entries) => {
@@ -172,6 +182,12 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           const index = videoRefs.current.findIndex(ref => ref === entry.target);
           if (index !== -1 && index !== currentVideoIndex) {
             setCurrentVideoIndex(index);
+
+            // Auto-close comments when scrolling to new video
+            // Use refs to get the latest state without recreating the observer
+            if (isSidebarOpenRef.current && rightTabRef.current === 'comments') {
+              setIsSidebarOpen(false);
+            }
           }
         }
       });
@@ -184,7 +200,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     return () => {
       observer.disconnect();
     };
-  }, [filteredVideos]);
+  }, [filteredVideos]); // Only recreate if video list changes
 
   // Scroll to video when index changes (for programmatic navigation) & Auto-play logic
   useEffect(() => {
@@ -230,22 +246,17 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
 
   const handleLike = () => {
     if (!currentUser || !currentVideo) return;
-    dispatch(likeVideo({ videoId: currentVideo.id, userId: currentUser.id }));
+    dispatch(toggleLikeVideoThunk({ videoId: currentVideo.id, isLiked: !!currentVideo.isLiked }) as any);
     setLikeAnimation(true);
     setTimeout(() => setLikeAnimation(false), 500);
   };
 
   const handleComment = () => {
     if (!commentText.trim() || !currentUser || !currentVideo) return;
-    dispatch(addComment({
+    dispatch(addCommentThunk({
       videoId: currentVideo.id,
-      comment: {
-        id: Date.now().toString(),
-        username: currentUser.username,
-        text: commentText,
-        timestamp: Date.now(),
-      },
-    }));
+      text: commentText,
+    }) as any);
     setCommentText('');
   };
 
@@ -275,6 +286,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
       // Mở và chuyển sang comments
       setIsSidebarOpen(true);
       setRightTab('comments');
+      if (currentVideo) {
+        dispatch(fetchCommentsThunk(currentVideo.id) as any);
+      }
     }
   };
 
@@ -949,13 +963,12 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                         <p className="text-zinc-600 text-xs mt-1">Chức năng xem chi tiết bình luận sẽ được cập nhật</p>
                       </div>
                     )}
-                    {false && currentVideo.comments && (
-                      currentVideo.comments.map(comment => {
-                        const commenter = users.find(u => u.username === comment.username);
+                    {currentVideoComments && currentVideoComments.length > 0 && (
+                      currentVideoComments.map(comment => {
                         return (
                           <div key={comment.id} className="flex gap-3 group hover:bg-zinc-900/30 p-2 -mx-2 rounded-lg transition-colors">
-                            {commenter?.avatarUrl ? (
-                              <img src={commenter.avatarUrl} alt={comment.username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                            {comment.userAvatarUrl ? (
+                              <img src={comment.userAvatarUrl} alt={comment.username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
                             ) : (
                               <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
                                 <User className="w-4 h-4 text-zinc-500" />
@@ -963,9 +976,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                             )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-baseline gap-2 mb-1">
-                                <p className="text-white text-sm font-medium">{commenter?.displayName || comment.username}</p>
+                                <p className="text-white text-sm font-medium">{comment.userDisplayName || comment.username}</p>
                                 <p className="text-xs text-zinc-600">
-                                  {new Date(comment.timestamp).toLocaleDateString()}
+                                  {new Date(comment.createdAt).toLocaleDateString()}
                                 </p>
                               </div>
                               <p className="text-zinc-300 text-sm">{comment.text}</p>

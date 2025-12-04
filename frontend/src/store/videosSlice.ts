@@ -4,8 +4,13 @@ import {
   fetchVideoByIdApi,
   searchVideosApi,
   getTrendingVideosApi,
+  likeVideoApi,
+  unlikeVideoApi,
+  getCommentsApi,
+  addCommentApi,
   Video,
   VideoResponse,
+  Comment,
 } from '../api/videos';
 
 export interface VideosState {
@@ -14,6 +19,7 @@ export interface VideosState {
   trendingVideos: Video[];
   searchResults: Video[];
   selectedVideo: Video | null;
+  currentVideoComments: Comment[];
   loading: boolean;
   error: string | null;
   pagination: {
@@ -31,6 +37,7 @@ const initialState: VideosState = {
   trendingVideos: [],
   searchResults: [],
   selectedVideo: null,
+  currentVideoComments: [],
   loading: false,
   error: null,
   pagination: {
@@ -103,6 +110,55 @@ export const searchVideosThunk = createAsyncThunk(
       return response.data; // This is {videos: [], pagination: {...}}
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.detail || 'Failed to search videos');
+    }
+  }
+);
+
+export const toggleLikeVideoThunk = createAsyncThunk(
+  'videos/toggleLike',
+  async ({ videoId, isLiked }: { videoId: string; isLiked: boolean }, { dispatch, rejectWithValue }) => {
+    try {
+      // Optimistic update
+      if (isLiked) {
+        dispatch(videosSlice.actions.unlikeVideo(videoId));
+        await unlikeVideoApi(videoId);
+      } else {
+        dispatch(videosSlice.actions.likeVideo(videoId));
+        await likeVideoApi(videoId);
+      }
+      return { videoId, isLiked: !isLiked };
+    } catch (error: any) {
+      // Revert on failure
+      if (isLiked) {
+        dispatch(videosSlice.actions.likeVideo(videoId));
+      } else {
+        dispatch(videosSlice.actions.unlikeVideo(videoId));
+      }
+      return rejectWithValue(error.response?.data?.message || 'Failed to toggle like');
+    }
+  }
+);
+
+export const fetchCommentsThunk = createAsyncThunk(
+  'videos/fetchComments',
+  async (videoId: string, { rejectWithValue }) => {
+    try {
+      const response = await getCommentsApi(videoId);
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch comments');
+    }
+  }
+);
+
+export const addCommentThunk = createAsyncThunk(
+  'videos/addComment',
+  async ({ videoId, text }: { videoId: string; text: string }, { rejectWithValue }) => {
+    try {
+      const response = await addCommentApi(videoId, text);
+      return { videoId, comment: response.data };
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to add comment');
     }
   }
 );
@@ -274,6 +330,26 @@ const videosSlice = createSlice({
       .addCase(searchVideosThunk.rejected, (state, action) => {
         state.searchLoading = false;
         state.searchError = action.payload as string;
+      })
+
+      // Fetch Comments
+      .addCase(fetchCommentsThunk.fulfilled, (state, action) => {
+        state.currentVideoComments = action.payload;
+      })
+
+      // Add Comment
+      .addCase(addCommentThunk.fulfilled, (state, action) => {
+        state.currentVideoComments.unshift(action.payload.comment);
+
+        // Update comment count in video lists
+        const { videoId } = action.payload;
+        const video = state.videos.find(v => v.id === videoId);
+        if (video) video.comments++;
+
+        const trendingVideo = state.trendingVideos.find(v => v.id === videoId);
+        if (trendingVideo) trendingVideo.comments++;
+
+        if (state.selectedVideo?.id === videoId) state.selectedVideo.comments++;
       });
   },
 });

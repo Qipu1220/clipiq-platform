@@ -66,9 +66,59 @@ export const getTrendingVideosApi = async (): Promise<VideoResponse> => {
   return response.data;
 };
 
+// Like video
+export const likeVideoApi = async (videoId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await apiClient.post<{ success: boolean; message: string }>(`/videos/${videoId}/like`);
+  return response.data;
+};
+
+// Unlike video
+export const unlikeVideoApi = async (videoId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await apiClient.delete<{ success: boolean; message: string }>(`/videos/${videoId}/like`);
+  return response.data;
+};
+
+export interface Comment {
+  id: string;
+  text: string;
+  userId: string;
+  username: string;
+  userDisplayName?: string;
+  userAvatarUrl?: string;
+  createdAt: string;
+}
+
+export interface CommentsResponse {
+  success: boolean;
+  data: Comment[];
+}
+
+export interface AddCommentResponse {
+  success: boolean;
+  data: Comment;
+}
+
+// Get comments
+export const getCommentsApi = async (videoId: string, page: number = 1): Promise<CommentsResponse> => {
+  const response = await apiClient.get<CommentsResponse>(`/videos/${videoId}/comments`, {
+    params: { page }
+  });
+  return response.data;
+};
+
+// Add comment
+export const addCommentApi = async (videoId: string, text: string): Promise<AddCommentResponse> => {
+  const response = await apiClient.post<AddCommentResponse>(`/videos/${videoId}/comments`, { text });
+  return response.data;
+};
+
 export default {
   fetchVideosApi,
   fetchVideoByIdApi,
   searchVideosApi,
-  getTrendingVideosApi
+  getTrendingVideosApi,
+  likeVideoApi,
+  unlikeVideoApi,
+  getCommentsApi,
+  addCommentApi
 };

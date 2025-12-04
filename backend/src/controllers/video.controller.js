@@ -38,28 +38,31 @@ export async function getVideos(req, res, next) {
     const countResult = await pool.query(countQuery, params);
     const total = parseInt(countResult.rows[0].count);
 
-    // Get videos with user info
+    // Get videos with user info and like status
     const query = `
-      SELECT v.*, u.username, u.display_name, u.avatar_url
+      SELECT v.*, u.username, u.display_name, u.avatar_url,
+      EXISTS(SELECT 1 FROM likes l WHERE l.video_id = v.id AND l.user_id = $${paramIndex + 2}) as is_liked
       FROM videos v
       LEFT JOIN users u ON v.uploader_id = u.id
       WHERE ${conditions.join(' AND ')}
       ORDER BY v.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
-    
-    const result = await pool.query(query, [...params, limitNum, offset]);
+
+    const userId = (req.user && req.user.userId) || null;
+    const result = await pool.query(query, [...params, limitNum, offset, userId]);
     const videos = result.rows.map(row => ({
       id: row.id,
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http')) 
-        ? row.thumbnail_url 
+      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
+        ? row.thumbnail_url
         : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
       duration: row.duration,
       views: row.views,
       likes: row.likes_count || 0,
+      isLiked: row.is_liked,
       comments: row.comments_count || 0,
       uploaderUsername: row.username,
       uploaderDisplayName: row.display_name,
@@ -68,7 +71,7 @@ export async function getVideos(req, res, next) {
     }));
 
     const pages = Math.ceil(total / limitNum);
-    
+
     return res.status(200).json({
       success: true,
       data: {
@@ -100,7 +103,7 @@ export async function getVideoById(req, res, next) {
       LEFT JOIN users u ON v.uploader_id = u.id
       WHERE v.id = $1 AND v.status = $2
     `;
-    
+
     const result = await pool.query(query, [id, 'active']);
 
     if (result.rows.length === 0) {
@@ -132,8 +135,8 @@ export async function getVideoById(req, res, next) {
         title: video.title,
         description: video.description,
         videoUrl: `http://localhost:9000/clipiq-videos/${video.video_url}`,
-        thumbnailUrl: (video.thumbnail_url && video.thumbnail_url.startsWith('http')) 
-          ? video.thumbnail_url 
+        thumbnailUrl: (video.thumbnail_url && video.thumbnail_url.startsWith('http'))
+          ? video.thumbnail_url
           : `https://images.unsplash.com/photo-${Math.abs(video.id.charCodeAt(0) * 1000 + video.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
         duration: video.duration,
         views: video.views + 1,
@@ -301,8 +304,8 @@ export async function searchVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http')) 
-        ? row.thumbnail_url 
+      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
+        ? row.thumbnail_url
         : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
       duration: row.duration,
       views: row.views,
@@ -357,8 +360,8 @@ export async function getTrendingVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http')) 
-        ? row.thumbnail_url 
+      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
+        ? row.thumbnail_url
         : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
       duration: row.duration,
       views: row.views,
@@ -375,6 +378,177 @@ export async function getTrendingVideos(req, res, next) {
       data: {
         videos,
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /api/v1/videos/:id/like - Like a video
+ */
+export async function likeVideo(req, res, next) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+
+    // Check if already liked
+    const check = await pool.query(
+      'SELECT 1 FROM likes WHERE video_id = $1 AND user_id = $2',
+      [id, userId]
+    );
+
+    if (check.rows.length > 0) {
+      return res.status(400).json({ success: false, message: 'Already liked' });
+    }
+
+    // Add like
+    await pool.query(
+      'INSERT INTO likes (video_id, user_id) VALUES ($1, $2)',
+      [id, userId]
+    );
+
+    // Update video likes count
+    await pool.query(
+      'UPDATE videos SET likes_count = likes_count + 1 WHERE id = $1',
+      [id]
+    );
+
+    return res.status(200).json({ success: true, message: 'Video liked' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * DELETE /api/v1/videos/:id/like - Unlike a video
+ */
+export async function unlikeVideo(req, res, next) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+
+    // Check if liked
+    const check = await pool.query(
+      'SELECT 1 FROM likes WHERE video_id = $1 AND user_id = $2',
+      [id, userId]
+    );
+
+    if (check.rows.length === 0) {
+      return res.status(400).json({ success: false, message: 'Not liked yet' });
+    }
+
+    // Remove like
+    await pool.query(
+      'DELETE FROM likes WHERE video_id = $1 AND user_id = $2',
+      [id, userId]
+    );
+
+    // Update video likes count
+    await pool.query(
+      'UPDATE videos SET likes_count = GREATEST(likes_count - 1, 0) WHERE id = $1',
+      [id]
+    );
+
+    return res.status(200).json({ success: true, message: 'Video unliked' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * GET /api/v1/videos/:id/comments - Get video comments
+ */
+export async function getComments(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 20;
+    const offset = (pageNum - 1) * limitNum;
+
+    const result = await pool.query(
+      `SELECT c.*, u.username, u.display_name, u.avatar_url
+       FROM comments c
+       LEFT JOIN users u ON c.user_id = u.id
+       WHERE c.video_id = $1
+       ORDER BY c.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [id, limitNum, offset]
+    );
+
+    const comments = result.rows.map(row => ({
+      id: row.id,
+      text: row.text,
+      userId: row.user_id,
+      username: row.username,
+      userDisplayName: row.display_name,
+      userAvatarUrl: row.avatar_url,
+      createdAt: row.created_at,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: comments
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /api/v1/videos/:id/comments - Add a comment
+ */
+export async function addComment(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { text } = req.body;
+    const userId = (req.user && req.user.userId) || null;
+
+    if (!text) {
+      throw new ApiError(400, 'Comment text is required');
+    }
+
+    if (!userId) {
+      throw new ApiError(401, 'Authentication required');
+    }
+
+    const commentId = crypto.randomUUID();
+
+    // Insert comment
+    const result = await pool.query(
+      `INSERT INTO comments (id, video_id, user_id, text, created_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [commentId, id, userId, text]
+    );
+
+    // Update video comments count
+    await pool.query(
+      'UPDATE videos SET comments_count = comments_count + 1 WHERE id = $1',
+      [id]
+    );
+
+    // Get user info for response
+    const userResult = await pool.query(
+      'SELECT username, display_name, avatar_url FROM users WHERE id = $1',
+      [userId]
+    );
+    const user = userResult.rows[0];
+
+    const newComment = {
+      id: result.rows[0].id,
+      text: result.rows[0].text,
+      userId: userId,
+      username: user.username,
+      userDisplayName: user.display_name,
+      userAvatarUrl: user.avatar_url,
+      createdAt: result.rows[0].created_at,
+    };
+
+    return res.status(201).json({
+      success: true,
+      data: newComment
     });
   } catch (error) {
     next(error);
