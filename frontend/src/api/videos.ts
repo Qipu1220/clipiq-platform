@@ -112,6 +112,12 @@ export const addCommentApi = async (videoId: string, text: string): Promise<AddC
   return response.data;
 };
 
+// Delete comment
+export const deleteCommentApi = async (videoId: string, commentId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await apiClient.delete<{ success: boolean; message: string }>(`/videos/${videoId}/comments/${commentId}`);
+  return response.data;
+};
+
 export default {
   fetchVideosApi,
   fetchVideoByIdApi,
@@ -120,5 +126,6 @@ export default {
   likeVideoApi,
   unlikeVideoApi,
   getCommentsApi,
-  addCommentApi
+  addCommentApi,
+  deleteCommentApi
 };

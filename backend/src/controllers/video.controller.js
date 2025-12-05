@@ -554,3 +554,44 @@ export async function addComment(req, res, next) {
     next(error);
   }
 }
+
+/**
+ * DELETE /api/v1/videos/:id/comments/:commentId - Delete a comment
+ */
+export async function deleteComment(req, res, next) {
+  try {
+    const { id, commentId } = req.params;
+    const userId = req.user.userId;
+
+    // Check if comment exists
+    const commentCheck = await pool.query(
+      'SELECT user_id FROM comments WHERE id = $1 AND video_id = $2',
+      [commentId, id]
+    );
+
+    if (commentCheck.rows.length === 0) {
+      throw new ApiError(404, 'Comment not found');
+    }
+
+    // Check authorization
+    if (commentCheck.rows[0].user_id !== userId && req.user.role !== 'admin') {
+      throw new ApiError(403, 'Not authorized to delete this comment');
+    }
+
+    // Delete comment
+    await pool.query(
+      'DELETE FROM comments WHERE id = $1',
+      [commentId]
+    );
+
+    // Update video comments count
+    await pool.query(
+      'UPDATE videos SET comments_count = GREATEST(comments_count - 1, 0) WHERE id = $1',
+      [id]
+    );
+
+    return res.status(200).json({ success: true, message: 'Comment deleted' });
+  } catch (error) {
+    next(error);
+  }
+}

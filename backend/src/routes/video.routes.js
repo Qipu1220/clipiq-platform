@@ -13,6 +13,7 @@ import {
   unlikeVideo,
   getComments,
   addComment,
+  deleteComment,
 } from '../controllers/video.controller.js';
 import { authenticateToken, optionalAuth } from '../middlewares/auth.middleware.js';
 
@@ -35,6 +36,7 @@ router.delete('/:id/like', authenticateToken, unlikeVideo);
 // Comment routes
 router.get('/:id/comments', getComments);
 router.post('/:id/comments', authenticateToken, addComment);
+router.delete('/:id/comments/:commentId', authenticateToken, deleteComment);
 
 // This route must be last
 router.get('/:id', getVideoById); // Get single video

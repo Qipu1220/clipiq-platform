@@ -8,6 +8,7 @@ import {
   unlikeVideoApi,
   getCommentsApi,
   addCommentApi,
+  deleteCommentApi,
   Video,
   VideoResponse,
   Comment,
@@ -151,6 +152,10 @@ export const fetchCommentsThunk = createAsyncThunk(
   }
 );
 
+
+
+
+
 export const addCommentThunk = createAsyncThunk(
   'videos/addComment',
   async ({ videoId, text }: { videoId: string; text: string }, { rejectWithValue }) => {
@@ -159,6 +164,18 @@ export const addCommentThunk = createAsyncThunk(
       return { videoId, comment: response.data };
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to add comment');
+    }
+  }
+);
+
+export const deleteCommentThunk = createAsyncThunk(
+  'videos/deleteComment',
+  async ({ videoId, commentId }: { videoId: string; commentId: string }, { rejectWithValue }) => {
+    try {
+      await deleteCommentApi(videoId, commentId);
+      return { videoId, commentId };
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to delete comment');
     }
   }
 );
@@ -350,6 +367,23 @@ const videosSlice = createSlice({
         if (trendingVideo) trendingVideo.comments++;
 
         if (state.selectedVideo?.id === videoId) state.selectedVideo.comments++;
+      })
+
+      // Delete Comment
+      .addCase(deleteCommentThunk.fulfilled, (state, action) => {
+        const { videoId, commentId } = action.payload;
+        state.currentVideoComments = state.currentVideoComments.filter(c => c.id !== commentId);
+
+        // Update comment count in video lists
+        const video = state.videos.find(v => v.id === videoId);
+        if (video) video.comments = Math.max(0, video.comments - 1);
+
+        const trendingVideo = state.trendingVideos.find(v => v.id === videoId);
+        if (trendingVideo) trendingVideo.comments = Math.max(0, trendingVideo.comments - 1);
+
+        if (state.selectedVideo?.id === videoId) {
+          state.selectedVideo.comments = Math.max(0, state.selectedVideo.comments - 1);
+        }
       });
   },
 });

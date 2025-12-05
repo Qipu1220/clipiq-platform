@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { logoutThunk } from '../../store/authSlice';
 import {
   Play, Search, Home, Compass, Users, Video, MessageCircle,
   Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check, LogOut, ChevronDown,
-  AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy
+  AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
@@ -19,6 +19,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '../ui/dropdown-menu';
 import {
   AlertDialog,
@@ -251,7 +252,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     setTimeout(() => setLikeAnimation(false), 500);
   };
 
-  const handleComment = () => {
+  
+  const handleDeleteComment = async (commentId: string) => {
+    if (!currentVideo) return;
+    try {
+      await dispatch(deleteCommentThunk({ videoId: currentVideo.id, commentId })).unwrap();
+      toast.success('Đã xóa bình luận');
+    } catch (error) {
+      toast.error('Không thể xóa bình luận');
+    }
+  };
+
+const handleComment = () => {
     if (!commentText.trim() || !currentUser || !currentVideo) return;
     dispatch(addCommentThunk({
       videoId: currentVideo.id,
@@ -947,8 +959,8 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
 
             {/* Tab Content */}
             {rightTab === 'comments' ? (
-              <div className="flex-1 flex flex-col">
-                <ScrollArea className="flex-1">
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
                   <div className="p-4 space-y-3">
                     {currentVideo.comments === 0 ? (
                       <div className="text-center py-12">
@@ -965,6 +977,12 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                     )}
                     {currentVideoComments && currentVideoComments.length > 0 && (
                       currentVideoComments.map(comment => {
+                        console.log('Comment Debug:', {
+                          commentId: comment.id,
+                          commentUserId: comment.userId,
+                          currentUserId: currentUser?.id,
+                          isMatch: currentUser?.id === comment.userId
+                        });
                         return (
                           <div key={comment.id} className="flex gap-3 group hover:bg-zinc-900/30 p-2 -mx-2 rounded-lg transition-colors">
                             {comment.userAvatarUrl ? (
@@ -993,6 +1011,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
+
                                   <DropdownMenuItem
                                     onClick={() => {
                                       copyToClipboard(comment.text);
@@ -1016,6 +1035,17 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                                     <Flag className="w-4 h-4 mr-2" />
                                     Báo cáo
                                   </DropdownMenuItem>
+                                                                    {/* Force show delete for debugging */}
+                                  <>
+                                    <DropdownMenuSeparator className="bg-zinc-800" />
+                                    <DropdownMenuItem
+                                      onClick={() => handleDeleteComment(comment.id)}
+                                      className="text-red-400 hover:text-red-300 hover:bg-zinc-800 focus:text-red-300 focus:bg-zinc-800 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Xóa (Debug)
+                                    </DropdownMenuItem>
+                                  </>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
@@ -1024,10 +1054,10 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                       })
                     )}
                   </div>
-                </ScrollArea>
+                </div>
 
                 {/* Comment Input */}
-                <div className="p-4 border-t border-zinc-800 bg-black">
+                <div className="p-4 border-t border-zinc-800 bg-black flex-shrink-0">
                   <div className="flex items-center gap-2">
                     <div className="flex-1 flex items-center gap-2 bg-zinc-900 rounded-lg px-3 py-1.5 border border-zinc-800">
                       <Input
@@ -1487,7 +1517,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* Top Bar */}
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
               <h2 className="text-white text-xl logo-text">Đã follow</h2>
