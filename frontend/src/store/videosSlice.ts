@@ -4,11 +4,14 @@ import {
   fetchVideoByIdApi,
   searchVideosApi,
   getTrendingVideosApi,
+  fetchLikedVideosApi,
+  fetchSavedVideosApi,
   likeVideoApi,
   unlikeVideoApi,
   getCommentsApi,
   addCommentApi,
   deleteCommentApi,
+  toggleSaveVideoApi,
   Video,
   VideoResponse,
   Comment,
@@ -17,9 +20,12 @@ import {
 export interface VideosState {
   videos: Video[];
   userVideos: Video[];
+  likedVideos: Video[];
+  savedVideos: Video[];
   trendingVideos: Video[];
   searchResults: Video[];
   selectedVideo: Video | null;
+  focusedVideoId: string | null;
   currentVideoComments: Comment[];
   loading: boolean;
   error: string | null;
@@ -35,9 +41,12 @@ export interface VideosState {
 const initialState: VideosState = {
   videos: [],
   userVideos: [],
+  likedVideos: [],
+  savedVideos: [],
   trendingVideos: [],
   searchResults: [],
   selectedVideo: null,
+  focusedVideoId: null,
   currentVideoComments: [],
   loading: false,
   error: null,
@@ -103,6 +112,32 @@ export const fetchTrendingVideosThunk = createAsyncThunk(
   }
 );
 
+
+
+export const fetchLikedVideosThunk = createAsyncThunk(
+  'videos/fetchLikedVideos',
+  async (params: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
+    try {
+      const response = await fetchLikedVideosApi(params.page || 1, params.limit || 20);
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.detail || 'Failed to fetch liked videos');
+    }
+  }
+);
+
+export const fetchSavedVideosThunk = createAsyncThunk(
+  'videos/fetchSavedVideos',
+  async (params: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
+    try {
+      const response = await fetchSavedVideosApi(params.page || 1, params.limit || 20);
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.detail || 'Failed to fetch saved videos');
+    }
+  }
+);
+
 export const searchVideosThunk = createAsyncThunk(
   'videos/searchVideos',
   async (params: { query: string; page?: number }, { rejectWithValue }) => {
@@ -155,6 +190,18 @@ export const fetchCommentsThunk = createAsyncThunk(
 
 
 
+
+export const toggleSaveVideoThunk = createAsyncThunk(
+  'videos/toggleSaveVideo',
+  async (videoId: string, { rejectWithValue }) => {
+    try {
+      const response = await toggleSaveVideoApi(videoId);
+      return { videoId, isSaved: response.data.isSaved };
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.detail || 'Failed to toggle save video');
+    }
+  }
+);
 
 export const addCommentThunk = createAsyncThunk(
   'videos/addComment',
@@ -251,6 +298,12 @@ const videosSlice = createSlice({
         state.selectedVideo = null;
       }
     },
+    setVideos: (state, action: PayloadAction<Video[]>) => {
+      state.videos = action.payload;
+    },
+    setFocusedVideoId: (state, action: PayloadAction<string | null>) => {
+      state.focusedVideoId = action.payload;
+    },
     addVideo: (state, action: PayloadAction<any>) => {
       state.videos.unshift(action.payload);
     },
@@ -294,12 +347,39 @@ const videosSlice = createSlice({
       .addCase(fetchUserVideosThunk.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.userVideos = [];
       })
       .addCase(fetchUserVideosThunk.fulfilled, (state, action) => {
         state.loading = false;
         state.userVideos = action.payload.videos || [];
       })
       .addCase(fetchUserVideosThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+
+      // Fetch Liked Videos
+      .addCase(fetchLikedVideosThunk.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchLikedVideosThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.likedVideos = action.payload.videos || [];
+      })
+      .addCase(fetchLikedVideosThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+
+      // Fetch Saved Videos
+      .addCase(fetchSavedVideosThunk.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchSavedVideosThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.savedVideos = action.payload.videos || [];
+      })
+      .addCase(fetchSavedVideosThunk.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       });
@@ -384,6 +464,46 @@ const videosSlice = createSlice({
         if (state.selectedVideo?.id === videoId) {
           state.selectedVideo.comments = Math.max(0, state.selectedVideo.comments - 1);
         }
+      })
+
+      // Toggle Save Video
+      .addCase(toggleSaveVideoThunk.fulfilled, (state, action) => {
+        const { videoId, isSaved } = action.payload;
+
+        // Update in main list
+        const video = state.videos.find(v => v.id === videoId);
+        if (video) video.isSaved = isSaved;
+
+        // Update in trending list
+        const trendingVideo = state.trendingVideos.find(v => v.id === videoId);
+        if (trendingVideo) trendingVideo.isSaved = isSaved;
+
+        // Update in search results
+        const searchVideo = state.searchResults.find(v => v.id === videoId);
+        if (searchVideo) searchVideo.isSaved = isSaved;
+
+        // Update selected video
+        if (state.selectedVideo?.id === videoId) {
+          state.selectedVideo.isSaved = isSaved;
+        }
+
+        // Update in user videos
+        const userVideo = state.userVideos.find(v => v.id === videoId);
+        if (userVideo) userVideo.isSaved = isSaved;
+
+        // Update in liked videos
+        const likedVideo = state.likedVideos.find(v => v.id === videoId);
+        if (likedVideo) likedVideo.isSaved = isSaved;
+
+        // Update saved videos list specifically
+        if (isSaved) {
+          // If saved, we might want to add it to savedVideos if not present? 
+          // But we don't have the full video object usually unless we fetch.
+          // However, if we are in the savedVideos tab, we probably want to remove it if unsaved.
+        } else {
+          // If unsaved, remove from savedVideos list
+          state.savedVideos = state.savedVideos.filter(v => v.id !== videoId);
+        }
       });
   },
 });
@@ -396,7 +516,10 @@ export const {
   incrementViewCount,
   addComment,
   deleteVideo,
+
   addVideo,
+  setVideos,
+  setFocusedVideoId,
 } = videosSlice.actions;
 
 export default videosSlice.reducer;

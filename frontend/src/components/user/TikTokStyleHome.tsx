@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { logoutThunk } from '../../store/authSlice';
 import {
@@ -84,7 +84,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
-  const { pagination, loading, currentVideoComments } = useSelector((state: RootState) => state.videos);
+  const { pagination, loading, currentVideoComments, focusedVideoId } = useSelector((state: RootState) => state.videos);
 
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -140,8 +140,25 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   useEffect(() => {
     if (currentVideo) {
       dispatch(incrementViewCount(currentVideo.id));
+      setIsBookmarked(!!currentVideo.isSaved);
     }
-  }, [currentVideo?.id, dispatch]);
+  }, [currentVideo?.id, currentVideo?.isSaved, dispatch]);
+
+  // Handle initial video focus from profile click
+  useEffect(() => {
+    if (focusedVideoId && videos.length > 0) {
+      const index = videos.findIndex(v => v.id === focusedVideoId);
+      if (index !== -1) {
+        setCurrentVideoIndex(index);
+        // Scroll to it
+        setTimeout(() => {
+          videoRefs.current[index]?.scrollIntoView({ behavior: 'auto' });
+        }, 100);
+        // Clear focus
+        dispatch(setFocusedVideoId(null));
+      }
+    }
+  }, [focusedVideoId, videos, dispatch]);
 
   // Click outside to close user menu
   useEffect(() => {
@@ -252,7 +269,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     setTimeout(() => setLikeAnimation(false), 500);
   };
 
-  
+
   const handleDeleteComment = async (commentId: string) => {
     if (!currentVideo) return;
     try {
@@ -263,7 +280,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     }
   };
 
-const handleComment = () => {
+  const handleComment = () => {
     if (!commentText.trim() || !currentUser || !currentVideo) return;
     dispatch(addCommentThunk({
       videoId: currentVideo.id,
@@ -405,7 +422,7 @@ const handleComment = () => {
 
               <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
-                onClick={() => onViewUserProfile?.(currentUser.username)}
+                onClick={() => onNavigate?.('profile')}
               >
                 <User className="w-5 h-5" />
                 <span>Hồ sơ</span>
@@ -531,7 +548,7 @@ const handleComment = () => {
 
               <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
-                onClick={() => onViewUserProfile?.(currentUser.username)}
+                onClick={() => onNavigate?.('profile')}
               >
                 <User className="w-5 h-5" />
                 <span>Hồ sơ</span>
@@ -700,9 +717,18 @@ const handleComment = () => {
                   <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/60 to-transparent">
                     <p className="text-white mb-1 font-medium">{video.title}</p>
                     <p className="text-zinc-300 text-sm line-clamp-2">{video.description}</p>
-                    <p className="text-zinc-400 text-xs mt-2">
-                      @{uploader?.username || video.uploaderUsername} · {new Date(video.uploadDate).toLocaleDateString()}
-                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent video click/toggle
+                          onViewUserProfile?.(uploader?.username || video.uploaderUsername);
+                        }}
+                        className="text-zinc-400 text-xs hover:text-white hover:underline transition-colors font-medium z-50 relative"
+                      >
+                        @{uploader?.username || video.uploaderUsername}
+                      </button>
+                      <span className="text-zinc-400 text-xs">· {new Date(video.uploadDate).toLocaleDateString()}</span>
+                    </div>
                   </div>
 
                   {/* Mute Button (Top Right) - Only show on current video */}
@@ -725,7 +751,7 @@ const handleComment = () => {
         </div>
 
         {/* Right Side Action Buttons (Fixed position, always visible) */}
-        <div className="absolute right-6 bottom-28 flex flex-col gap-4 items-center z-10">
+        <div className="absolute right-6 bottom-28 flex flex-col gap-4 items-center z-50">
           {/* Uploader Avatar with Follow Button */}
           <div className="relative">
             <button
@@ -796,9 +822,12 @@ const handleComment = () => {
           {/* Bookmark */}
           <button
             onClick={() => {
-              setIsBookmarked(!isBookmarked);
-              setBookmarkAnimation(true);
-              setTimeout(() => setBookmarkAnimation(false), 500);
+              if (currentVideo) {
+                dispatch(toggleSaveVideoThunk(currentVideo.id) as any);
+                setIsBookmarked(!isBookmarked); // Optimistic toggle
+                setBookmarkAnimation(true);
+                setTimeout(() => setBookmarkAnimation(false), 500);
+              }
             }}
             className="flex flex-col items-center gap-1 group"
           >
@@ -1035,7 +1064,7 @@ const handleComment = () => {
                                     <Flag className="w-4 h-4 mr-2" />
                                     Báo cáo
                                   </DropdownMenuItem>
-                                                                    {/* Force show delete for debugging */}
+                                  {/* Force show delete for debugging */}
                                   <>
                                     <DropdownMenuSeparator className="bg-zinc-800" />
                                     <DropdownMenuItem

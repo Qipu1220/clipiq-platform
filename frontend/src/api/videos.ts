@@ -17,6 +17,7 @@ export interface Video {
   createdAt?: string;
   updatedAt?: string;
   isLiked?: boolean; // whether current user liked this video
+  isSaved?: boolean;
 }
 
 export interface VideoResponse {
@@ -63,6 +64,22 @@ export const searchVideosApi = async (query: string, page: number = 1): Promise<
 // Get trending videos
 export const getTrendingVideosApi = async (): Promise<VideoResponse> => {
   const response = await apiClient.get<VideoResponse>('/videos/trending');
+  return response.data;
+};
+
+// Fetch liked videos
+export const fetchLikedVideosApi = async (page: number = 1, limit: number = 10): Promise<VideoResponse> => {
+  const response = await apiClient.get<VideoResponse>('/videos/liked', {
+    params: { page, limit }
+  });
+  return response.data;
+};
+
+// Fetch saved videos
+export const fetchSavedVideosApi = async (page: number = 1, limit: number = 10): Promise<VideoResponse> => {
+  const response = await apiClient.get<VideoResponse>('/videos/saved', {
+    params: { page, limit }
+  });
   return response.data;
 };
 
@@ -118,13 +135,22 @@ export const deleteCommentApi = async (videoId: string, commentId: string): Prom
   return response.data;
 };
 
+// Toggle save video
+export const toggleSaveVideoApi = async (videoId: string): Promise<{ success: boolean; data: { isSaved: boolean }; message: string }> => {
+  const response = await apiClient.post(`/videos/${videoId}/save`);
+  return response.data;
+};
+
 export default {
   fetchVideosApi,
   fetchVideoByIdApi,
   searchVideosApi,
   getTrendingVideosApi,
+  fetchLikedVideosApi,
+  fetchSavedVideosApi,
   likeVideoApi,
   unlikeVideoApi,
+  toggleSaveVideoApi,
   getCommentsApi,
   addCommentApi,
   deleteCommentApi

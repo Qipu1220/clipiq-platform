@@ -166,9 +166,57 @@ export async function getMe(req, res, next) {
   }
 }
 
+/**
+ * Update Current User Profile
+ * 
+ * Updates profile fields (displayName, bio, avatarUrl)
+ * Requires authentication.
+ * 
+ * PATCH /api/v1/auth/me
+ * 
+ * Request Body (partial):
+ * {
+ *   "displayName": "New Name",
+ *   "bio": "New Bio",
+ *   "avatarUrl": "http://..."
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Profile updated successfully",
+ *   "data": {
+ *     "user": { ...updated_user_profile... }
+ *   }
+ * }
+ */
+export async function updateProfile(req, res, next) {
+  try {
+    const userId = req.user.userId;
+    const { displayName, bio, avatarUrl } = req.body;
+
+    // Delegate to service layer
+    const user = await authService.updateUserProfile(userId, {
+      displayName,
+      bio,
+      avatarUrl
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: { user }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+}
+
 export default {
   login,
   logout,
   refreshToken,
-  getMe
+  getMe,
+  updateProfile
 };

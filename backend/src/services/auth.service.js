@@ -38,7 +38,7 @@ export async function authenticateUser(login, password) {
     WHERE email = $1 OR username = $1
     LIMIT 1
   `;
-  
+
   const result = await pool.query(query, [login]);
 
   if (result.rows.length === 0) {
@@ -54,7 +54,7 @@ export async function authenticateUser(login, password) {
   // Check if user is banned
   if (user.banned) {
     const isBanActive = !user.ban_expiry || new Date(user.ban_expiry) > new Date();
-    
+
     if (isBanActive) {
       throw ApiError.forbidden(
         'Your account has been suspended',
@@ -119,7 +119,7 @@ export async function logoutUser(refreshToken) {
     refreshTokenStore.delete(refreshToken);
     return true;
   }
-  
+
   // Even if token not found, logout is successful
   return true;
 }
@@ -155,7 +155,7 @@ export async function refreshAccessToken(refreshToken) {
   } catch (error) {
     // Remove invalid token from store
     refreshTokenStore.delete(refreshToken);
-    
+
     if (error.code === 'REFRESH_TOKEN_EXPIRED') {
       throw ApiError.unauthorized(
         'Your refresh token has expired. Please login again.',
@@ -163,7 +163,7 @@ export async function refreshAccessToken(refreshToken) {
         { expiredAt: error.expiredAt }
       );
     }
-    
+
     throw ApiError.forbidden(
       'The provided refresh token is invalid',
       'REFRESH_TOKEN_INVALID'
@@ -244,6 +244,79 @@ export async function getUserProfile(userId) {
 }
 
 /**
+ * Update user profile
+ * 
+ * @param {string} userId - User ID
+ * @param {object} updates - Fields to update (displayName, bio, avatarUrl)
+ * @returns {Promise<object>} Updated user profile
+ */
+export async function updateUserProfile(userId, updates) {
+  const { displayName, bio, avatarUrl } = updates;
+
+  // Build dynamic query
+  const fields = [];
+  const values = [userId];
+  let paramCount = 2; // $1 is userId
+
+  if (displayName !== undefined) {
+    fields.push(`display_name = $${paramCount++}`);
+    values.push(displayName);
+  }
+
+  if (bio !== undefined) {
+    fields.push(`bio = $${paramCount++}`);
+    values.push(bio);
+  }
+
+  if (avatarUrl !== undefined) {
+    fields.push(`avatar_url = $${paramCount++}`);
+    values.push(avatarUrl);
+  }
+
+  // If no fields to update
+  if (fields.length === 0) {
+    return getUserProfile(userId);
+  }
+
+  // Add updated_at
+  fields.push(`updated_at = CURRENT_TIMESTAMP`);
+
+  const query = `
+     UPDATE users 
+     SET ${fields.join(', ')} 
+     WHERE id = $1
+     RETURNING id, username, email, role, display_name, bio, avatar_url, 
+               banned, ban_expiry, ban_reason, warnings, created_at, updated_at
+   `;
+
+  const result = await pool.query(query, values);
+
+  if (result.rows.length === 0) {
+    throw ApiError.notFound(
+      'User not found',
+      'USER_NOT_FOUND'
+    );
+  }
+
+  const user = result.rows[0];
+
+  // Format response
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    displayName: user.display_name,
+    bio: user.bio,
+    avatarUrl: user.avatar_url,
+    banned: user.banned,
+    warnings: user.warnings,
+    createdAt: user.created_at,
+    updatedAt: user.updated_at
+  };
+}
+
+/**
  * Check if refresh token is valid and stored
  * 
  * @param {string} refreshToken - Refresh token to check
@@ -269,6 +342,8 @@ export default {
   logoutUser,
   refreshAccessToken,
   getUserProfile,
+  updateUserProfile,
+  isRefreshTokenValid,
   isRefreshTokenValid,
   clearAllRefreshTokens
 };

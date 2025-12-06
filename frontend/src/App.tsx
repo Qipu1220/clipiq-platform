@@ -14,6 +14,7 @@ import { VideoPlayer } from './components/user/VideoPlayer';
 import { UploadVideo } from './components/user/UploadVideo';
 import { ReportUser } from './components/user/ReportUser';
 import { PublicUserProfile } from './components/user/PublicUserProfile';
+import { UserProfile } from './components/user/UserProfile';
 
 function AppContent() {
   const dispatch = useDispatch<AppDispatch>();
@@ -134,11 +135,18 @@ function AppContent() {
       if (currentPage === 'view-user-profile' && selectedUsername) {
         return <PublicUserProfile username={selectedUsername} onVideoClick={handleVideoClick} onBack={() => handleNavigate('home')} />;
       }
+      if (currentPage === 'profile') {
+        return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
+      }
       // Use TikTok-style layout for home page
       return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
     }
 
-    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} />;
+    if (currentPage === 'profile') {
+      return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
+    }
+
+    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
   };
 
   return (

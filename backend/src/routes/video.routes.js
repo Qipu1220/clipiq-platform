@@ -11,6 +11,10 @@ import {
   getTrendingVideos,
   likeVideo,
   unlikeVideo,
+  toggleSaveVideo,
+
+  getLikedVideos,
+  getSavedVideos,
   getComments,
   addComment,
   deleteComment,
@@ -32,6 +36,9 @@ router.delete('/:id', authenticateToken, deleteVideo);
 // Like routes
 router.post('/:id/like', authenticateToken, likeVideo);
 router.delete('/:id/like', authenticateToken, unlikeVideo);
+router.get('/liked', authenticateToken, getLikedVideos); // Get liked videos
+router.get('/saved', authenticateToken, getSavedVideos); // Get saved videos
+router.post('/:id/save', authenticateToken, toggleSaveVideo); // Toggle save video
 
 // Comment routes
 router.get('/:id/comments', getComments);

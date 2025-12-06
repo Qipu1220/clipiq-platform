@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { loginApi, logoutApi, getCurrentUserApi, LoginRequest } from '../api/auth';
+import { loginApi, logoutApi, getCurrentUserApi, updateProfileApi, LoginRequest, UpdateProfileRequest } from '../api/auth';
 import { handleApiError } from '../api/client';
 
 export interface User {
@@ -40,12 +40,12 @@ export const loginThunk = createAsyncThunk(
   async (credentials: LoginRequest, { rejectWithValue }) => {
     try {
       const response = await loginApi(credentials);
-      
+
       // Store tokens in localStorage
       localStorage.setItem('accessToken', response.data.tokens.accessToken);
       localStorage.setItem('refreshToken', response.data.tokens.refreshToken);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      
+
       return response.data.user;
     } catch (error: any) {
       return rejectWithValue(handleApiError(error));
@@ -59,7 +59,7 @@ export const logoutThunk = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       await logoutApi();
-      
+
       // Clear tokens from localStorage
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
@@ -80,8 +80,27 @@ export const getCurrentUserThunk = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await getCurrentUserApi();
-      localStorage.setItem('user', JSON.stringify(response.data));
-      return response.data;
+      const user = response.data.user;
+      localStorage.setItem('user', JSON.stringify(user));
+      return user;
+    } catch (error: any) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+// Async thunk for updating profile
+export const updateProfileThunk = createAsyncThunk(
+  'auth/updateProfile',
+  async (data: UpdateProfileRequest, { rejectWithValue }) => {
+    try {
+      const response = await updateProfileApi(data);
+      // Update local storage
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const updatedUser = { ...currentUser, ...response.data.user };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+
+      return response.data.user;
     } catch (error: any) {
       return rejectWithValue(handleApiError(error));
     }
@@ -95,18 +114,19 @@ export const restoreSessionThunk = createAsyncThunk(
     try {
       const token = localStorage.getItem('accessToken');
       const userStr = localStorage.getItem('user');
-      
+
       if (!token || !userStr) {
         throw new Error('No session found');
       }
-      
+
       const user = JSON.parse(userStr);
-      
+
       // Validate token by fetching current user
       const response = await getCurrentUserApi();
-      localStorage.setItem('user', JSON.stringify(response.data));
-      
-      return response.data;
+      const fetchedUser = response.data.user;
+      localStorage.setItem('user', JSON.stringify(fetchedUser));
+
+      return fetchedUser;
     } catch (error: any) {
       // Clear invalid session
       localStorage.removeItem('accessToken');
@@ -161,7 +181,7 @@ const authSlice = createSlice({
       state.currentUser = null;
       state.error = action.payload as string;
     });
-    
+
     // Logout
     builder.addCase(logoutThunk.pending, (state) => {
       state.loading = true;
@@ -178,7 +198,7 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.currentUser = null;
     });
-    
+
     // Get current user
     builder.addCase(getCurrentUserThunk.pending, (state) => {
       state.loading = true;
@@ -194,7 +214,22 @@ const authSlice = createSlice({
       state.loading = false;
       state.error = action.payload as string;
     });
-    
+
+    // Update profile
+    builder.addCase(updateProfileThunk.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
+    builder.addCase(updateProfileThunk.fulfilled, (state, action) => {
+      state.loading = false;
+      state.currentUser = action.payload;
+      state.error = null;
+    });
+    builder.addCase(updateProfileThunk.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload as string;
+    });
+
     // Restore session
     builder.addCase(restoreSessionThunk.pending, (state) => {
       state.loading = true;

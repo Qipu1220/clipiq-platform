@@ -44,19 +44,35 @@ export interface UserInfoResponse {
   success: boolean;
   message: string;
   data: {
-    id: string;
-    username: string;
-    email: string;
-    role: 'admin' | 'staff' | 'user';
-    displayName?: string;
-    bio?: string;
-    avatarUrl?: string;
-    warnings: number;
-    banned: boolean;
-    banExpiry?: string;
-    banReason?: string;
-    createdAt: string;
-    updatedAt: string;
+    user: {
+      id: string;
+      username: string;
+      email: string;
+      role: 'admin' | 'staff' | 'user';
+      displayName?: string;
+      bio?: string;
+      avatarUrl?: string;
+      warnings: number;
+      banned: boolean;
+      banExpiry?: string;
+      banReason?: string;
+      createdAt: string;
+      updatedAt: string;
+    };
+  };
+}
+
+export interface UpdateProfileRequest {
+  displayName?: string;
+  bio?: string;
+  avatarUrl?: string;
+}
+
+export interface UpdateProfileResponse {
+  success: boolean;
+  message: string;
+  data: {
+    user: UserInfoResponse['data'];
   };
 }
 
@@ -83,5 +99,10 @@ export const refreshTokenApi = async (refreshToken: string): Promise<RefreshToke
 // Get current user info
 export const getCurrentUserApi = async (): Promise<UserInfoResponse> => {
   const response = await apiClient.get<UserInfoResponse>('/auth/me');
+  return response.data;
+};
+// Update user profile
+export const updateProfileApi = async (data: UpdateProfileRequest): Promise<UpdateProfileResponse> => {
+  const response = await apiClient.patch<UpdateProfileResponse>('/auth/me', data);
   return response.data;
 };
