@@ -4,7 +4,8 @@ import { User, Video, ArrowLeft, Plus, Check, Flag, X, Eye, Heart } from 'lucide
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
-import { fetchUserVideosThunk } from '../../store/videosSlice';
+import { fetchUserVideosThunk, setVideos, setFocusedVideoId } from '../../store/videosSlice';
+import { fetchUserByUsernameThunk } from '../../store/usersSlice';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { addUserReport } from '../../store/reportsSlice';
@@ -37,18 +38,20 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
     if (username) {
       // @ts-ignore - dispatch type issue
       dispatch(fetchUserVideosThunk(username));
+      // @ts-ignore
+      dispatch(fetchUserByUsernameThunk(username));
     }
   }, [dispatch, username]);
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-black">
-        <div className="container mx-auto px-4 py-8">
-          <Button onClick={onBack} variant="outline" className="mb-4 bg-zinc-900">
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-white mb-4">Loading user profile...</p>
+          <Button onClick={onBack} variant="outline" className="bg-zinc-900 border-zinc-700 text-white hover:bg-zinc-800">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
-          <p className="text-white">User not found</p>
         </div>
       </div>
     );
@@ -84,10 +87,11 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
     setShowReportModal(false);
   };
 
-  const formatCount = (count: number) => {
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-    return count.toString();
+  const formatCount = (count: number | undefined | null) => {
+    const safeCount = typeof count === 'number' ? count : 0;
+    if (safeCount >= 1000000) return `${(safeCount / 1000000).toFixed(1)}M`;
+    if (safeCount >= 1000) return `${(safeCount / 1000).toFixed(1)}K`;
+    return safeCount.toString();
   };
 
   return (
@@ -208,11 +212,18 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
                     <div
                       key={video.id}
                       className="relative aspect-[9/16] bg-zinc-900 rounded-lg overflow-hidden cursor-pointer group"
-                      onClick={() => onVideoClick(video.id)}
+                      onClick={() => {
+                        if (userVideos.length > 0) {
+                          dispatch(setVideos(userVideos));
+                          dispatch(setFocusedVideoId(video.id));
+                        }
+                        onVideoClick(video.id);
+                      }}
                     >
                       <ImageWithFallback
-                        src={video.thumbnailUrl || `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=300&h=500&fit=crop`}
+                        src={video.thumbnailUrl && video.thumbnailUrl.startsWith('http') ? video.thumbnailUrl : `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=300&h=500&fit=crop`}
                         alt={video.title}
+                        videoSrc={video.videoUrl}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
@@ -229,7 +240,7 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
                           </div>
                           <div className="flex items-center gap-1.5 text-sm">
                             <Heart className="w-4 h-4" />
-                            <span>{formatCount(video.likes.length)}</span>
+                            <span>{formatCount(typeof video.likes === 'number' ? video.likes : 0)}</span>
                           </div>
                         </div>
                         <p className="text-sm font-medium line-clamp-2 opacity-0 group-hover:opacity-100 transition-opacity">

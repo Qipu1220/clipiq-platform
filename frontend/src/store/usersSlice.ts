@@ -1,4 +1,4 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import { User } from './authSlice';
 
 interface UsersState {
@@ -7,57 +7,76 @@ interface UsersState {
 
 const initialState: UsersState = {
   allUsers: [
-    { 
+    {
       id: 'admin-001',
-      username: 'admin001', 
+      username: 'admin001',
       email: 'admin@clipiq.com',
-      role: 'admin', 
-      password: '123456', 
+      role: 'admin',
+      password: '123456',
       warnings: 0,
       createdAt: Date.now() - 86400000 * 365
     },
-    { 
+    {
       id: 'staff-001',
-      username: 'staff001', 
+      username: 'staff001',
       email: 'staff@clipiq.com',
-      role: 'staff', 
-      password: '123456', 
+      role: 'staff',
+      password: '123456',
       warnings: 0,
       createdAt: Date.now() - 86400000 * 180
     },
-    { 
+    {
       id: 'user-001',
-      username: 'user001', 
+      username: 'user001',
       email: 'user001@example.com',
-      role: 'user', 
-      password: '123456', 
+      role: 'user',
+      password: '123456',
       warnings: 0,
       displayName: 'User One',
       bio: 'Just a regular user enjoying videos',
       createdAt: Date.now() - 86400000 * 90
     },
-    { 
+    {
       id: 'user-002',
-      username: 'user002', 
+      username: 'user002',
       email: 'user002@example.com',
-      role: 'user', 
-      password: '123456', 
+      role: 'user',
+      password: '123456',
       warnings: 0,
       createdAt: Date.now() - 86400000 * 60
     },
-    { 
+    {
       id: 'user-creator123',
-      username: 'creator123', 
+      username: 'creator123',
       email: 'creator@example.com',
-      role: 'user', 
-      password: '123456', 
+      role: 'user',
+      password: '123456',
       warnings: 0,
       displayName: 'Content Creator',
       bio: 'Creating educational content about web development',
       createdAt: Date.now() - 86400000 * 120
     },
   ],
+  status: 'idle',
+  error: null,
 };
+
+// Async thunk to fetch user by username
+export const fetchUserByUsernameThunk = createAsyncThunk(
+  'users/fetchByUsername',
+  async (username: string, { rejectWithValue }) => {
+    try {
+      const { fetchUserByUsernameApi } = await import('../api/users');
+      const response = await fetchUserByUsernameApi(username);
+      return response.data.data;
+    } catch (error: any) {
+      if (error.response && error.response.data) {
+        return rejectWithValue(error.response.data);
+      }
+      return rejectWithValue({ message: 'Failed to fetch user' });
+    }
+  }
+);
 
 const usersSlice = createSlice({
   name: 'users',
@@ -170,18 +189,37 @@ const usersSlice = createSlice({
       }
     },
   },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchUserByUsernameThunk.pending, (state) => {
+        // state.status = 'loading';
+      })
+      .addCase(fetchUserByUsernameThunk.fulfilled, (state, action) => {
+        // Check if user already exists
+        const index = state.allUsers.findIndex(u => u.username === action.payload.username);
+        if (index !== -1) {
+          state.allUsers[index] = { ...state.allUsers[index], ...action.payload };
+        } else {
+          state.allUsers.push(action.payload);
+        }
+      })
+      .addCase(fetchUserByUsernameThunk.rejected, (state, action) => {
+        // state.status = 'failed';
+        // state.error = action.payload as any;
+      });
+  },
 });
 
-export const { 
-  addUser, 
-  deleteUser, 
-  changePassword, 
-  banUser, 
-  unbanUser, 
-  warnUser, 
-  clearWarnings, 
-  updateUserDisplayName, 
-  updateUserAvatar, 
+export const {
+  addUser,
+  deleteUser,
+  changePassword,
+  banUser,
+  unbanUser,
+  warnUser,
+  clearWarnings,
+  updateUserDisplayName,
+  updateUserAvatar,
   updateUserBio,
   changeUserRole,
   banUserByUsername,

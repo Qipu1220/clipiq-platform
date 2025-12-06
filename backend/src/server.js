@@ -12,6 +12,7 @@ import cors from 'cors';
 // Import routes
 import authRoutes from './routes/auth.routes.js';
 import videoRoutes from './routes/video.routes.js';
+import userRoutes from './routes/user.routes.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
@@ -56,6 +57,7 @@ app.get('/health', (req, res) => {
 // API v1 routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/videos', videoRoutes);
+app.use('/api/v1/users', userRoutes);
 
 // ===========================================
 // Error Handling

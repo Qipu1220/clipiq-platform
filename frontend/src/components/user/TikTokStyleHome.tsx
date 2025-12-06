@@ -758,9 +758,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               onClick={() => onViewUserProfile?.(currentVideo.uploaderUsername)}
               className="block"
             >
-              {uploaderInfo?.avatarUrl ? (
+              {(currentVideo.uploaderAvatarUrl || uploaderInfo?.avatarUrl) ? (
                 <img
-                  src={uploaderInfo.avatarUrl}
+                  src={currentVideo.uploaderAvatarUrl || uploaderInfo?.avatarUrl}
                   alt={currentVideo.uploaderUsername}
                   className="w-12 h-12 rounded-full object-cover border-2 border-zinc-800"
                 />
