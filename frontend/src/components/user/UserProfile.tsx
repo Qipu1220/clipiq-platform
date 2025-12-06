@@ -64,7 +64,7 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: 
     const followerCount = Object.values(subscriptions).filter(
         subs => subs.includes(currentUser?.username || '')
     ).length;
-    const totalLikes = myVideos.reduce((sum, video) => sum + (Array.isArray(video.likes) ? video.likes.length : 0), 0);
+    const totalLikes = myVideos.reduce((sum, video) => sum + (typeof video.likes === 'number' ? video.likes : 0), 0);
 
     // Sort videos
     const sortVideos = (vids: typeof userVideos) => {
@@ -474,7 +474,7 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: 
                                                 </div>
                                                 <div className="flex items-center gap-1.5 text-sm">
                                                     <Heart className="w-4 h-4" />
-                                                    <span>{formatCount(Array.isArray(video.likes) ? video.likes.length : 0)}</span>
+                                                    <span>{formatCount(typeof video.likes === 'number' ? video.likes : 0)}</span>
                                                 </div>
                                             </div>
                                             <p className="text-sm font-medium line-clamp-2 opacity-0 group-hover:opacity-100 transition-opacity">
