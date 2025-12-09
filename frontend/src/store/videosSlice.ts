@@ -4,29 +4,15 @@ import {
   fetchVideoByIdApi,
   searchVideosApi,
   getTrendingVideosApi,
-  fetchLikedVideosApi,
-  fetchSavedVideosApi,
-  likeVideoApi,
-  unlikeVideoApi,
-  getCommentsApi,
-  addCommentApi,
-  deleteCommentApi,
-  toggleSaveVideoApi,
   Video,
   VideoResponse,
-  Comment,
 } from '../api/videos';
 
 export interface VideosState {
   videos: Video[];
-  userVideos: Video[];
-  likedVideos: Video[];
-  savedVideos: Video[];
   trendingVideos: Video[];
   searchResults: Video[];
   selectedVideo: Video | null;
-  focusedVideoId: string | null;
-  currentVideoComments: Comment[];
   loading: boolean;
   error: string | null;
   pagination: {
@@ -40,14 +26,9 @@ export interface VideosState {
 
 const initialState: VideosState = {
   videos: [],
-  userVideos: [],
-  likedVideos: [],
-  savedVideos: [],
   trendingVideos: [],
   searchResults: [],
   selectedVideo: null,
-  focusedVideoId: null,
-  currentVideoComments: [],
   loading: false,
   error: null,
   pagination: {
@@ -71,19 +52,6 @@ export const fetchVideosThunk = createAsyncThunk(
     } catch (error: any) {
       console.error('💥 fetchVideosThunk error:', error);
       return rejectWithValue(error.response?.data?.detail || 'Failed to fetch videos');
-    }
-  }
-);
-
-export const fetchUserVideosThunk = createAsyncThunk(
-  'videos/fetchUserVideos',
-  async (username: string, { rejectWithValue }) => {
-    try {
-      console.log('🎬 fetchUserVideosThunk called for username:', username);
-      const response = await fetchVideosApi(1, 50, username); // Fetch up to 50 videos for user profile
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.detail || 'Failed to fetch user videos');
     }
   }
 );
@@ -112,32 +80,6 @@ export const fetchTrendingVideosThunk = createAsyncThunk(
   }
 );
 
-
-
-export const fetchLikedVideosThunk = createAsyncThunk(
-  'videos/fetchLikedVideos',
-  async (params: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
-    try {
-      const response = await fetchLikedVideosApi(params.page || 1, params.limit || 20);
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.detail || 'Failed to fetch liked videos');
-    }
-  }
-);
-
-export const fetchSavedVideosThunk = createAsyncThunk(
-  'videos/fetchSavedVideos',
-  async (params: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
-    try {
-      const response = await fetchSavedVideosApi(params.page || 1, params.limit || 20);
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.detail || 'Failed to fetch saved videos');
-    }
-  }
-);
-
 export const searchVideosThunk = createAsyncThunk(
   'videos/searchVideos',
   async (params: { query: string; page?: number }, { rejectWithValue }) => {
@@ -146,83 +88,6 @@ export const searchVideosThunk = createAsyncThunk(
       return response.data; // This is {videos: [], pagination: {...}}
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.detail || 'Failed to search videos');
-    }
-  }
-);
-
-export const toggleLikeVideoThunk = createAsyncThunk(
-  'videos/toggleLike',
-  async ({ videoId, isLiked }: { videoId: string; isLiked: boolean }, { dispatch, rejectWithValue }) => {
-    try {
-      // Optimistic update
-      if (isLiked) {
-        dispatch(videosSlice.actions.unlikeVideo(videoId));
-        await unlikeVideoApi(videoId);
-      } else {
-        dispatch(videosSlice.actions.likeVideo(videoId));
-        await likeVideoApi(videoId);
-      }
-      return { videoId, isLiked: !isLiked };
-    } catch (error: any) {
-      // Revert on failure
-      if (isLiked) {
-        dispatch(videosSlice.actions.likeVideo(videoId));
-      } else {
-        dispatch(videosSlice.actions.unlikeVideo(videoId));
-      }
-      return rejectWithValue(error.response?.data?.message || 'Failed to toggle like');
-    }
-  }
-);
-
-export const fetchCommentsThunk = createAsyncThunk(
-  'videos/fetchComments',
-  async (videoId: string, { rejectWithValue }) => {
-    try {
-      const response = await getCommentsApi(videoId);
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to fetch comments');
-    }
-  }
-);
-
-
-
-
-
-export const toggleSaveVideoThunk = createAsyncThunk(
-  'videos/toggleSaveVideo',
-  async (videoId: string, { rejectWithValue }) => {
-    try {
-      const response = await toggleSaveVideoApi(videoId);
-      return { videoId, isSaved: response.data.isSaved };
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.detail || 'Failed to toggle save video');
-    }
-  }
-);
-
-export const addCommentThunk = createAsyncThunk(
-  'videos/addComment',
-  async ({ videoId, text }: { videoId: string; text: string }, { rejectWithValue }) => {
-    try {
-      const response = await addCommentApi(videoId, text);
-      return { videoId, comment: response.data };
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to add comment');
-    }
-  }
-);
-
-export const deleteCommentThunk = createAsyncThunk(
-  'videos/deleteComment',
-  async ({ videoId, commentId }: { videoId: string; commentId: string }, { rejectWithValue }) => {
-    try {
-      await deleteCommentApi(videoId, commentId);
-      return { videoId, commentId };
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to delete comment');
     }
   }
 );
@@ -298,12 +163,6 @@ const videosSlice = createSlice({
         state.selectedVideo = null;
       }
     },
-    setVideos: (state, action: PayloadAction<Video[]>) => {
-      state.videos = action.payload;
-    },
-    setFocusedVideoId: (state, action: PayloadAction<string | null>) => {
-      state.focusedVideoId = action.payload;
-    },
     addVideo: (state, action: PayloadAction<any>) => {
       state.videos.unshift(action.payload);
     },
@@ -318,68 +177,14 @@ const videosSlice = createSlice({
       .addCase(fetchVideosThunk.fulfilled, (state, action) => {
         state.loading = false;
         console.log('📦 fetchVideosThunk fulfilled - action.payload:', action.payload);
-
-        const newVideos = action.payload.videos || [];
-        const page = action.payload.pagination?.page || 1;
-
-        if (page === 1) {
-          state.videos = newVideos;
-        } else {
-          // Append new videos, avoiding duplicates
-          const existingIds = new Set(state.videos.map(v => v.id));
-          const uniqueNewVideos = newVideos.filter(v => !existingIds.has(v.id));
-          state.videos = [...state.videos, ...uniqueNewVideos];
-        }
-
+        state.videos = action.payload.videos || [];
         state.pagination = {
-          page: page,
+          page: action.payload.pagination?.page || 1,
           hasMore: action.payload.pagination?.hasMore || false,
           total: action.payload.pagination?.total || 0,
         };
       })
       .addCase(fetchVideosThunk.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      });
-
-    // Fetch User Videos
-    builder
-      .addCase(fetchUserVideosThunk.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-        state.userVideos = [];
-      })
-      .addCase(fetchUserVideosThunk.fulfilled, (state, action) => {
-        state.loading = false;
-        state.userVideos = action.payload.videos || [];
-      })
-      .addCase(fetchUserVideosThunk.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      })
-
-      // Fetch Liked Videos
-      .addCase(fetchLikedVideosThunk.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchLikedVideosThunk.fulfilled, (state, action) => {
-        state.loading = false;
-        state.likedVideos = action.payload.videos || [];
-      })
-      .addCase(fetchLikedVideosThunk.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      })
-
-      // Fetch Saved Videos
-      .addCase(fetchSavedVideosThunk.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchSavedVideosThunk.fulfilled, (state, action) => {
-        state.loading = false;
-        state.savedVideos = action.payload.videos || [];
-      })
-      .addCase(fetchSavedVideosThunk.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       });
@@ -427,83 +232,6 @@ const videosSlice = createSlice({
       .addCase(searchVideosThunk.rejected, (state, action) => {
         state.searchLoading = false;
         state.searchError = action.payload as string;
-      })
-
-      // Fetch Comments
-      .addCase(fetchCommentsThunk.fulfilled, (state, action) => {
-        state.currentVideoComments = action.payload;
-      })
-
-      // Add Comment
-      .addCase(addCommentThunk.fulfilled, (state, action) => {
-        state.currentVideoComments.unshift(action.payload.comment);
-
-        // Update comment count in video lists
-        const { videoId } = action.payload;
-        const video = state.videos.find(v => v.id === videoId);
-        if (video) video.comments++;
-
-        const trendingVideo = state.trendingVideos.find(v => v.id === videoId);
-        if (trendingVideo) trendingVideo.comments++;
-
-        if (state.selectedVideo?.id === videoId) state.selectedVideo.comments++;
-      })
-
-      // Delete Comment
-      .addCase(deleteCommentThunk.fulfilled, (state, action) => {
-        const { videoId, commentId } = action.payload;
-        state.currentVideoComments = state.currentVideoComments.filter(c => c.id !== commentId);
-
-        // Update comment count in video lists
-        const video = state.videos.find(v => v.id === videoId);
-        if (video) video.comments = Math.max(0, video.comments - 1);
-
-        const trendingVideo = state.trendingVideos.find(v => v.id === videoId);
-        if (trendingVideo) trendingVideo.comments = Math.max(0, trendingVideo.comments - 1);
-
-        if (state.selectedVideo?.id === videoId) {
-          state.selectedVideo.comments = Math.max(0, state.selectedVideo.comments - 1);
-        }
-      })
-
-      // Toggle Save Video
-      .addCase(toggleSaveVideoThunk.fulfilled, (state, action) => {
-        const { videoId, isSaved } = action.payload;
-
-        // Update in main list
-        const video = state.videos.find(v => v.id === videoId);
-        if (video) video.isSaved = isSaved;
-
-        // Update in trending list
-        const trendingVideo = state.trendingVideos.find(v => v.id === videoId);
-        if (trendingVideo) trendingVideo.isSaved = isSaved;
-
-        // Update in search results
-        const searchVideo = state.searchResults.find(v => v.id === videoId);
-        if (searchVideo) searchVideo.isSaved = isSaved;
-
-        // Update selected video
-        if (state.selectedVideo?.id === videoId) {
-          state.selectedVideo.isSaved = isSaved;
-        }
-
-        // Update in user videos
-        const userVideo = state.userVideos.find(v => v.id === videoId);
-        if (userVideo) userVideo.isSaved = isSaved;
-
-        // Update in liked videos
-        const likedVideo = state.likedVideos.find(v => v.id === videoId);
-        if (likedVideo) likedVideo.isSaved = isSaved;
-
-        // Update saved videos list specifically
-        if (isSaved) {
-          // If saved, we might want to add it to savedVideos if not present? 
-          // But we don't have the full video object usually unless we fetch.
-          // However, if we are in the savedVideos tab, we probably want to remove it if unsaved.
-        } else {
-          // If unsaved, remove from savedVideos list
-          state.savedVideos = state.savedVideos.filter(v => v.id !== videoId);
-        }
       });
   },
 });
@@ -516,10 +244,7 @@ export const {
   incrementViewCount,
   addComment,
   deleteVideo,
-
   addVideo,
-  setVideos,
-  setFocusedVideoId,
 } = videosSlice.actions;
 
 export default videosSlice.reducer;

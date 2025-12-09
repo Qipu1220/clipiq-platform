@@ -14,7 +14,6 @@ import { VideoPlayer } from './components/user/VideoPlayer';
 import { UploadVideo } from './components/user/UploadVideo';
 import { ReportUser } from './components/user/ReportUser';
 import { PublicUserProfile } from './components/user/PublicUserProfile';
-import { UserProfile } from './components/user/UserProfile';
 
 function AppContent() {
   const dispatch = useDispatch<AppDispatch>();
@@ -39,14 +38,6 @@ function AppContent() {
       console.error('❌ fetchVideosThunk error:', error);
     });
   }, [dispatch]);
-
-  // Refetch videos when user logs in to ensure like status is correct
-  useEffect(() => {
-    if (isAuthenticated) {
-      console.log('🔄 User authenticated, refetching videos to update like status');
-      dispatch(fetchVideosThunk());
-    }
-  }, [isAuthenticated, dispatch]);
 
   // Show loading screen while checking session
   if (loading && !isAuthenticated) {
@@ -133,20 +124,13 @@ function AppContent() {
         return <VideoPlayer videoId={selectedVideoId} onBack={() => handleNavigate('home')} onViewUserProfile={handleViewUserProfile} />;
       }
       if (currentPage === 'view-user-profile' && selectedUsername) {
-        return <PublicUserProfile username={selectedUsername} onVideoClick={() => setCurrentPage('home')} onBack={() => handleNavigate('home')} />;
-      }
-      if (currentPage === 'profile') {
-        return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
+        return <PublicUserProfile username={selectedUsername} onVideoClick={handleVideoClick} onBack={() => handleNavigate('home')} />;
       }
       // Use TikTok-style layout for home page
       return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
     }
 
-    if (currentPage === 'profile') {
-      return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
-    }
-
-    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
+    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} />;
   };
 
   return (
