@@ -121,10 +121,42 @@ services:
     networks:
       - clipiq_network
 
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: clipiq_qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - clipiq_network
+
+  # Elasticsearch
+  elasticsearch:
+    image: elasticsearch:8.11.1
+    container_name: clipiq_elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - clipiq_network
+
 volumes:
   postgres_data:
     driver: local
   minio_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  elasticsearch_data:
     driver: local
 
 networks:
