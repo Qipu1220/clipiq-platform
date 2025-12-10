@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { resolveVideoReport, resolveUserReport, updateAppealStatus } from '../../store/reportsSlice';
+import { resolveVideoReport, resolveUserReport, updateAppealStatus, setVideoReports } from '../../store/reportsSlice';
 import { banUser, unbanUser, warnUser, clearWarnings } from '../../store/usersSlice';
 import { deleteVideo } from '../../store/videosSlice';
 import { logoutThunk } from '../../store/authSlice';
@@ -17,6 +17,7 @@ import { Label } from '../ui/label';
 import { ScrollArea } from '../ui/scroll-area';
 import { StaffProfile } from './StaffProfile';
 import { toast } from 'sonner';
+import { getVideoReportsApi, resolveVideoReportApi, VideoReport } from '../../api/reports';
 
 interface StaffDashboardProps {
   onVideoClick: (videoId: string) => void;
@@ -38,6 +39,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
   const [banReason, setBanReason] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [apiVideoReports, setApiVideoReports] = useState<VideoReport[]>([]);
   
   // Confirmation Modal State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -84,15 +87,56 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     };
   }, [showUserMenu]);
 
-  // Calculate stats
-  const pendingVideoReports = videoReports.filter(r => r.status === 'pending').length;
+  // Fetch video reports from API
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        setLoading(true);
+        console.log('🔄 Fetching video reports for staff...');
+        const response = await getVideoReportsApi('pending', 1, 100);
+        console.log('✅ Fetched reports:', response.data.reports);
+        setApiVideoReports(response.data.reports);
+        
+        // Also update Redux store for compatibility
+        dispatch(setVideoReports(response.data.reports.map(r => ({
+          id: r.id,
+          videoId: r.video_id,
+          videoTitle: r.video_title || 'Unknown',
+          reportedBy: r.reporter_username || 'Unknown',
+          reason: r.reason,
+          timestamp: new Date(r.created_at).getTime(),
+          status: r.status as 'pending' | 'resolved'
+        }))));
+        
+      } catch (error: any) {
+        console.error('❌ Error fetching reports:', error);
+        if (error.response?.status === 403) {
+          toast.error('Bạn không có quyền xem báo cáo');
+        } else {
+          toast.error('Không thể tải danh sách báo cáo');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReports();
+    
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchReports, 30000);
+    
+    return () => clearInterval(interval);
+  }, [dispatch]);
+
+  // Calculate stats - Dùng apiVideoReports từ API thay vì Redux
+  const pendingVideoReports = apiVideoReports.filter((r: VideoReport) => r.status === 'pending').length;
   const pendingUserReports = userReports.filter(r => r.status === 'pending').length;
   const pendingAppeals = appeals.filter(a => a.status === 'pending').length;
-  const resolvedToday = [...videoReports, ...userReports].filter(
+  const resolvedToday = [...apiVideoReports.map((r: VideoReport) => ({ status: r.status, timestamp: new Date(r.created_at).getTime() })), ...userReports].filter(
     r => r.status === 'resolved' && new Date(r.timestamp).toDateString() === new Date().toDateString()
   ).length;
   const violatingVideos = videos.filter(v => 
-    videoReports.some(r => r.videoId === v.id && r.status === 'pending')
+    apiVideoReports.some((r: VideoReport) => r.video_id === v.id && r.status === 'pending')
   ).length;
 
   const handleResolveVideoReport = (reportId: string, videoId: string, shouldDelete: boolean) => {
@@ -103,15 +147,31 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         message: 'Bạn có chắc muốn xóa video này? Video sẽ bị xóa vĩnh viễn.',
         confirmText: 'Xóa video',
         confirmColor: '#ff3b5c',
-        onConfirm: () => {
-          dispatch(deleteVideo(videoId));
-          dispatch(resolveVideoReport({
-            id: reportId,
-            reviewedBy: currentUser?.id || '',
-            reviewedByUsername: currentUser?.username || '',
-            resolutionNote: 'Video đã bị xóa'
-          }));
-          setShowConfirmModal(false);
+        onConfirm: async () => {
+          try {
+            console.log('🗑️ Deleting video and resolving report:', reportId);
+            // Gọi API resolve với action delete_content
+            await resolveVideoReportApi(reportId, 'delete_content', 'Video đã bị xóa vì vi phạm quy định');
+            
+            // Update local state
+            dispatch(deleteVideo(videoId));
+            dispatch(resolveVideoReport({
+              id: reportId,
+              reviewedBy: currentUser?.id || '',
+              reviewedByUsername: currentUser?.username || '',
+              resolutionNote: 'Video đã bị xóa'
+            }));
+            
+            // Refresh reports list
+            const response = await getVideoReportsApi('pending', 1, 100);
+            setApiVideoReports(response.data.reports);
+            
+            toast.success('Đã xóa video và resolve báo cáo');
+            setShowConfirmModal(false);
+          } catch (error: any) {
+            console.error('❌ Error resolving report:', error);
+            toast.error('Không thể xử lý báo cáo. Vui lòng thử lại.');
+          }
         }
       });
       setShowConfirmModal(true);
@@ -122,14 +182,30 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         message: 'Bạn có chắc muốn bỏ qua báo cáo này? Báo cáo sẽ được đánh dấu là đã xử lý.',
         confirmText: 'Bỏ qua',
         confirmColor: '#ff3b5c',
-        onConfirm: () => {
-          dispatch(resolveVideoReport({
-            id: reportId,
-            reviewedBy: currentUser?.id || '',
-            reviewedByUsername: currentUser?.username || '',
-            resolutionNote: 'Báo cáo bị bỏ qua'
-          }));
-          setShowConfirmModal(false);
+        onConfirm: async () => {
+          try {
+            console.log('✅ Dismissing report:', reportId);
+            // Gọi API resolve với action dismiss
+            await resolveVideoReportApi(reportId, 'dismiss', 'Báo cáo không có căn cứ');
+            
+            // Update local state
+            dispatch(resolveVideoReport({
+              id: reportId,
+              reviewedBy: currentUser?.id || '',
+              reviewedByUsername: currentUser?.username || '',
+              resolutionNote: 'Báo cáo bị bỏ qua'
+            }));
+            
+            // Refresh reports list
+            const response = await getVideoReportsApi('pending', 1, 100);
+            setApiVideoReports(response.data.reports);
+            
+            toast.success('Đã bỏ qua báo cáo');
+            setShowConfirmModal(false);
+          } catch (error: any) {
+            console.error('❌ Error resolving report:', error);
+            toast.error('Không thể xử lý báo cáo. Vui lòng thử lại.');
+          }
         }
       });
       setShowConfirmModal(true);
@@ -549,18 +625,18 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                     </CardHeader>
                     <CardContent className="pt-4">
                       <div className="space-y-3">
-                        {videoReports.filter(r => r.status === 'pending').slice(0, 5).map(report => (
+                        {apiVideoReports.filter((r: VideoReport) => r.status === 'pending').slice(0, 5).map((report: VideoReport) => (
                           <div key={report.id} className="p-3 bg-zinc-900/30 rounded-lg border border-zinc-900/50">
                             <div className="flex justify-between items-start mb-2">
-                              <p className="text-white text-sm truncate flex-1">{report.videoTitle}</p>
+                              <p className="text-white text-sm truncate flex-1">{report.video_title || 'Unknown'}</p>
                               <span className="text-xs text-zinc-500 ml-2">
-                                {new Date(report.timestamp).toLocaleDateString()}
+                                {new Date(report.created_at).toLocaleDateString()}
                               </span>
                             </div>
-                            <p className="text-xs text-zinc-500">Báo cáo bởi: {report.reportedBy}</p>
+                            <p className="text-xs text-zinc-500">Báo cáo bởi: {report.reporter_username || 'Unknown'}</p>
                           </div>
                         ))}
-                        {videoReports.filter(r => r.status === 'pending').length === 0 && (
+                        {apiVideoReports.filter((r: VideoReport) => r.status === 'pending').length === 0 && (
                           <p className="text-zinc-600 text-sm text-center py-8">Không có báo cáo nào</p>
                         )}
                       </div>
@@ -613,8 +689,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             {/* Video Reports Tab */}
             {activeTab === 'video-reports' && (
               <div className="space-y-4">
-                {videoReports.filter(r => r.status === 'pending').map(report => {
-                  const video = videos.find(v => v.id === report.videoId);
+                {apiVideoReports.filter((r: VideoReport) => r.status === 'pending').map((report: VideoReport) => {
+                  const video = videos.find(v => v.id === report.video_id);
                   return (
                     <Card key={report.id} className="bg-zinc-950/50 border-zinc-900/50 rounded-xl overflow-hidden">
                       <CardContent className="p-6">
@@ -627,16 +703,16 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                             </div>
                           </div>
                           <div className="flex-1">
-                            <h3 className="text-white font-medium mb-2">{report.videoTitle}</h3>
+                            <h3 className="text-white font-medium mb-2">{report.video_title || 'Unknown'}</h3>
                             <div className="space-y-1 text-sm mb-4">
-                              <p className="text-zinc-400">Báo cáo bởi: <span className="text-white">{report.reportedBy}</span></p>
+                              <p className="text-zinc-400">Báo cáo bởi: <span className="text-white">{report.reporter_username || 'Unknown'}</span></p>
                               <p className="text-zinc-400">Lý do: <span className="text-[#ff3b5c]">{getReportTypeName(report.reason)}</span></p>
-                              <p className="text-zinc-600 text-xs">{new Date(report.timestamp).toLocaleString()}</p>
+                              <p className="text-zinc-600 text-xs">{new Date(report.created_at).toLocaleString()}</p>
                             </div>
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
-                                onClick={() => onVideoClick(report.videoId)}
+                                onClick={() => onVideoClick(report.video_id)}
                                 className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30 h-9 rounded-lg"
                               >
                                 <Eye className="w-4 h-4 mr-2" />
@@ -644,7 +720,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                               </Button>
                               <Button
                                 size="sm"
-                                onClick={() => handleResolveVideoReport(report.id, report.videoId, true)}
+                                onClick={() => handleResolveVideoReport(report.id, report.video_id, true)}
                                 className="bg-[#ff3b5c]/20 hover:bg-[#ff3b5c]/30 text-[#ff3b5c] border-[#ff3b5c]/30 h-9 rounded-lg"
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
@@ -652,7 +728,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                               </Button>
                               <Button
                                 size="sm"
-                                onClick={() => handleResolveVideoReport(report.id, report.videoId, false)}
+                                onClick={() => handleResolveVideoReport(report.id, report.video_id, false)}
                                 className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
                               >
                                 <CheckCircle className="w-4 h-4 mr-2" />
@@ -665,7 +741,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                     </Card>
                   );
                 })}
-                {videoReports.filter(r => r.status === 'pending').length === 0 && (
+                {apiVideoReports.filter((r: VideoReport) => r.status === 'pending').length === 0 && (
                   <div className="text-center py-24">
                     <div className="w-16 h-16 rounded-full bg-zinc-900/50 flex items-center justify-center mx-auto mb-4">
                       <Flag className="w-8 h-8 text-zinc-600" />

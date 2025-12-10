@@ -1,7 +1,9 @@
 # Tính năng Report Video - Hướng dẫn Test
 
 ## 📝 Tổng quan
-Đã implement đầy đủ backend và frontend cho tính năng report video của user role:
+Đã implement đầy đủ backend và frontend cho tính năng report video:
+
+### User Role (✅ Hoàn thành)
 - ✅ Model: VideoReport với đầy đủ CRUD operations
 - ✅ Service: Business logic xử lý reports, validate, check duplicate
 - ✅ Controller: Handle requests, response formatting
@@ -9,6 +11,13 @@
 - ✅ Routes: RESTful API endpoints
 - ✅ Frontend API: Integration với backend
 - ✅ UI Components: TikTokStyleHome và VideoPlayer đã được update
+
+### Staff Role (✅ Hoàn thành)
+- ✅ API Endpoints: GET reports, GET report by ID, Resolve report
+- ✅ Frontend API Client: TypeScript types và functions
+- ✅ StaffDashboard: Auto-fetch reports mỗi 30s
+- ✅ Resolve Actions: dismiss, warn_user, ban_user, delete_content
+- ✅ Real-time Updates: Refresh sau khi resolve
 
 ## 🏗️ Cấu trúc Backend
 
@@ -258,34 +267,150 @@ CREATE TABLE video_reports (
 ## 📌 Notes
 
 - Report status mặc định là 'pending'
-- Staff/Admin endpoints chưa được implement ở frontend (đúng như yêu cầu)
 - Description field là optional, có thể để trống
 - Reason field bắt buộc và phải thuộc danh sách valid reasons
 - Reports được lưu vào database thực, không chỉ Redux store
 - Video bị report vẫn hiển thị bình thường cho đến khi staff xử lý
 
+## 🎯 Staff Features
+
+### GET /api/v1/reports/videos (Staff/Admin)
+Xem tất cả video reports
+
+**Query Parameters:**
+- `status` (optional): 'pending' | 'reviewed' | 'resolved'
+- `page` (default: 1)
+- `limit` (default: 20, max: 100)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "reports": [
+      {
+        "id": "uuid",
+        "video_id": "uuid",
+        "reported_by_id": "uuid",
+        "reason": "spam",
+        "evidence_url": "description text",
+        "status": "pending",
+        "created_at": "2024-12-10T...",
+        "video_title": "Video Title",
+        "reporter_username": "user001",
+        "uploader_username": "creator01"
+      }
+    ],
+    "total": 45,
+    "pagination": {
+      "page": 1,
+      "pages": 3,
+      "total": 45
+    }
+  }
+}
+```
+
+### PUT /api/v1/reports/videos/:id/resolve (Staff/Admin)
+Xử lý report
+
+**Request:**
+```json
+{
+  "action": "dismiss|warn_user|ban_user|delete_content",
+  "note": "Optional resolution note"
+}
+```
+
+**Actions:**
+- `dismiss` - Bỏ qua report (không hành động)
+- `warn_user` - Cảnh báo uploader
+- `ban_user` - Ban uploader
+- `delete_content` - Xóa video
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "reportId": "uuid",
+    "status": "resolved",
+    "action": "dismiss"
+  },
+  "message": "Report resolved successfully"
+}
+```
+
+## 🖥️ Staff Dashboard Features
+
+1. **Auto-refresh**: Tự động fetch reports mỗi 30 giây
+2. **Resolve Actions**: 
+   - Dismiss report (bỏ qua)
+   - Delete video (xóa video vi phạm)
+3. **Real-time Updates**: Refresh danh sách sau khi resolve
+4. **Error Handling**: Toast notifications cho mọi action
+
+## 🧪 Test Staff Features
+
+### 1. Login as Staff
+```bash
+POST /api/v1/auth/login
+{
+  "login": "staff001@example.com",
+  "password": "123456"
+}
+```
+
+### 2. View Reports
+```bash
+GET /api/v1/reports/videos?status=pending
+Authorization: Bearer <staff-token>
+```
+
+### 3. Resolve Report
+```bash
+PUT /api/v1/reports/videos/<report-id>/resolve
+Authorization: Bearer <staff-token>
+{
+  "action": "dismiss",
+  "note": "Không có vi phạm"
+}
+```
+
 ## 🚀 Next Steps (Future Work)
 
-- [ ] Implement staff/admin dashboard để xem và xử lý reports
 - [ ] Thêm notification cho staff khi có report mới
 - [ ] Implement report statistics và analytics
 - [ ] Thêm filter và search cho reports
 - [ ] Export reports data
 - [ ] Report history cho users
+- [ ] Email notifications khi report được resolve
 
 ## ✅ Checklist Hoàn thành
 
+**Backend:**
 - [x] Model VideoReport
 - [x] Service layer với business logic
 - [x] Controller với proper error handling
 - [x] Validator với express-validator
 - [x] Routes integration
 - [x] Validation middleware
+- [x] Role-based access control
+
+**Frontend User:**
 - [x] Frontend API client
 - [x] TikTokStyleHome component update
 - [x] VideoPlayer component update
 - [x] Error handling frontend
 - [x] Toast notifications
+
+**Frontend Staff:**
+- [x] Staff API client với TypeScript types
+- [x] StaffDashboard integration
+- [x] Auto-refresh reports
+- [x] Resolve actions (dismiss, delete)
+- [x] Real-time updates
+- [x] Error handling và feedback
 - [x] Database schema exists
 - [x] Testing documentation
 

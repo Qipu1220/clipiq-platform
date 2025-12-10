@@ -74,7 +74,7 @@ export const getVideoReportById = asyncHandler(async (req, res) => {
 export const resolveVideoReport = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { action, note } = req.body;
-  const reviewedById = req.user.id;
+  const reviewedById = req.user.userId; // Đúng field từ auth middleware
   
   const report = await ReportService.resolveVideoReport(id, action, reviewedById, note);
   

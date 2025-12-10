@@ -5,8 +5,56 @@
 
 import apiClient from './client';
 
+// Types
+export interface VideoReport {
+  id: string;
+  video_id: string;
+  reported_by_id: string;
+  reason: string;
+  evidence_url: string | null;
+  status: 'pending' | 'reviewed' | 'resolved';
+  reviewed_by_id: string | null;
+  reviewed_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  video_title?: string;
+  video_url?: string;
+  reporter_username?: string;
+  reporter_display_name?: string;
+  uploader_username?: string;
+  uploader_display_name?: string;
+}
+
+export interface VideoReportsResponse {
+  success: boolean;
+  data: {
+    reports: VideoReport[];
+    total: number;
+    pagination: {
+      page: number;
+      pages: number;
+      total: number;
+    };
+  };
+}
+
+export interface SingleVideoReportResponse {
+  success: boolean;
+  data: VideoReport;
+}
+
+export interface ResolveReportResponse {
+  success: boolean;
+  data: {
+    reportId: string;
+    status: string;
+    action: string;
+  };
+  message: string;
+}
+
 /**
- * Report a video
+ * Report a video (User)
  */
 export const reportVideoApi = async (videoId: string, reason: string, description?: string) => {
   const response = await apiClient.post('/reports/videos', {
@@ -21,8 +69,12 @@ export const reportVideoApi = async (videoId: string, reason: string, descriptio
 /**
  * Get all video reports (Staff/Admin only)
  */
-export const getVideoReportsApi = async (status?: string, page: number = 1, limit: number = 20) => {
-  const response = await apiClient.get('/reports/videos', {
+export const getVideoReportsApi = async (
+  status?: string, 
+  page: number = 1, 
+  limit: number = 20
+): Promise<VideoReportsResponse> => {
+  const response = await apiClient.get<VideoReportsResponse>('/reports/videos', {
     params: { status, page, limit }
   });
   
@@ -32,20 +84,27 @@ export const getVideoReportsApi = async (status?: string, page: number = 1, limi
 /**
  * Get video report by ID (Staff/Admin only)
  */
-export const getVideoReportByIdApi = async (reportId: string) => {
-  const response = await apiClient.get(`/reports/videos/${reportId}`);
+export const getVideoReportByIdApi = async (reportId: string): Promise<SingleVideoReportResponse> => {
+  const response = await apiClient.get<SingleVideoReportResponse>(`/reports/videos/${reportId}`);
   
   return response.data;
 };
 
 /**
  * Resolve a video report (Staff/Admin only)
+ * @param reportId - UUID of the report
+ * @param action - Action to take: 'dismiss' | 'warn_user' | 'ban_user' | 'delete_content'
+ * @param note - Optional note explaining the resolution
  */
-export const resolveVideoReportApi = async (reportId: string, action: string, note?: string) => {
-  const response = await apiClient.put(`/reports/videos/${reportId}/resolve`, {
-    action,
-    note
-  });
+export const resolveVideoReportApi = async (
+  reportId: string, 
+  action: 'dismiss' | 'warn_user' | 'ban_user' | 'delete_content', 
+  note?: string
+): Promise<ResolveReportResponse> => {
+  const response = await apiClient.put<ResolveReportResponse>(
+    `/reports/videos/${reportId}/resolve`, 
+    { action, note }
+  );
   
   return response.data;
 };
