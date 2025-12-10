@@ -8,6 +8,7 @@ import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User, Bell, BellOff, MoreVe
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { reportVideoApi } from '../../api/reports';
 import {
   Dialog,
   DialogContent,
@@ -145,20 +146,38 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
     setShowVideoReportConfirm(true);
   };
 
-  const submitVideoReport = () => {
-    dispatch(addVideoReport({
-      id: Date.now().toString(),
-      videoId,
-      videoTitle: video.title,
-      reportedBy: currentUser.username,
-      reason: reportReason,
-      timestamp: Date.now(),
-      status: 'pending',
-    }));
-    toast.success('Báo cáo video đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
-    setReportReason('');
-    setReportOpen(false);
-    setShowVideoReportConfirm(false);
+  const submitVideoReport = async () => {
+    try {
+      // Gọi API để báo cáo video
+      await reportVideoApi(videoId, 'other', reportReason);
+      
+      // Cũng dispatch vào Redux store cho local state (optional)
+      dispatch(addVideoReport({
+        id: Date.now().toString(),
+        videoId,
+        videoTitle: video.title,
+        reportedBy: currentUser.username,
+        reason: reportReason,
+        timestamp: Date.now(),
+        status: 'pending',
+      }));
+      
+      toast.success('Báo cáo video đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
+      setReportReason('');
+      setReportOpen(false);
+      setShowVideoReportConfirm(false);
+    } catch (error: any) {
+      console.error('Error reporting video:', error);
+      
+      // Hiển thị thông báo lỗi cụ thể
+      if (error.response?.data?.detail) {
+        toast.error(error.response.data.detail);
+      } else if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error('Không thể gửi báo cáo. Vui lòng thử lại sau.');
+      }
+    }
   };
 
   const formatViews = (views: number) => {

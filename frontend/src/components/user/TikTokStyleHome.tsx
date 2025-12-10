@@ -34,6 +34,7 @@ import {
 import { toast } from 'sonner';
 import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
 import { SearchResults } from './SearchResults';
+import { reportVideoApi } from '../../api/reports';
 
 // Helper function to copy text with fallback
 const copyToClipboard = (text: string) => {
@@ -1234,6 +1235,12 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               </button>
               <button
                 onClick={() => {
+                  // Validate trước khi mở confirmation
+                  if (!reportType) {
+                    toast.error('Vui lòng chọn lý do báo cáo');
+                    return;
+                  }
+                  console.log('Opening report confirmation with:', { reportType, reportReason, videoId: currentVideo?.id });
                   setShowVideoReportConfirm(true);
                 }}
                 className="flex-1 text-white py-3 rounded-lg transition-all"
@@ -1345,18 +1352,52 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                dispatch(addVideoReport({
-                  videoId: currentVideo.id,
-                  userId: currentUser.id,
-                  type: reportType,
-                  reason: reportReason,
-                }));
-                toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
-                setShowReportModal(false);
-                setShowVideoReportConfirm(false);
-                setReportReason('');
-                setReportType('spam');
+              onClick={async () => {
+                try {
+                  console.log('🚀 Submitting report:', {
+                    videoId: currentVideo.id,
+                    reason: reportType,
+                    description: reportReason
+                  });
+                  
+                  // Gọi API để báo cáo video
+                  const response = await reportVideoApi(currentVideo.id, reportType, reportReason);
+                  console.log('✅ Report API response:', response);
+                  
+                  // Cũng dispatch vào Redux store cho local state (optional)
+                  dispatch(addVideoReport({
+                    videoId: currentVideo.id,
+                    userId: currentUser.id,
+                    type: reportType,
+                    reason: reportReason,
+                  }));
+                  
+                  toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
+                  setShowReportModal(false);
+                  setShowVideoReportConfirm(false);
+                  setReportReason('');
+                  setReportType('spam');
+                } catch (error: any) {
+                  console.error('❌ Error reporting video:', error);
+                  console.error('Error details:', {
+                    response: error.response?.data,
+                    status: error.response?.status,
+                    message: error.message
+                  });
+                  
+                  // Hiển thị thông báo lỗi cụ thể
+                  if (error.response?.data?.detail) {
+                    toast.error(error.response.data.detail);
+                  } else if (error.response?.data?.message) {
+                    toast.error(error.response.data.message);
+                  } else if (error.response?.data?.errors) {
+                    // Hiển thị validation errors
+                    const errorMsg = error.response.data.errors.map((e: any) => e.message).join(', ');
+                    toast.error(`Lỗi validation: ${errorMsg}`);
+                  } else {
+                    toast.error('Không thể gửi báo cáo. Vui lòng thử lại sau.');
+                  }
+                }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
