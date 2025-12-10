@@ -84,9 +84,82 @@ export const resolveVideoReportValidator = [
     .withMessage('Note must not exceed 1000 characters')
 ];
 
+/**
+ * Validator for reporting a user
+ */
+export const reportUserValidator = [
+  body('username')
+    .notEmpty()
+    .withMessage('Username is required')
+    .isString()
+    .withMessage('Username must be a string')
+    .isLength({ min: 3, max: 30 })
+    .withMessage('Username must be between 3 and 30 characters'),
+  
+  body('reason')
+    .notEmpty()
+    .withMessage('Reason is required')
+    .isIn(['spam', 'harassment', 'hate', 'violence', 'nudity', 'impersonation', 'fake_account', 'other'])
+    .withMessage('Invalid report reason'),
+  
+  body('description')
+    .optional()
+    .isString()
+    .withMessage('Description must be a string')
+    .isLength({ max: 500 })
+    .withMessage('Description must not exceed 500 characters')
+];
+
+/**
+ * Validator for getting user reports (with filters)
+ */
+export const getUserReportsValidator = [
+  query('status')
+    .optional()
+    .isIn(['pending', 'reviewed', 'resolved'])
+    .withMessage('Status must be one of: pending, reviewed, resolved'),
+  
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Page must be a positive integer'),
+  
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('Limit must be between 1 and 100')
+];
+
+/**
+ * Validator for resolving a user report
+ */
+export const resolveUserReportValidator = [
+  param('id')
+    .notEmpty()
+    .withMessage('Report ID is required')
+    .isUUID()
+    .withMessage('Report ID must be a valid UUID'),
+  
+  body('action')
+    .notEmpty()
+    .withMessage('Action is required')
+    .isIn(['dismiss', 'warn_user', 'ban_user', 'delete_content'])
+    .withMessage('Invalid action'),
+  
+  body('note')
+    .optional()
+    .isString()
+    .withMessage('Note must be a string')
+    .isLength({ max: 1000 })
+    .withMessage('Note must not exceed 1000 characters')
+];
+
 export default {
   reportVideoValidator,
   getVideoReportsValidator,
   getReportByIdValidator,
-  resolveVideoReportValidator
+  resolveVideoReportValidator,
+  reportUserValidator,
+  getUserReportsValidator,
+  resolveUserReportValidator
 };

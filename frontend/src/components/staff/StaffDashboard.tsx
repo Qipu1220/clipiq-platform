@@ -41,6 +41,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [apiVideoReports, setApiVideoReports] = useState<VideoReport[]>([]);
+  const [videoReportsSubTab, setVideoReportsSubTab] = useState<'pending' | 'resolved'>('pending');
   
   // Confirmation Modal State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -93,12 +94,17 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
       try {
         setLoading(true);
         console.log('🔄 Fetching video reports for staff...');
-        const response = await getVideoReportsApi('pending', 1, 100);
-        console.log('✅ Fetched reports:', response.data.reports);
-        setApiVideoReports(response.data.reports);
+        // Fetch both pending and resolved reports
+        const [pendingResponse, resolvedResponse] = await Promise.all([
+          getVideoReportsApi('pending', 1, 100),
+          getVideoReportsApi('resolved', 1, 100)
+        ]);
+        const allReports = [...pendingResponse.data.reports, ...resolvedResponse.data.reports];
+        console.log('✅ Fetched reports:', allReports);
+        setApiVideoReports(allReports);
         
         // Also update Redux store for compatibility
-        dispatch(setVideoReports(response.data.reports.map(r => ({
+        dispatch(setVideoReports(allReports.map((r: VideoReport) => ({
           id: r.id,
           videoId: r.video_id,
           videoTitle: r.video_title || 'Unknown',
@@ -163,8 +169,12 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             }));
             
             // Refresh reports list
-            const response = await getVideoReportsApi('pending', 1, 100);
-            setApiVideoReports(response.data.reports);
+            const [pendingResponse, resolvedResponse] = await Promise.all([
+              getVideoReportsApi('pending', 1, 100),
+              getVideoReportsApi('resolved', 1, 100)
+            ]);
+            const allReports = [...pendingResponse.data.reports, ...resolvedResponse.data.reports];
+            setApiVideoReports(allReports);
             
             toast.success('Đã xóa video và resolve báo cáo');
             setShowConfirmModal(false);
@@ -197,8 +207,12 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             }));
             
             // Refresh reports list
-            const response = await getVideoReportsApi('pending', 1, 100);
-            setApiVideoReports(response.data.reports);
+            const [pendingResponse, resolvedResponse] = await Promise.all([
+              getVideoReportsApi('pending', 1, 100),
+              getVideoReportsApi('resolved', 1, 100)
+            ]);
+            const allReports = [...pendingResponse.data.reports, ...resolvedResponse.data.reports];
+            setApiVideoReports(allReports);
             
             toast.success('Đã bỏ qua báo cáo');
             setShowConfirmModal(false);
@@ -689,7 +703,34 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             {/* Video Reports Tab */}
             {activeTab === 'video-reports' && (
               <div className="space-y-4">
-                {apiVideoReports.filter((r: VideoReport) => r.status === 'pending').map((report: VideoReport) => {
+                {/* Sub-tabs for Video Reports */}
+                <div className="flex gap-2 mb-6">
+                  <Button
+                    onClick={() => setVideoReportsSubTab('pending')}
+                    className={`h-10 px-6 rounded-lg transition-all ${
+                      videoReportsSubTab === 'pending'
+                        ? 'bg-[#ff3b5c] text-white'
+                        : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    <Flag className="w-4 h-4 mr-2" />
+                    Chưa xử lý ({apiVideoReports.filter((r: VideoReport) => r.status === 'pending').length})
+                  </Button>
+                  <Button
+                    onClick={() => setVideoReportsSubTab('resolved')}
+                    className={`h-10 px-6 rounded-lg transition-all ${
+                      videoReportsSubTab === 'resolved'
+                        ? 'bg-[#ff3b5c] text-white'
+                        : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Đã xử lý ({apiVideoReports.filter((r: VideoReport) => r.status === 'resolved').length})
+                  </Button>
+                </div>
+
+                {/* Reports List */}
+                {apiVideoReports.filter((r: VideoReport) => r.status === videoReportsSubTab).map((report: VideoReport) => {
                   const video = videos.find(v => v.id === report.video_id);
                   return (
                     <Card key={report.id} className="bg-zinc-950/50 border-zinc-900/50 rounded-xl overflow-hidden">
@@ -708,6 +749,12 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                               <p className="text-zinc-400">Báo cáo bởi: <span className="text-white">{report.reporter_username || 'Unknown'}</span></p>
                               <p className="text-zinc-400">Lý do: <span className="text-[#ff3b5c]">{getReportTypeName(report.reason)}</span></p>
                               <p className="text-zinc-600 text-xs">{new Date(report.created_at).toLocaleString()}</p>
+                              {report.status === 'resolved' && report.resolution_note && (
+                                <p className="text-green-400 text-xs mt-2">✓ {report.resolution_note}</p>
+                              )}
+                              {report.status === 'resolved' && report.reviewed_at && (
+                                <p className="text-zinc-600 text-xs">Xử lý lúc: {new Date(report.reviewed_at).toLocaleString()}</p>
+                              )}
                             </div>
                             <div className="flex gap-2">
                               <Button
@@ -718,22 +765,26 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                                 <Eye className="w-4 h-4 mr-2" />
                                 Xem video
                               </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleResolveVideoReport(report.id, report.video_id, true)}
-                                className="bg-[#ff3b5c]/20 hover:bg-[#ff3b5c]/30 text-[#ff3b5c] border-[#ff3b5c]/30 h-9 rounded-lg"
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Xóa video
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleResolveVideoReport(report.id, report.video_id, false)}
-                                className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
-                              >
-                                <CheckCircle className="w-4 h-4 mr-2" />
-                                Bỏ qua
-                              </Button>
+                              {report.status === 'pending' && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleResolveVideoReport(report.id, report.video_id, true)}
+                                    className="bg-[#ff3b5c]/20 hover:bg-[#ff3b5c]/30 text-[#ff3b5c] border-[#ff3b5c]/30 h-9 rounded-lg"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Xóa video
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleResolveVideoReport(report.id, report.video_id, false)}
+                                    className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
+                                  >
+                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                    Bỏ qua
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -741,12 +792,20 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                     </Card>
                   );
                 })}
-                {apiVideoReports.filter((r: VideoReport) => r.status === 'pending').length === 0 && (
+                {apiVideoReports.filter((r: VideoReport) => r.status === videoReportsSubTab).length === 0 && (
                   <div className="text-center py-24">
                     <div className="w-16 h-16 rounded-full bg-zinc-900/50 flex items-center justify-center mx-auto mb-4">
-                      <Flag className="w-8 h-8 text-zinc-600" />
+                      {videoReportsSubTab === 'pending' ? (
+                        <Flag className="w-8 h-8 text-zinc-600" />
+                      ) : (
+                        <CheckCircle className="w-8 h-8 text-zinc-600" />
+                      )}
                     </div>
-                    <p className="text-zinc-500 text-sm">Không có báo cáo video nào</p>
+                    <p className="text-zinc-500 text-sm">
+                      {videoReportsSubTab === 'pending' 
+                        ? 'Không có báo cáo chưa xử lý' 
+                        : 'Không có báo cáo đã xử lý'}
+                    </p>
                   </div>
                 )}
               </div>

@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { addUserReport } from '../../store/reportsSlice';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { reportUserApi } from '../../api/reports';
 
 interface PublicUserProfileProps {
   username: string;
@@ -77,14 +78,34 @@ export function PublicUserProfile({ username, onVideoClick, onBack }: PublicUser
     setShowReportModal(true);
   };
 
-  const handleReportSubmit = () => {
-    dispatch(addUserReport({
-      username: username,
-      type: reportType,
-      reason: reportReason
-    }));
-    toast.success(`Báo cáo user "@${username}" thành công`);
-    setShowReportModal(false);
+  const handleReportSubmit = async () => {
+    try {
+      console.log('📝 Reporting user:', username, 'reason:', reportType);
+      await reportUserApi(username, reportType, reportReason || undefined);
+      
+      // Also update Redux for UI consistency
+      dispatch(addUserReport({
+        username: username,
+        type: reportType,
+        reason: reportReason
+      }));
+      
+      toast.success(`Báo cáo user "@${username}" thành công`);
+      setShowReportModal(false);
+      setReportType('spam');
+      setReportReason('');
+    } catch (error: any) {
+      console.error('❌ Error reporting user:', error);
+      if (error.response?.status === 409) {
+        toast.error('Bạn đã báo cáo người dùng này rồi');
+      } else if (error.response?.status === 400) {
+        toast.error(error.response?.data?.detail || 'Không thể báo cáo chính mình');
+      } else if (error.response?.status === 404) {
+        toast.error('Người dùng không tồn tại');
+      } else {
+        toast.error('Không thể gửi báo cáo. Vui lòng thử lại sau.');
+      }
+    }
   };
 
   const formatCount = (count: number | undefined | null) => {

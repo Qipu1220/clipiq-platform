@@ -975,6 +975,16 @@ Report user.
 }
 ```
 
+**Reason Options:**
+- `spam` - Spam or scam
+- `harassment` - Harassment or bullying
+- `hate` - Hate speech
+- `violence` - Violence or dangerous behavior
+- `nudity` - Nudity or sexual content
+- `impersonation` - Impersonating someone
+- `fake_account` - Fake account or bot
+- `other` - Other
+
 **Success (201):**
 ```json
 {

@@ -90,9 +90,105 @@ export const resolveVideoReport = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * POST /api/v1/reports/users - Report a user
+ */
+export const reportUser = asyncHandler(async (req, res) => {
+  const { username, reason, description } = req.body;
+  const reportedById = req.user.userId;
+  
+  // Get reported user ID from username
+  const userQuery = 'SELECT id FROM users WHERE username = $1';
+  const { rows } = await import('../config/database.js').then(m => m.default.query(userQuery, [username]));
+  
+  if (rows.length === 0) {
+    throw new ApiError(404, 'User not found');
+  }
+  
+  const reportedUserId = rows[0].id;
+  
+  const report = await ReportService.createUserReport({
+    reportedUserId,
+    reportedById,
+    reason,
+    description
+  });
+  
+  res.status(201).json(
+    successResponse(
+      { reportId: report.id },
+      'Report submitted successfully'
+    )
+  );
+});
+
+/**
+ * GET /api/v1/reports/users - Get all user reports (Staff/Admin only)
+ */
+export const getUserReports = asyncHandler(async (req, res) => {
+  const { status, page = 1, limit = 20 } = req.query;
+  
+  const filters = {
+    status,
+    page: parseInt(page),
+    limit: Math.min(parseInt(limit), 100)
+  };
+  
+  const result = await ReportService.getAllUserReports(filters);
+  
+  res.json(
+    successResponse({
+      reports: result.reports,
+      total: result.total,
+      pagination: {
+        page: result.page,
+        pages: result.pages,
+        total: result.total
+      }
+    })
+  );
+});
+
+/**
+ * GET /api/v1/reports/users/:id - Get user report by ID (Staff/Admin only)
+ */
+export const getUserReportById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  const report = await ReportService.getUserReportById(id);
+  
+  res.json(successResponse(report));
+});
+
+/**
+ * PUT /api/v1/reports/users/:id/resolve - Resolve a user report (Staff/Admin only)
+ */
+export const resolveUserReport = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { action, note } = req.body;
+  const reviewedById = req.user.userId;
+  
+  const report = await ReportService.resolveUserReport(id, action, reviewedById, note);
+  
+  res.json(
+    successResponse(
+      {
+        reportId: report.id,
+        status: report.status,
+        action
+      },
+      'Report resolved successfully'
+    )
+  );
+});
+
 export default {
   reportVideo,
   getVideoReports,
   getVideoReportById,
-  resolveVideoReport
+  resolveVideoReport,
+  reportUser,
+  getUserReports,
+  getUserReportById,
+  resolveUserReport
 };
