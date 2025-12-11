@@ -149,6 +149,36 @@ services:
     networks:
       - clipiq_network
 
+  # Seeder Service (Ephemeral)
+  seeder:
+    image: python:3.10-slim
+    container_name: clipiq_seeder
+    volumes:
+      - ./backend:/app
+    working_dir: /app/src/database/seeders/data
+    environment:
+      - ES_HOST=http://elasticsearch:9200
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    command: >
+      sh -c "pip install 'elasticsearch<9' qdrant-client numpy &&
+             echo 'import time, urllib.request' > wait.py &&
+             echo 'while True:' >> wait.py &&
+             echo '  try:' >> wait.py &&
+             echo '    urllib.request.urlopen(\"http://elasticsearch:9200\")' >> wait.py &&
+             echo '    break' >> wait.py &&
+             echo '  except:' >> wait.py &&
+             echo '    print(\"Waiting for ES...\")' >> wait.py &&
+             echo '    time.sleep(5)' >> wait.py &&
+             python wait.py &&
+             python index_els.py &&
+             python index_qdrant.py"
+    networks:
+      - clipiq_network
+    depends_on:
+      - elasticsearch
+      - qdrant
+
 volumes:
   postgres_data:
     driver: local

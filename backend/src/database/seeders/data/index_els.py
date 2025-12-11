@@ -19,8 +19,14 @@ def index_data():
     print(f"Connecting to Elasticsearch at {ES_HOST}...")
     es = Elasticsearch(ES_HOST)
     
-    if not es.ping():
-        print("Error: Could not connect to Elasticsearch. Is it running?")
+    try:
+        if not es.ping():
+            print("Error: Could not connect to Elasticsearch. Is it running?")
+            # Attempt info to get error
+            print(es.info())
+            sys.exit(1)
+    except Exception as e:
+        print(f"Connection error details: {e}")
         sys.exit(1)
 
     if not os.path.exists(DATA_FILE):

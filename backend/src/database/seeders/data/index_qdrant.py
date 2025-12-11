@@ -2,6 +2,7 @@ import os
 import glob
 import sys
 import json
+import uuid
 
 # Try to import dependencies
 try:
@@ -71,7 +72,8 @@ def index_data():
                 if isinstance(pid, (np.integer, int)):
                     point_id = int(pid)
                 else:
-                    point_id = str(pid)
+                    # Qdrant requires int or UUID. Convert string to UUID.
+                    point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(pid)))
 
                 # Handle Vector
                 vector = vectors[i].tolist()
