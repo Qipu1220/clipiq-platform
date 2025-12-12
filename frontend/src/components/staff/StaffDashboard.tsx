@@ -17,7 +17,7 @@ import { Label } from '../ui/label';
 import { ScrollArea } from '../ui/scroll-area';
 import { StaffProfile } from './StaffProfile';
 import { toast } from 'sonner';
-import { getVideoReportsApi, resolveVideoReportApi, VideoReport } from '../../api/reports';
+import { getVideoReportsApi, resolveVideoReportApi, VideoReport, getUserReportsApi, resolveUserReportApi, UserReport } from '../../api/reports';
 
 interface StaffDashboardProps {
   onVideoClick: (videoId: string) => void;
@@ -42,6 +42,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
   const [loading, setLoading] = useState(false);
   const [apiVideoReports, setApiVideoReports] = useState<VideoReport[]>([]);
   const [videoReportsSubTab, setVideoReportsSubTab] = useState<'pending' | 'resolved'>('pending');
+  const [apiUserReports, setApiUserReports] = useState<UserReport[]>([]);
+  const [userReportsSubTab, setUserReportsSubTab] = useState<'pending' | 'resolved'>('pending');
   
   // Confirmation Modal State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -134,11 +136,41 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     return () => clearInterval(interval);
   }, [dispatch]);
 
-  // Calculate stats - Dùng apiVideoReports từ API thay vì Redux
+  // Fetch user reports from API
+  useEffect(() => {
+    const fetchUserReports = async () => {
+      try {
+        console.log('🔄 Fetching user reports for staff...');
+        const [pendingResponse, resolvedResponse] = await Promise.all([
+          getUserReportsApi('pending', 1, 100),
+          getUserReportsApi('resolved', 1, 100)
+        ]);
+        const allUserReports = [...pendingResponse.data.reports, ...resolvedResponse.data.reports];
+        console.log('✅ Fetched user reports:', allUserReports);
+        setApiUserReports(allUserReports);
+      } catch (error: any) {
+        console.error('❌ Error fetching user reports:', error);
+        if (error.response?.status === 403) {
+          toast.error('Bạn không có quyền xem báo cáo user');
+        } else {
+          toast.error('Không thể tải danh sách báo cáo user');
+        }
+      }
+    };
+
+    fetchUserReports();
+    const interval = setInterval(fetchUserReports, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Calculate stats - Dùng apiVideoReports và apiUserReports từ API thay vì Redux
   const pendingVideoReports = apiVideoReports.filter((r: VideoReport) => r.status === 'pending').length;
-  const pendingUserReports = userReports.filter(r => r.status === 'pending').length;
+  const pendingUserReports = apiUserReports.filter((r: UserReport) => r.status === 'pending').length;
   const pendingAppeals = appeals.filter(a => a.status === 'pending').length;
-  const resolvedToday = [...apiVideoReports.map((r: VideoReport) => ({ status: r.status, timestamp: new Date(r.created_at).getTime() })), ...userReports].filter(
+  const resolvedToday = [
+    ...apiVideoReports.map((r: VideoReport) => ({ status: r.status, timestamp: new Date(r.created_at).getTime() })),
+    ...apiUserReports.map((r: UserReport) => ({ status: r.status, timestamp: new Date(r.created_at).getTime() }))
+  ].filter(
     r => r.status === 'resolved' && new Date(r.timestamp).toDateString() === new Date().toDateString()
   ).length;
   const violatingVideos = videos.filter(v => 
@@ -226,7 +258,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     }
   };
 
-  const handleResolveUserReport = (reportId: string, username: string, shouldWarn: boolean) => {
+  const handleResolveUserReport = async (reportId: string, username: string, shouldWarn: boolean) => {
     if (shouldWarn) {
       setConfirmAction({
         type: 'warn-user',
@@ -234,15 +266,24 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         message: `Bạn có chắc muốn cảnh báo người dùng ${username}? Người dùng sẽ nhận được 1 cảnh báo.`,
         confirmText: 'Cảnh báo',
         confirmColor: '#ff3b5c',
-        onConfirm: () => {
-          dispatch(warnUser(username));
-          dispatch(resolveUserReport({
-            id: reportId,
-            reviewedBy: currentUser?.id || '',
-            reviewedByUsername: currentUser?.username || '',
-            resolutionNote: 'User đã bị cảnh báo'
-          }));
-          setShowConfirmModal(false);
+        onConfirm: async () => {
+          try {
+            dispatch(warnUser(username));
+            await resolveUserReportApi(reportId, 'warn_user', 'User đã bị cảnh báo');
+            
+            // Refresh data
+            const [pendingResponse, resolvedResponse] = await Promise.all([
+              getUserReportsApi('pending', 1, 100),
+              getUserReportsApi('resolved', 1, 100)
+            ]);
+            setApiUserReports([...pendingResponse.data.reports, ...resolvedResponse.data.reports]);
+            
+            toast.success('Đã cảnh báo người dùng');
+            setShowConfirmModal(false);
+          } catch (error) {
+            console.error('Failed to resolve user report:', error);
+            toast.error('Không thể xử lý báo cáo');
+          }
         }
       });
       setShowConfirmModal(true);
@@ -253,14 +294,23 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         message: 'Bạn có chắc muốn bỏ qua báo cáo này? Báo cáo sẽ được đánh dấu là đã xử lý.',
         confirmText: 'Bỏ qua',
         confirmColor: '#ff3b5c',
-        onConfirm: () => {
-          dispatch(resolveUserReport({
-            id: reportId,
-            reviewedBy: currentUser?.id || '',
-            reviewedByUsername: currentUser?.username || '',
-            resolutionNote: 'Báo cáo bị bỏ qua'
-          }));
-          setShowConfirmModal(false);
+        onConfirm: async () => {
+          try {
+            await resolveUserReportApi(reportId, 'dismiss', 'Báo cáo bị bỏ qua');
+            
+            // Refresh data
+            const [pendingResponse, resolvedResponse] = await Promise.all([
+              getUserReportsApi('pending', 1, 100),
+              getUserReportsApi('resolved', 1, 100)
+            ]);
+            setApiUserReports([...pendingResponse.data.reports, ...resolvedResponse.data.reports]);
+            
+            toast.success('Đã bỏ qua báo cáo');
+            setShowConfirmModal(false);
+          } catch (error) {
+            console.error('Failed to resolve user report:', error);
+            toast.error('Không thể xử lý báo cáo');
+          }
         }
       });
       setShowConfirmModal(true);
@@ -814,54 +864,99 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             {/* User Reports Tab */}
             {activeTab === 'user-reports' && (
               <div className="space-y-4">
-                {userReports.filter(r => r.status === 'pending').map(report => (
+                {/* Sub-tabs for User Reports */}
+                <div className="flex gap-2 mb-6">
+                  <Button
+                    onClick={() => setUserReportsSubTab('pending')}
+                    className={`h-10 px-6 rounded-lg transition-all ${
+                      userReportsSubTab === 'pending'
+                        ? 'bg-[#ff3b5c] text-white'
+                        : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    Chưa xử lý ({apiUserReports.filter((r: UserReport) => r.status === 'pending').length})
+                  </Button>
+                  <Button
+                    onClick={() => setUserReportsSubTab('resolved')}
+                    className={`h-10 px-6 rounded-lg transition-all ${
+                      userReportsSubTab === 'resolved'
+                        ? 'bg-[#ff3b5c] text-white'
+                        : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Đã xử lý ({apiUserReports.filter((r: UserReport) => r.status === 'resolved').length})
+                  </Button>
+                </div>
+
+                {/* Reports List */}
+                {apiUserReports.filter((r: UserReport) => r.status === userReportsSubTab).map((report: UserReport) => (
                   <Card key={report.id} className="bg-zinc-950/50 border-zinc-900/50 rounded-xl overflow-hidden">
                     <CardContent className="p-6">
                       <div className="flex justify-between items-start mb-4">
                         <div className="flex-1">
-                          <h3 className="text-white font-medium mb-2">Người dùng: {report.reportedUsername}</h3>
+                          <h3 className="text-white font-medium mb-2">Người dùng: {report.reported_username || 'Unknown'}</h3>
                           <div className="space-y-1 text-sm">
-                            <p className="text-zinc-400">Báo cáo bởi: <span className="text-white">{report.reportedBy}</span></p>
+                            <p className="text-zinc-400">Báo cáo bởi: <span className="text-white">{report.reporter_username || 'Unknown'}</span></p>
                             <p className="text-zinc-400">Lý do: <span className="text-[#ff3b5c]">{getReportTypeName(report.reason)}</span></p>
-                            <p className="text-zinc-600 text-xs">{new Date(report.timestamp).toLocaleString()}</p>
+                            <p className="text-zinc-600 text-xs">{new Date(report.created_at).toLocaleString('vi-VN')}</p>
+                            {report.status === 'resolved' && report.resolution_note && (
+                              <p className="text-green-400 text-xs mt-2">✓ {report.resolution_note}</p>
+                            )}
+                            {report.status === 'resolved' && report.reviewed_at && (
+                              <p className="text-zinc-600 text-xs">Xử lý lúc: {new Date(report.reviewed_at).toLocaleString('vi-VN')}</p>
+                            )}
                           </div>
                         </div>
                       </div>
                       <div className="flex gap-2">
                         <Button
                           size="sm"
-                          onClick={() => onViewUserProfile(report.reportedUsername)}
+                          onClick={() => onViewUserProfile(report.reported_username || '')}
                           className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30 h-9 rounded-lg"
                         >
                           <UserCircle className="w-4 h-4 mr-2" />
                           Xem profile
                         </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleResolveUserReport(report.id, report.reportedUsername, true)}
-                          className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30 h-9 rounded-lg"
-                        >
-                          <AlertTriangle className="w-4 h-4 mr-2" />
-                          Cảnh báo
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleResolveUserReport(report.id, report.reportedUsername, false)}
-                          className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
-                        >
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Bỏ qua
-                        </Button>
+                        {report.status === 'pending' && (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => handleResolveUserReport(report.id, report.reported_username || '', true)}
+                              className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30 h-9 rounded-lg"
+                            >
+                              <AlertTriangle className="w-4 h-4 mr-2" />
+                              Cảnh báo
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleResolveUserReport(report.id, report.reported_username || '', false)}
+                              className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              Bỏ qua
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
                 ))}
-                {userReports.filter(r => r.status === 'pending').length === 0 && (
+                {apiUserReports.filter((r: UserReport) => r.status === userReportsSubTab).length === 0 && (
                   <div className="text-center py-24">
                     <div className="w-16 h-16 rounded-full bg-zinc-900/50 flex items-center justify-center mx-auto mb-4">
-                      <AlertTriangle className="w-8 h-8 text-zinc-600" />
+                      {userReportsSubTab === 'pending' ? (
+                        <AlertTriangle className="w-8 h-8 text-zinc-600" />
+                      ) : (
+                        <CheckCircle className="w-8 h-8 text-zinc-600" />
+                      )}
                     </div>
-                    <p className="text-zinc-500 text-sm">Không có báo cáo người dùng nào</p>
+                    <p className="text-zinc-500 text-sm">
+                      {userReportsSubTab === 'pending' 
+                        ? 'Không có báo cáo chưa xử lý' 
+                        : 'Không có báo cáo đã xử lý'}
+                    </p>
                   </div>
                 )}
               </div>
