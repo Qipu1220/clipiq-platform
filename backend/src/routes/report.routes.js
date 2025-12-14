@@ -10,7 +10,7 @@
 
 import express from 'express';
 import * as ReportController from '../controllers/report.controller.js';
-import { authenticateToken } from '../middlewares/auth.middleware.js';
+import { authenticateToken, checkNotBanned } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import {
@@ -44,6 +44,7 @@ const router = express.Router();
 router.post(
   '/videos',
   authenticateToken,
+  checkNotBanned,
   reportVideoValidator,
   validate,
   ReportController.reportVideo
@@ -121,6 +122,7 @@ router.put(
 router.post(
   '/users',
   authenticateToken,
+  checkNotBanned,
   reportUserValidator,
   validate,
   ReportController.reportUser
@@ -198,6 +200,7 @@ router.put(
 router.post(
   '/comments',
   authenticateToken,
+  checkNotBanned,
   reportCommentValidator,
   validate,
   ReportController.reportComment

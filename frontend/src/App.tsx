@@ -5,6 +5,7 @@ import { restoreSessionThunk } from './store/authSlice';
 import { fetchVideosThunk } from './store/videosSlice';
 import { LoginPage } from './components/LoginPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
+import { BannedModal } from './components/BannedModal';
 import { Header } from './components/Header';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { StaffDashboard } from './components/staff/StaffDashboard';
@@ -60,6 +61,21 @@ function AppContent() {
   // Show login page if not authenticated
   if (!isAuthenticated) {
     return <LoginPage />;
+  }
+
+  // Show banned modal if user is banned (staff and admin bypass this)
+  if (currentUser?.banned && currentUser?.role === 'user') {
+    const isBanActive = !currentUser.banExpiry || new Date(currentUser.banExpiry) > new Date();
+    
+    if (isBanActive) {
+      return (
+        <BannedModal
+          banReason={currentUser.banReason}
+          banExpiry={currentUser.banExpiry}
+          isPermanent={!currentUser.banExpiry}
+        />
+      );
+    }
   }
 
   // Show maintenance screen for non-admin users when maintenance is active
