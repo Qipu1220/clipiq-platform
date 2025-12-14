@@ -33,7 +33,7 @@ export async function authenticateUser(login, password) {
 
   // Find user by email or username
   const query = `
-    SELECT id, username, email, password, role, banned, ban_expiry, ban_reason
+    SELECT id, username, email, password, role, banned, ban_expiry, ban_reason, warnings
     FROM users
     WHERE email = $1 OR username = $1
     LIMIT 1
@@ -80,7 +80,7 @@ export async function authenticateUser(login, password) {
     [user.id]
   );
 
-  // Return user data (without password) with ban information
+  // Return user data (without password) with ban and warning information
   const userData = {
     id: user.id,
     username: user.username,
@@ -88,7 +88,8 @@ export async function authenticateUser(login, password) {
     role: user.role,
     banned: user.banned,
     banReason: user.ban_reason,
-    banExpiry: user.ban_expiry
+    banExpiry: user.ban_expiry,
+    warnings: user.warnings || 0
   };
 
   return { user: userData, tokens };

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState, AppDispatch } from './store/store';
-import { restoreSessionThunk } from './store/authSlice';
+import { restoreSessionThunk, getCurrentUserThunk } from './store/authSlice';
 import { fetchVideosThunk } from './store/videosSlice';
 import { LoginPage } from './components/LoginPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
 import { BannedModal } from './components/BannedModal';
+import { WarningBanner } from './components/WarningBanner';
 import { Header } from './components/Header';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { StaffDashboard } from './components/staff/StaffDashboard';
@@ -44,9 +45,22 @@ function AppContent() {
   // Refetch videos when user logs in to ensure like status is correct
   useEffect(() => {
     if (isAuthenticated) {
-      console.log('🔄 User authenticated, refetching videos to update like status');
       dispatch(fetchVideosThunk());
+      // Also refresh user data immediately after login to ensure warnings are shown
+      dispatch(getCurrentUserThunk());
     }
+  }, [isAuthenticated, dispatch]);
+
+  // Periodically refresh user data to get updated warnings, ban status, etc.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Refresh user data every 30 seconds
+    const intervalId = setInterval(() => {
+      dispatch(getCurrentUserThunk());
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(intervalId);
   }, [isAuthenticated, dispatch]);
 
   // Show loading screen while checking session
@@ -169,6 +183,11 @@ function AppContent() {
     <div className="h-screen bg-black overflow-hidden">
       {/* Header is now completely hidden - all roles have their own navigation */}
       {renderPage()}
+      
+      {/* Warning banner for users with warnings (only show for regular users, not staff/admin) */}
+      {currentUser?.role === 'user' && currentUser?.warnings > 0 && (
+        <WarningBanner warnings={currentUser.warnings} username={currentUser.username} />
+      )}
     </div>
   );
 }
