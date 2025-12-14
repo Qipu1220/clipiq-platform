@@ -182,6 +182,89 @@ export const resolveUserReport = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * POST /api/v1/reports/comments - Report a comment
+ */
+export const reportComment = asyncHandler(async (req, res) => {
+  const { commentId, reason, description } = req.body;
+  const reportedById = req.user.userId;
+  
+  const report = await ReportService.createCommentReport({
+    commentId,
+    reportedById,
+    reason,
+    description
+  });
+  
+  res.status(201).json(
+    successResponse(
+      { reportId: report.id },
+      'Comment report submitted successfully'
+    )
+  );
+});
+
+/**
+ * GET /api/v1/reports/comments - Get all comment reports (Staff/Admin only)
+ */
+export const getCommentReports = asyncHandler(async (req, res) => {
+  const { status, page = 1, limit = 20 } = req.query;
+  
+  const filters = {
+    status,
+    page: parseInt(page),
+    limit: Math.min(parseInt(limit), 100)
+  };
+  
+  const result = await ReportService.getAllCommentReports(filters);
+  
+  res.json(
+    successResponse({
+      reports: result.reports,
+      total: result.total,
+      pagination: {
+        page: result.page,
+        pages: result.pages,
+        total: result.total
+      }
+    })
+  );
+});
+
+/**
+ * GET /api/v1/reports/comments/:id - Get comment report by ID (Staff/Admin only)
+ */
+export const getCommentReportById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  const report = await ReportService.getCommentReportById(id);
+  
+  res.json(successResponse(report));
+});
+
+/**
+ * PUT /api/v1/reports/comments/:id/resolve - Resolve comment report (Staff/Admin only)
+ */
+export const resolveCommentReport = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { action, note } = req.body;
+  const reviewedById = req.user.userId;
+  
+  const updatedReport = await ReportService.resolveCommentReport(
+    id,
+    action,
+    reviewedById,
+    note
+  );
+  
+  res.json(
+    successResponse(
+      updatedReport,
+      'Comment report resolved successfully'
+    )
+  );
+});
+
 export default {
   reportVideo,
   getVideoReports,
@@ -190,5 +273,9 @@ export default {
   reportUser,
   getUserReports,
   getUserReportById,
-  resolveUserReport
+  resolveUserReport,
+  reportComment,
+  getCommentReports,
+  getCommentReportById,
+  resolveCommentReport
 };

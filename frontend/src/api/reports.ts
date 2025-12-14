@@ -44,6 +44,27 @@ export interface UserReport {
   reviewer_username?: string;
 }
 
+export interface CommentReport {
+  id: string;
+  comment_id: string;
+  reported_by_id: string;
+  reason: string;
+  evidence_url: string | null;
+  status: 'pending' | 'reviewed' | 'resolved';
+  reviewed_by_id: string | null;
+  reviewed_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  comment_text?: string;
+  comment_user_id?: string;
+  video_id?: string;
+  reporter_username?: string;
+  reporter_display_name?: string;
+  commenter_username?: string;
+  commenter_display_name?: string;
+  video_title?: string;
+}
+
 export interface VideoReportsResponse {
   success: boolean;
   data: {
@@ -78,6 +99,24 @@ export interface SingleUserReportResponse {
 export interface SingleVideoReportResponse {
   success: boolean;
   data: VideoReport;
+}
+
+export interface CommentReportsResponse {
+  success: boolean;
+  data: {
+    reports: CommentReport[];
+    total: number;
+    pagination: {
+      page: number;
+      pages: number;
+      total: number;
+    };
+  };
+}
+
+export interface SingleCommentReportResponse {
+  success: boolean;
+  data: CommentReport;
 }
 
 export interface ResolveReportResponse {
@@ -202,6 +241,62 @@ export const resolveUserReportApi = async (
   return response.data;
 };
 
+/**
+ * Report a comment (User)
+ */
+export const reportCommentApi = async (commentId: string, reason: string, description?: string) => {
+  const response = await apiClient.post('/reports/comments', {
+    commentId,
+    reason,
+    description
+  });
+  
+  return response.data;
+};
+
+/**
+ * Get all comment reports (Staff/Admin only)
+ */
+export const getCommentReportsApi = async (
+  status?: string, 
+  page: number = 1, 
+  limit: number = 20
+): Promise<CommentReportsResponse> => {
+  const response = await apiClient.get<CommentReportsResponse>('/reports/comments', {
+    params: { status, page, limit }
+  });
+  
+  return response.data;
+};
+
+/**
+ * Get comment report by ID (Staff/Admin only)
+ */
+export const getCommentReportByIdApi = async (reportId: string): Promise<SingleCommentReportResponse> => {
+  const response = await apiClient.get<SingleCommentReportResponse>(`/reports/comments/${reportId}`);
+  
+  return response.data;
+};
+
+/**
+ * Resolve a comment report (Staff/Admin only)
+ * @param reportId - UUID of the report
+ * @param action - Action to take: 'dismiss' | 'warn_user' | 'ban_user' | 'delete_content'
+ * @param note - Optional note explaining the resolution
+ */
+export const resolveCommentReportApi = async (
+  reportId: string, 
+  action: 'dismiss' | 'warn_user' | 'ban_user' | 'delete_content', 
+  note?: string
+): Promise<ResolveReportResponse> => {
+  const response = await apiClient.put<ResolveReportResponse>(
+    `/reports/comments/${reportId}/resolve`, 
+    { action, note }
+  );
+  
+  return response.data;
+};
+
 export default {
   reportVideoApi,
   getVideoReportsApi,
@@ -210,5 +305,9 @@ export default {
   reportUserApi,
   getUserReportsApi,
   getUserReportByIdApi,
-  resolveUserReportApi
+  resolveUserReportApi,
+  reportCommentApi,
+  getCommentReportsApi,
+  getCommentReportByIdApi,
+  resolveCommentReportApi
 };

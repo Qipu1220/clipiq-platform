@@ -5,6 +5,7 @@
 
 import * as VideoReportModel from '../models/VideoReport.js';
 import * as UserReportModel from '../models/UserReport.js';
+import * as CommentReportModel from '../models/CommentReport.js';
 import pool from '../config/database.js';
 import ApiError from '../utils/apiError.js';
 
@@ -240,6 +241,109 @@ export async function resolveUserReport(reportId, action, reviewedById, note) {
   return updatedReport;
 }
 
+/**
+ * Create a comment report
+ */
+export async function createCommentReport(data) {
+  const { commentId, reportedById, reason, description } = data;
+  
+  // Check if comment exists
+  const commentQuery = 'SELECT id, user_id FROM comments WHERE id = $1';
+  const commentResult = await pool.query(commentQuery, [commentId]);
+  
+  if (commentResult.rows.length === 0) {
+    throw new ApiError(404, 'Comment not found');
+  }
+  
+  const comment = commentResult.rows[0];
+  
+  // Prevent users from reporting their own comments
+  if (comment.user_id === reportedById) {
+    throw new ApiError(400, 'You cannot report your own comment');
+  }
+  
+  // Check if user already reported this comment
+  const hasReported = await CommentReportModel.hasUserReportedComment(commentId, reportedById);
+  
+  if (hasReported) {
+    throw new ApiError(409, 'You have already reported this comment');
+  }
+  
+  // Validate reason
+  const validReasons = ['spam', 'harassment', 'hate_speech', 'violence_threat', 'sexual_content', 'misinformation', 'impersonation', 'off_topic', 'other'];
+  const reasonType = reason.split(':')[0].trim(); // Extract type from "type: details"
+  
+  if (!validReasons.includes(reasonType)) {
+    throw new ApiError(400, 'Invalid report reason');
+  }
+  
+  // Create the report
+  const report = await CommentReportModel.createCommentReport({
+    commentId,
+    reportedById,
+    reason,
+    description
+  });
+  
+  return report;
+}
+
+/**
+ * Get comment report by ID (staff/admin only)
+ */
+export async function getCommentReportById(reportId) {
+  const report = await CommentReportModel.getCommentReportById(reportId);
+  
+  if (!report) {
+    throw new ApiError(404, 'Report not found');
+  }
+  
+  return report;
+}
+
+/**
+ * Get all comment reports with filters (staff/admin only)
+ */
+export async function getAllCommentReports(filters) {
+  const result = await CommentReportModel.getAllCommentReports(filters);
+  return result;
+}
+
+/**
+ * Resolve a comment report (staff/admin only)
+ */
+export async function resolveCommentReport(reportId, action, reviewedById, note) {
+  // Get the report
+  const report = await CommentReportModel.getCommentReportById(reportId);
+  
+  if (!report) {
+    throw new ApiError(404, 'Report not found');
+  }
+  
+  if (report.status === 'resolved') {
+    throw new ApiError(400, 'Report already resolved');
+  }
+  
+  // Validate action
+  const validActions = ['dismiss', 'warn_user', 'ban_user', 'delete_content'];
+  if (!validActions.includes(action)) {
+    throw new ApiError(400, 'Invalid action');
+  }
+  
+  // Update report status
+  const updatedReport = await CommentReportModel.updateCommentReportStatus(
+    reportId,
+    'resolved',
+    reviewedById,
+    note || `Action taken: ${action}`
+  );
+  
+  // TODO: Execute the action (warn, ban, delete comment)
+  // This will be implemented when we add staff/admin features
+  
+  return updatedReport;
+}
+
 export default {
   createVideoReport,
   getVideoReportById,
@@ -248,5 +352,9 @@ export default {
   createUserReport,
   getUserReportById,
   getAllUserReports,
-  resolveUserReport
+  resolveUserReport,
+  createCommentReport,
+  getCommentReportById,
+  getAllCommentReports,
+  resolveCommentReport
 };

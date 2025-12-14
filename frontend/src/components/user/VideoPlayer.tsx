@@ -8,7 +8,7 @@ import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User, Bell, BellOff, MoreVe
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
-import { reportVideoApi } from '../../api/reports';
+import { reportVideoApi, reportCommentApi } from '../../api/reports';
 import {
   Dialog,
   DialogContent,
@@ -94,6 +94,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
   const [showCommentReportModal, setShowCommentReportModal] = useState(false);
   const [selectedComment, setSelectedComment] = useState<{ id: string; text: string; username: string } | null>(null);
   const [commentReportReason, setCommentReportReason] = useState('');
+  const [commentReportType, setCommentReportType] = useState('spam');
   const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
 
@@ -170,7 +171,11 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
       console.error('Error reporting video:', error);
       
       // Hiển thị thông báo lỗi cụ thể
-      if (error.response?.data?.detail) {
+      if (error.response?.status === 409) {
+        toast.error('Bạn đã báo cáo video này rồi');
+      } else if (error.response?.status === 404) {
+        toast.error('Video không tồn tại');
+      } else if (error.response?.data?.detail) {
         toast.error(error.response.data.detail);
       } else if (error.response?.data?.message) {
         toast.error(error.response.data.message);
@@ -385,6 +390,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
                   setShowCommentReportModal(false);
                   setSelectedComment(null);
                   setCommentReportReason('');
+                  setCommentReportType('spam');
                 }}
                 className="text-zinc-400 hover:text-white transition-colors"
               >
@@ -401,13 +407,38 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
               </div>
 
               <div>
-                <Label className="text-white text-sm mb-2 block">Lý do báo cáo</Label>
+                <label className="block text-white text-sm mb-2">Loại vi phạm:</label>
+                <select
+                  value={commentReportType}
+                  onChange={(e) => setCommentReportType(e.target.value)}
+                  className="w-full bg-zinc-800 text-white p-3 rounded-lg border border-zinc-700 focus:border-red-500 focus:outline-none transition-colors"
+                >
+                  <option value="spam">Spam hoặc quảng cáo</option>
+                  <option value="harassment">Quấy rối hoặc bắt nạt</option>
+                  <option value="hate_speech">Ngôn từ gây thù ghét</option>
+                  <option value="violence_threat">Đe dọa bạo lực</option>
+                  <option value="sexual_content">Nội dung khiêu dâm</option>
+                  <option value="misinformation">Thông tin sai lệch</option>
+                  <option value="impersonation">Mạo danh</option>
+                  <option value="off_topic">Nội dung không liên quan</option>
+                  <option value="other">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-white text-sm mb-2">Chi tiết (không bắt buộc):</label>
                 <Textarea
                   value={commentReportReason}
                   onChange={(e) => setCommentReportReason(e.target.value)}
-                  placeholder="Mô tả lý do bạn báo cáo bình luận này..."
-                  className="bg-zinc-800 border-zinc-700 text-white min-h-[120px] resize-none"
+                  placeholder="Mô tả thêm về vấn đề bạn gặp phải..."
+                  className="bg-zinc-800 border-zinc-700 text-white min-h-[100px] resize-none"
                 />
+              </div>
+
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                <p className="text-yellow-500 text-xs">
+                  ⚠️ Báo cáo sai sự thật có thể bị xử phạt. Staff sẽ xem xét trong 24-48 giờ.
+                </p>
               </div>
             </div>
 
@@ -418,6 +449,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
                   setShowCommentReportModal(false);
                   setSelectedComment(null);
                   setCommentReportReason('');
+                  setCommentReportType('spam');
                 }}
                 variant="outline"
                 className="flex-1 bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700"
@@ -426,10 +458,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
               </Button>
               <Button
                 onClick={() => {
-                  if (!commentReportReason.trim()) {
-                    toast.error('Vui lòng nhập lý do báo cáo');
-                    return;
-                  }
+                  // Reason dropdown is always selected, optional details
                   setShowCommentReportConfirm(true);
                 }}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
@@ -494,26 +523,47 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
                 if (selectedComment && video) {
-                  dispatch(addCommentReport({
-                    id: Date.now().toString(),
-                    commentId: selectedComment.id,
-                    commentText: selectedComment.text,
-                    commentUsername: selectedComment.username,
-                    videoId: video.id,
-                    videoTitle: video.title,
-                    reportedBy: currentUser!.id,
-                    reportedByUsername: currentUser!.username,
-                    reason: commentReportReason,
-                    timestamp: Date.now(),
-                    status: 'pending',
-                  }));
-                  toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
-                  setShowCommentReportModal(false);
-                  setShowCommentReportConfirm(false);
-                  setSelectedComment(null);
-                  setCommentReportReason('');
+                  try {
+                    console.log('📝 Reporting comment:', selectedComment.id, 'reason:', commentReportType);
+                    // Call API to report comment
+                    const reason = `${commentReportType}${commentReportReason ? ': ' + commentReportReason : ''}`;
+                    await reportCommentApi(selectedComment.id, reason, commentReportReason || undefined);
+                    
+                    // Also update Redux for UI consistency (optional)
+                    dispatch(addCommentReport({
+                      id: Date.now().toString(),
+                      commentId: selectedComment.id,
+                      commentText: selectedComment.text,
+                      commentUsername: selectedComment.username,
+                      videoId: video.id,
+                      videoTitle: video.title,
+                      reportedBy: currentUser!.id,
+                      reportedByUsername: currentUser!.username,
+                      reason,
+                      timestamp: Date.now(),
+                      status: 'pending',
+                    }));
+                    
+                    toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
+                    setShowCommentReportModal(false);
+                    setShowCommentReportConfirm(false);
+                    setSelectedComment(null);
+                    setCommentReportReason('');
+                    setCommentReportType('spam');
+                  } catch (error: any) {
+                    console.error('❌ Error reporting comment:', error);
+                    if (error.response?.status === 409) {
+                      toast.error('Bạn đã báo cáo bình luận này rồi');
+                    } else if (error.response?.status === 400) {
+                      toast.error(error.response?.data?.detail || 'Không thể báo cáo bình luận của chính mình');
+                    } else if (error.response?.status === 404) {
+                      toast.error('Bình luận không tồn tại');
+                    } else {
+                      toast.error('Không thể gửi báo cáo. Vui lòng thử lại sau.');
+                    }
+                  }
                 }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"

@@ -154,6 +154,84 @@ export const resolveUserReportValidator = [
     .withMessage('Note must not exceed 1000 characters')
 ];
 
+/**
+ * Validator for reporting a comment
+ */
+export const reportCommentValidator = [
+  body('commentId')
+    .notEmpty()
+    .withMessage('Comment ID is required')
+    .isUUID()
+    .withMessage('Comment ID must be a valid UUID'),
+  
+  body('reason')
+    .notEmpty()
+    .withMessage('Reason is required')
+    .isString()
+    .withMessage('Reason must be a string')
+    .custom((value) => {
+      const validReasons = ['spam', 'harassment', 'hate_speech', 'violence_threat', 'sexual_content', 'misinformation', 'impersonation', 'off_topic', 'other'];
+      const reasonType = value.split(':')[0].trim();
+      if (!validReasons.includes(reasonType)) {
+        throw new Error('Invalid report reason');
+      }
+      return true;
+    })
+    .isLength({ max: 500 })
+    .withMessage('Reason must not exceed 500 characters'),
+  
+  body('description')
+    .optional()
+    .isString()
+    .withMessage('Description must be a string')
+    .isLength({ max: 500 })
+    .withMessage('Description must not exceed 500 characters')
+];
+
+/**
+ * Validator for getting comment reports (with filters)
+ */
+export const getCommentReportsValidator = [
+  query('status')
+    .optional()
+    .isIn(['pending', 'reviewed', 'resolved'])
+    .withMessage('Status must be one of: pending, reviewed, resolved'),
+  
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Page must be a positive integer'),
+  
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('Limit must be between 1 and 100')
+];
+
+/**
+ * Validator for resolving a comment report
+ */
+export const resolveCommentReportValidator = [
+  param('id')
+    .notEmpty()
+    .withMessage('Report ID is required')
+    .isUUID()
+    .withMessage('Report ID must be a valid UUID'),
+  
+  body('action')
+    .notEmpty()
+    .withMessage('Action is required')
+    .isIn(['dismiss', 'warn_user', 'ban_user', 'delete_content'])
+    .withMessage('Invalid action'),
+  
+  body('note')
+    .optional()
+    .isString()
+    .withMessage('Note must be a string')
+    .isLength({ max: 1000 })
+    .withMessage('Note must not exceed 1000 characters')
+];
+
 export default {
   reportVideoValidator,
   getVideoReportsValidator,
@@ -161,5 +239,8 @@ export default {
   resolveVideoReportValidator,
   reportUserValidator,
   getUserReportsValidator,
-  resolveUserReportValidator
+  resolveUserReportValidator,
+  reportCommentValidator,
+  getCommentReportsValidator,
+  resolveCommentReportValidator
 };

@@ -20,7 +20,10 @@ import {
   resolveVideoReportValidator,
   reportUserValidator,
   getUserReportsValidator,
-  resolveUserReportValidator
+  resolveUserReportValidator,
+  reportCommentValidator,
+  getCommentReportsValidator,
+  resolveCommentReportValidator
 } from '../validators/report.validator.js';
 
 const router = express.Router();
@@ -177,6 +180,83 @@ router.put(
   resolveUserReportValidator,
   validate,
   ReportController.resolveUserReport
+);
+
+/**
+ * POST /api/v1/reports/comments
+ * 
+ * Report a comment
+ * Requires authentication
+ * 
+ * Request Body:
+ * {
+ *   "commentId": "uuid",
+ *   "reason": "spam|harassment|hate_speech|violence_threat|sexual_content|misinformation|impersonation|off_topic|other",
+ *   "description": "Optional description"
+ * }
+ */
+router.post(
+  '/comments',
+  authenticateToken,
+  reportCommentValidator,
+  validate,
+  ReportController.reportComment
+);
+
+/**
+ * GET /api/v1/reports/comments
+ * 
+ * Get all comment reports (Staff/Admin only)
+ * Requires authentication and staff/admin role
+ * 
+ * Query Params:
+ * - status: pending|reviewed|resolved
+ * - page: 1
+ * - limit: 20
+ */
+router.get(
+  '/comments',
+  authenticateToken,
+  requireRole(['admin', 'staff']),
+  getCommentReportsValidator,
+  validate,
+  ReportController.getCommentReports
+);
+
+/**
+ * GET /api/v1/reports/comments/:id
+ * 
+ * Get comment report by ID (Staff/Admin only)
+ * Requires authentication and staff/admin role
+ */
+router.get(
+  '/comments/:id',
+  authenticateToken,
+  requireRole(['admin', 'staff']),
+  getReportByIdValidator,
+  validate,
+  ReportController.getCommentReportById
+);
+
+/**
+ * PUT /api/v1/reports/comments/:id/resolve
+ * 
+ * Resolve a comment report (Staff/Admin only)
+ * Requires authentication and staff/admin role
+ * 
+ * Request Body:
+ * {
+ *   "action": "dismiss|warn_user|ban_user|delete_content",
+ *   "note": "Optional note"
+ * }
+ */
+router.put(
+  '/comments/:id/resolve',
+  authenticateToken,
+  requireRole(['admin', 'staff']),
+  resolveCommentReportValidator,
+  validate,
+  ReportController.resolveCommentReport
 );
 
 export default router;

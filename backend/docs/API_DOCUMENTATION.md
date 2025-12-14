@@ -1004,16 +1004,40 @@ Report comment.
 ```json
 {
   "commentId": "uuid",
-  "reason": "hate",
-  "description": "Hate speech"
+  "reason": "hate_speech",
+  "description": "Optional additional details"
 }
 ```
+
+**Reason Options:**
+- `spam` - Spam hoặc quảng cáo
+- `harassment` - Quấy rối hoặc bắt nạt
+- `hate_speech` - Ngôn từ gây thù ghét
+- `violence_threat` - Đe dọa bạo lực
+- `sexual_content` - Nội dung khiêu dâm
+- `misinformation` - Thông tin sai lệch
+- `impersonation` - Mạo danh
+- `off_topic` - Nội dung không liên quan
+- `other` - Khác
+
+**Notes:**
+- `description` field is **optional** - provides additional context
+- `reason` field is **required** - must be one of the values above
+- Duplicate reports for the same comment by the same user will return 409 error
 
 **Success (201):**
 ```json
 {
   "success": true,
   "message": "Report submitted"
+}
+```
+
+**Error (409):**
+```json
+{
+  "success": false,
+  "detail": "Bạn đã báo cáo bình luận này rồi"
 }
 ```
 
@@ -1221,27 +1245,202 @@ Get system statistics (Admin only).
 ---
 
 ### GET /admin/users
-Manage all users (Admin only).
+Get all users with detailed stats (Staff only).
 
-**Auth:** Admin
+**Auth:** Staff
 
 **Query Params:**
-- `role` (admin|staff|user)
-- `banned` (true|false)
-- `search` (username/email)
-- `page` (default: 1)
-- `limit` (default: 50)
+- `role` (admin|staff|user) - Filter by user role
+- `banned` (true|false) - Filter by ban status
+- `search` (string) - Search by username, display name, or email
+- `page` (default: 1) - Page number
+- `limit` (default: 100, max: 100) - Results per page
 
 **Success (200):**
 ```json
 {
   "success": true,
   "data": {
-    "users": [...],
-    "total": 1562
+    "users": [
+      {
+        "id": "uuid",
+        "username": "user001",
+        "email": "user001@example.com",
+        "role": "user",
+        "displayName": "John Doe",
+        "bio": "Content creator",
+        "avatarUrl": "https://...",
+        "banned": false,
+        "banExpiry": null,
+        "banReason": null,
+        "warnings": 0,
+        "stats": {
+          "videos": 42,
+          "followers": 1500,
+          "following": 230
+        },
+        "createdAt": "2024-01-01T00:00:00Z",
+        "updatedAt": "2024-12-04T10:00:00Z"
+      }
+    ],
+    "pagination": {
+      "total": 1562,
+      "page": 1,
+      "pages": 16,
+      "limit": 100
+    }
   }
 }
 ```
+
+---
+
+### PUT /admin/users/:username/ban
+Ban a user temporarily or permanently (Staff only).
+
+**Auth:** Staff
+
+**URL Params:**
+- `username` - Username of the user to ban
+
+**Request:**
+```json
+{
+  "reason": "Repeated violation of community guidelines",
+  "duration": 7
+}
+```
+
+**Fields:**
+- `reason` (required) - Reason for ban (5-500 characters)
+- `duration` (optional) - Number of days for temporary ban (1-365). Omit for permanent ban.
+
+**Notes:**
+- If `duration` is provided, user will be automatically unbanned after the specified days
+- If `duration` is omitted, user is permanently banned until manually unbanned
+- User receives notification about the ban
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "User banned successfully",
+  "data": {
+    "id": "uuid",
+    "username": "user001",
+    "displayName": "John Doe",
+    "banned": true,
+    "banExpiry": "2024-12-11T10:00:00Z",
+    "banReason": "Repeated violation of community guidelines",
+    "warnings": 2
+  }
+}
+```
+
+**Errors:**
+- `404` - User not found
+
+---
+
+### PUT /admin/users/:username/unban
+Unban a user (Staff only).
+
+**Auth:** Staff
+
+**URL Params:**
+- `username` - Username of the user to unban
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "User unbanned successfully",
+  "data": {
+    "id": "uuid",
+    "username": "user001",
+    "displayName": "John Doe",
+    "banned": false,
+    "warnings": 2
+  }
+}
+```
+
+**Errors:**
+- `404` - User not found
+- `400` - User is not banned
+
+---
+
+### PUT /admin/users/:username/warn
+Warn a user (Staff only).
+
+**Auth:** Staff
+
+**URL Params:**
+- `username` - Username of the user to warn
+
+**Request:**
+```json
+{
+  "reason": "Posted inappropriate content",
+  "duration": 7
+}
+```
+
+**Fields:**
+- `reason` (required) - Warning reason (5-500 characters)
+- `duration` (optional) - Number of days warning is effective (1-90, default: 7)
+
+**Notes:**
+- Increments user's warning count by 1
+- User receives notification about the warning
+- After 3 warnings, consider temporary ban
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "User warned successfully",
+  "data": {
+    "id": "uuid",
+    "username": "user001",
+    "displayName": "John Doe",
+    "warnings": 3,
+    "banned": false
+  }
+}
+```
+
+**Errors:**
+- `404` - User not found
+
+---
+
+### PUT /admin/users/:username/clear-warnings
+Clear all warnings for a user (Staff only).
+
+**Auth:** Staff
+
+**URL Params:**
+- `username` - Username of the user
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "Warnings cleared successfully",
+  "data": {
+    "id": "uuid",
+    "username": "user001",
+    "displayName": "John Doe",
+    "warnings": 0
+  }
+}
+```
+
+**Errors:**
+- `404` - User not found
+- `400` - User has no warnings to clear
 
 ---
 

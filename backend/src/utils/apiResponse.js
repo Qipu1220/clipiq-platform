@@ -4,14 +4,14 @@
  */
 
 /**
- * Success response format
+ * Success response format - sends response directly
  */
-export const successResponse = (data, message = 'Success') => {
-  return {
+export const successResponse = (res, data, message = 'Success') => {
+  return res.status(200).json({
     success: true,
     data,
     message
-  };
+  });
 };
 
 /**

@@ -34,7 +34,7 @@ import {
 import { toast } from 'sonner';
 import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
 import { SearchResults } from './SearchResults';
-import { reportVideoApi } from '../../api/reports';
+import { reportVideoApi, reportCommentApi } from '../../api/reports';
 
 // Helper function to copy text with fallback
 const copyToClipboard = (text: string) => {
@@ -108,6 +108,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const [showCommentReportModal, setShowCommentReportModal] = useState(false);
   const [selectedComment, setSelectedComment] = useState<{ id: string; text: string; username: string } | null>(null);
   const [commentReportReason, setCommentReportReason] = useState('');
+  const [commentReportType, setCommentReportType] = useState('spam');
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
   const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
 
@@ -1272,6 +1273,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   setShowCommentReportModal(false);
                   setSelectedComment(null);
                   setCommentReportReason('');
+                  setCommentReportType('spam');
                 }}
                 className="text-zinc-400 hover:text-white transition-colors"
               >
@@ -1288,13 +1290,38 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               </div>
 
               <div>
-                <label className="text-white text-sm mb-2 block">Lý do báo cáo</label>
+                <label className="block text-white text-sm mb-2">Loại vi phạm:</label>
+                <select
+                  value={commentReportType}
+                  onChange={(e) => setCommentReportType(e.target.value)}
+                  className="w-full bg-zinc-800 text-white p-3 rounded-lg border border-zinc-700 focus:border-red-500 focus:outline-none transition-colors"
+                >
+                  <option value="spam">Spam hoặc quảng cáo</option>
+                  <option value="harassment">Quấy rối hoặc bắt nạt</option>
+                  <option value="hate_speech">Ngôn từ gây thù ghét</option>
+                  <option value="violence_threat">Đe dọa bạo lực</option>
+                  <option value="sexual_content">Nội dung khiêu dâm</option>
+                  <option value="misinformation">Thông tin sai lệch</option>
+                  <option value="impersonation">Mạo danh</option>
+                  <option value="off_topic">Nội dung không liên quan</option>
+                  <option value="other">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-white text-sm mb-2">Chi tiết (không bắt buộc):</label>
                 <Textarea
                   value={commentReportReason}
                   onChange={(e) => setCommentReportReason(e.target.value)}
-                  placeholder="Mô tả lý do bạn báo cáo bình luận này..."
-                  className="bg-zinc-800 border-zinc-700 text-white min-h-[120px] resize-none"
+                  placeholder="Mô tả thêm về vấn đề bạn gặp phải..."
+                  className="bg-zinc-800 border-zinc-700 text-white min-h-[100px] resize-none"
                 />
+              </div>
+
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                <p className="text-yellow-500 text-xs">
+                  ⚠️ Báo cáo sai sự thật có thể bị xử phạt. Staff sẽ xem xét trong 24-48 giờ.
+                </p>
               </div>
             </div>
 
@@ -1305,6 +1332,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   setShowCommentReportModal(false);
                   setSelectedComment(null);
                   setCommentReportReason('');
+                  setCommentReportType('spam');
                 }}
                 className="flex-1 bg-zinc-800 text-white py-3 rounded-lg hover:bg-zinc-700 transition-colors"
               >
@@ -1312,10 +1340,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               </button>
               <button
                 onClick={() => {
-                  if (!commentReportReason.trim()) {
-                    toast.error('Vui lòng nhập lý do báo cáo');
-                    return;
-                  }
+                  // Reason dropdown is always selected, optional details
                   setShowCommentReportConfirm(true);
                 }}
                 className="flex-1 text-white py-3 rounded-lg transition-all"
@@ -1429,26 +1454,45 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
                 if (selectedComment && currentVideo) {
-                  dispatch(addCommentReport({
-                    id: Date.now().toString(),
-                    commentId: selectedComment.id,
-                    commentText: selectedComment.text,
-                    commentUsername: selectedComment.username,
-                    videoId: currentVideo.id,
-                    videoTitle: currentVideo.title,
-                    reportedBy: currentUser!.id,
-                    reportedByUsername: currentUser!.username,
-                    reason: commentReportReason,
-                    timestamp: Date.now(),
-                    status: 'pending',
-                  }));
-                  toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
-                  setShowCommentReportModal(false);
-                  setShowCommentReportConfirm(false);
-                  setSelectedComment(null);
-                  setCommentReportReason('');
+                  try {
+                    const reason = `${commentReportType}${commentReportReason ? ': ' + commentReportReason : ''}`;
+                    await reportCommentApi(selectedComment.id, reason, commentReportReason || undefined);
+                    
+                    // Redux dispatch for UI consistency
+                    dispatch(addCommentReport({
+                      id: Date.now().toString(),
+                      commentId: selectedComment.id,
+                      commentText: selectedComment.text,
+                      commentUsername: selectedComment.username,
+                      videoId: currentVideo.id,
+                      videoTitle: currentVideo.title,
+                      reportedBy: currentUser!.id,
+                      reportedByUsername: currentUser!.username,
+                      reason: reason,
+                      timestamp: Date.now(),
+                      status: 'pending',
+                    }));
+                    
+                    toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
+                    setShowCommentReportModal(false);
+                    setShowCommentReportConfirm(false);
+                    setSelectedComment(null);
+                    setCommentReportReason('');
+                    setCommentReportType('spam');
+                  } catch (error: any) {
+                    console.error('Lỗi khi gửi báo cáo bình luận:', error);
+                    if (error.response?.status === 409) {
+                      toast.error('Bạn đã báo cáo bình luận này rồi!');
+                    } else if (error.response?.status === 400) {
+                      toast.error('Không thể báo cáo bình luận của chính mình!');
+                    } else if (error.response?.status === 404) {
+                      toast.error('Bình luận không tồn tại!');
+                    } else {
+                      toast.error('Không thể gửi báo cáo. Vui lòng thử lại sau!');
+                    }
+                  }
                 }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"
