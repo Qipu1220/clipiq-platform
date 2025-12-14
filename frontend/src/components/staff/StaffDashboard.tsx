@@ -710,18 +710,6 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             </button>
 
             <button 
-              onClick={() => setActiveTab('comments')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                activeTab === 'comments'
-                  ? 'bg-zinc-900/40 text-white'
-                  : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
-              }`}
-            >
-              <MessageSquare className={`w-5 h-5 ${activeTab === 'comments' ? 'text-[#ff3b5c]' : ''}`} />
-              <span>Quản lý Bình luận</span>
-            </button>
-
-            <button 
               onClick={() => setActiveTab('support')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all ${
                 activeTab === 'support'

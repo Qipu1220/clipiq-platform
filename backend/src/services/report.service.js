@@ -30,11 +30,11 @@ export async function createVideoReport(data) {
     throw new ApiError(400, 'You cannot report your own video');
   }
   
-  // Check if user already reported this video
+  // Check if user already has a pending report for this video
   const hasReported = await VideoReportModel.hasUserReportedVideo(videoId, reportedById);
   
   if (hasReported) {
-    throw new ApiError(409, 'You have already reported this video');
+    throw new ApiError(409, 'You already have a pending report for this video');
   }
   
   // Validate reason
@@ -145,11 +145,11 @@ export async function createUserReport(data) {
     throw new ApiError(400, 'You cannot report yourself');
   }
   
-  // Check if user already reported this user
+  // Check if user already has a pending report for this user
   const hasReported = await UserReportModel.hasUserReportedUser(reportedUserId, reportedById);
   
   if (hasReported) {
-    throw new ApiError(409, 'You have already reported this user');
+    throw new ApiError(409, 'You already have a pending report for this user');
   }
   
   // Validate reason
@@ -262,11 +262,11 @@ export async function createCommentReport(data) {
     throw new ApiError(400, 'You cannot report your own comment');
   }
   
-  // Check if user already reported this comment
+  // Check if user already has a pending report for this comment
   const hasReported = await CommentReportModel.hasUserReportedComment(commentId, reportedById);
   
   if (hasReported) {
-    throw new ApiError(409, 'You have already reported this comment');
+    throw new ApiError(409, 'You already have a pending report for this comment');
   }
   
   // Validate reason

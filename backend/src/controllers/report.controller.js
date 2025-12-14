@@ -22,11 +22,10 @@ export const reportVideo = asyncHandler(async (req, res) => {
     description
   });
   
-  res.status(201).json(
-    successResponse(
-      { reportId: report.id },
-      'Report submitted successfully'
-    )
+  return successResponse(
+    res.status(201),
+    { reportId: report.id },
+    'Report submitted successfully'
   );
 });
 
@@ -44,17 +43,15 @@ export const getVideoReports = asyncHandler(async (req, res) => {
   
   const result = await ReportService.getAllVideoReports(filters);
   
-  res.json(
-    successResponse({
-      reports: result.reports,
-      total: result.total,
-      pagination: {
-        page: result.page,
-        pages: result.pages,
-        total: result.total
-      }
-    })
-  );
+  return successResponse(res, {
+    reports: result.reports,
+    total: result.total,
+    pagination: {
+      page: result.page,
+      pages: result.pages,
+      total: result.total
+    }
+  });
 });
 
 /**
@@ -65,9 +62,8 @@ export const getVideoReportById = asyncHandler(async (req, res) => {
   
   const report = await ReportService.getVideoReportById(id);
   
-  res.json(successResponse(report));
+  return successResponse(res, report);
 });
-
 /**
  * PUT /api/v1/reports/videos/:id/resolve - Resolve a video report (Staff/Admin only)
  */
@@ -78,15 +74,14 @@ export const resolveVideoReport = asyncHandler(async (req, res) => {
   
   const report = await ReportService.resolveVideoReport(id, action, reviewedById, note);
   
-  res.json(
-    successResponse(
-      {
-        reportId: report.id,
-        status: report.status,
-        action
-      },
-      'Report resolved successfully'
-    )
+  return successResponse(
+    res,
+    {
+      reportId: report.id,
+      status: report.status,
+      action
+    },
+    'Report resolved successfully'
   );
 });
 
@@ -114,11 +109,10 @@ export const reportUser = asyncHandler(async (req, res) => {
     description
   });
   
-  res.status(201).json(
-    successResponse(
-      { reportId: report.id },
-      'Report submitted successfully'
-    )
+  return successResponse(
+    res.status(201),
+    { reportId: report.id },
+    'Report submitted successfully'
   );
 });
 
@@ -136,17 +130,15 @@ export const getUserReports = asyncHandler(async (req, res) => {
   
   const result = await ReportService.getAllUserReports(filters);
   
-  res.json(
-    successResponse({
-      reports: result.reports,
-      total: result.total,
-      pagination: {
-        page: result.page,
-        pages: result.pages,
-        total: result.total
-      }
-    })
-  );
+  return successResponse(res, {
+    reports: result.reports,
+    total: result.total,
+    pagination: {
+      page: result.page,
+      pages: result.pages,
+      total: result.total
+    }
+  });
 });
 
 /**
@@ -157,7 +149,7 @@ export const getUserReportById = asyncHandler(async (req, res) => {
   
   const report = await ReportService.getUserReportById(id);
   
-  res.json(successResponse(report));
+  return successResponse(res, report);
 });
 
 /**
@@ -170,15 +162,14 @@ export const resolveUserReport = asyncHandler(async (req, res) => {
   
   const report = await ReportService.resolveUserReport(id, action, reviewedById, note);
   
-  res.json(
-    successResponse(
-      {
-        reportId: report.id,
-        status: report.status,
-        action
-      },
-      'Report resolved successfully'
-    )
+  return successResponse(
+    res,
+    {
+      reportId: report.id,
+      status: report.status,
+      action
+    },
+    'Report resolved successfully'
   );
 });
 
@@ -196,11 +187,10 @@ export const reportComment = asyncHandler(async (req, res) => {
     description
   });
   
-  res.status(201).json(
-    successResponse(
-      { reportId: report.id },
-      'Comment report submitted successfully'
-    )
+  return successResponse(
+    res.status(201),
+    { reportId: report.id },
+    'Comment report submitted successfully'
   );
 });
 
@@ -218,17 +208,15 @@ export const getCommentReports = asyncHandler(async (req, res) => {
   
   const result = await ReportService.getAllCommentReports(filters);
   
-  res.json(
-    successResponse({
-      reports: result.reports,
-      total: result.total,
-      pagination: {
-        page: result.page,
-        pages: result.pages,
-        total: result.total
-      }
-    })
-  );
+  return successResponse(res, {
+    reports: result.reports,
+    total: result.total,
+    pagination: {
+      page: result.page,
+      pages: result.pages,
+      total: result.total
+    }
+  });
 });
 
 /**
@@ -239,7 +227,7 @@ export const getCommentReportById = asyncHandler(async (req, res) => {
   
   const report = await ReportService.getCommentReportById(id);
   
-  res.json(successResponse(report));
+  return successResponse(res, report);
 });
 
 /**
@@ -257,11 +245,10 @@ export const resolveCommentReport = asyncHandler(async (req, res) => {
     note
   );
   
-  res.json(
-    successResponse(
-      updatedReport,
-      'Comment report resolved successfully'
-    )
+  return successResponse(
+    res,
+    updatedReport,
+    'Comment report resolved successfully'
   );
 });
 

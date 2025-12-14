@@ -109,12 +109,12 @@ export async function getAllVideoReports(filters = {}) {
 }
 
 /**
- * Check if user already reported this video
+ * Check if user already reported this video (only checks pending reports)
  */
 export async function hasUserReportedVideo(videoId, userId) {
   const query = `
     SELECT id FROM video_reports
-    WHERE video_id = $1 AND reported_by_id = $2
+    WHERE video_id = $1 AND reported_by_id = $2 AND status = 'pending'
     LIMIT 1
   `;
   

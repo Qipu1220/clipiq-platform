@@ -108,9 +108,9 @@ export async function getAllUserReports(filters = {}) {
 }
 
 /**
- * Check if a user has already reported another user
+ * Check if user already reported another user (only checks pending reports)
  */
-export async function hasUserReportedUser(reportedUserId, reporterId) {
+export async function hasUserReportedUser(reportedUserId, reportedById) {
   const query = `
     SELECT id FROM user_reports
     WHERE reported_user_id = $1 AND reported_by_id = $2 AND status = 'pending'

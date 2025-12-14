@@ -114,13 +114,13 @@ export async function getAllCommentReports(filters = {}) {
 }
 
 /**
- * Check if user already reported this comment
+ * Check if user already reported this comment (only checks pending reports)
  */
 export async function hasUserReportedComment(commentId, userId) {
   const query = `
     SELECT id FROM comment_reports
     WHERE comment_id = $1 AND reported_by_id = $2
-    AND status IN ('pending', 'reviewed')
+    AND status = 'pending'
     LIMIT 1
   `;
   
