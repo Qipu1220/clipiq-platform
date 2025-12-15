@@ -499,6 +499,30 @@ Get video by ID.
 
 ---
 
+## 🔍 Search Engine Endpoints
+
+### GET /search
+Classify search query using AI.
+
+**Auth:** Optional
+
+**Query Params:**
+- `q` (string, required): usage "Who is..."
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "title": "text for title search",
+    "semantic": "text for vector search",
+    "ocr": "text for ocr"
+  }
+}
+```
+
+---
+
 ### POST /videos
 Upload new video.
 
