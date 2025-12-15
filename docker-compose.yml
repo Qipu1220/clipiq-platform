@@ -87,7 +87,7 @@ services:
       - JWT_EXPIRE=7d
       - JWT_REFRESH_SECRET=clipiq-refresh-token-secret
       - JWT_REFRESH_EXPIRE=30d
-      - CORS_ORIGIN=http://localhost:5173
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:5173
     command: sh -c "npm install && npm run migrate && npm run seed && npm run dev"
     depends_on:
       postgres:
@@ -106,7 +106,7 @@ services:
     working_dir: /app
     restart: unless-stopped
     ports:
-      - "5173:3000"
+      - "3000:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules

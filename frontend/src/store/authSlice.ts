@@ -147,6 +147,9 @@ const authSlice = createSlice({
     toggleMaintenanceMode: (state) => {
       state.maintenanceMode = !state.maintenanceMode;
     },
+    setMaintenanceMode: (state, action: PayloadAction<boolean>) => {
+      state.maintenanceMode = action.payload;
+    },
     updateDisplayName: (state, action: PayloadAction<string>) => {
       if (state.currentUser) {
         state.currentUser.displayName = action.payload;
@@ -249,5 +252,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, toggleMaintenanceMode, updateDisplayName, updateAvatar, updateBio } = authSlice.actions;
+export const { clearError, toggleMaintenanceMode, setMaintenanceMode, updateDisplayName, updateAvatar, updateBio } = authSlice.actions;
 export default authSlice.reducer;
