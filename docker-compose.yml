@@ -7,7 +7,7 @@ services:
     container_name: clipiq_postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_USER: clipiq_user
       POSTGRES_PASSWORD: clipiq_password
@@ -57,7 +57,7 @@ services:
 
   # Backend API
   backend:
-    image: node:18-alpine
+    image: node:20-alpine
     container_name: clipiq_backend
     working_dir: /app
     restart: unless-stopped
@@ -88,6 +88,7 @@ services:
       - JWT_REFRESH_SECRET=clipiq-refresh-token-secret
       - JWT_REFRESH_EXPIRE=30d
       - CORS_ORIGIN=http://localhost:5173
+      - QDRANT_URL=http://qdrant:6333
     command: sh -c "npm install && npm run migrate && npm run seed && npm run dev"
     depends_on:
       postgres:
@@ -101,7 +102,7 @@ services:
 
   # Frontend
   frontend:
-    image: node:18-alpine
+    image: node:20-alpine
     container_name: clipiq_frontend
     working_dir: /app
     restart: unless-stopped

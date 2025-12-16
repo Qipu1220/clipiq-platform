@@ -15,11 +15,11 @@ export async function search(req, res, next) {
             });
         }
 
-        const classification = await searchService.classifyQuery(q);
+        const result = await searchService.performMultimodalSearch(q);
 
         return res.status(200).json({
             success: true,
-            data: classification
+            data: result
         });
     } catch (error) {
         next(error);
