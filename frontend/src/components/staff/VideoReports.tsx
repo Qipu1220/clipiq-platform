@@ -18,7 +18,7 @@ export function VideoReports({
   onVideoClick,
   onResolveReport,
   getReportTypeName
-}: VideoReportsViewProps) {
+}: VideoReportsProps) {
   const [videoReportsSubTab, setVideoReportsSubTab] = useState<'pending' | 'resolved'>('pending');
 
   return (

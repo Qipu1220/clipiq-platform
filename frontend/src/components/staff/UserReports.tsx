@@ -16,7 +16,7 @@ export function UserReports({
   onViewUserProfile,
   onResolveReport,
   getReportTypeName
-}: UserReportsViewProps) {
+}: UserReportsProps) {
   const [userReportsSubTab, setUserReportsSubTab] = useState<'pending' | 'resolved'>('pending');
 
   return (

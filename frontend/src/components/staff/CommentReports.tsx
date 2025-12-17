@@ -14,7 +14,7 @@ export function CommentReports({
   apiCommentReports,
   onResolveReport,
   getReportTypeName
-}: CommentReportsViewProps) {
+}: CommentReportsProps) {
   const [commentReportsSubTab, setCommentReportsSubTab] = useState<'pending' | 'resolved'>('pending');
 
   return (

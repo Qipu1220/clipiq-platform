@@ -35,7 +35,7 @@ export function UserManagement({
   setShowConfirmModal,
   setConfirmAction,
   setApiUsers
-}: UserManagementViewProps) {
+}: UserManagementProps) {
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<'' | 'banned' | 'warned'>('');
 

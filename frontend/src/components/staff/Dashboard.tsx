@@ -28,7 +28,7 @@ export function Dashboard({
   apiVideoReports,
   allUsers,
   onViewUserProfile
-}: DashboardViewProps) {
+}: DashboardProps) {
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
