@@ -28,16 +28,21 @@ export function BannedModal({ banReason, banExpiry, isPermanent }: BannedModalPr
     window.location.reload();
   };
 
-  const formatExpiryDate = (expiry?: string) => {
+  const getTimeRemaining = (expiry?: string) => {
     if (!expiry) return null;
-    const date = new Date(expiry);
-    return date.toLocaleString('vi-VN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    const now = new Date().getTime();
+    const expiryTime = new Date(expiry).getTime();
+    const diff = expiryTime - now;
+
+    if (diff <= 0) return 'Đã hết hạn';
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (days > 0) return `${days} ngày ${hours} giờ`;
+    if (hours > 0) return `${hours} giờ ${minutes} phút`;
+    return `${minutes} phút`;
   };
 
   return (
@@ -81,19 +86,23 @@ export function BannedModal({ banReason, banExpiry, isPermanent }: BannedModalPr
           )}
 
           <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700">
-            <p className="text-sm text-zinc-300 mb-2 font-semibold">Thời hạn:</p>
-            <p className="text-white">
-              {isPermanent ? (
-                <span className="text-red-400 font-semibold">Vĩnh viễn</span>
-              ) : (
-                <>
-                  Đến ngày{' '}
-                  <span className="font-semibold text-yellow-300">
-                    {formatExpiryDate(banExpiry)}
-                  </span>
-                </>
-              )}
-            </p>
+            <p className="text-sm text-zinc-400 mb-3">Thời hạn cấm</p>
+            {isPermanent ? (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                <p className="text-red-400 font-bold text-xl text-center">
+                  Vĩnh viễn
+                </p>
+              </div>
+            ) : (
+              <div className="bg-gradient-to-br from-red-500/10 to-orange-500/10 border border-red-400/30 rounded-lg p-4">
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-red-400 mb-1">
+                    {getTimeRemaining(banExpiry)}
+                  </p>
+                  <p className="text-white">còn lại để được mở khóa</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

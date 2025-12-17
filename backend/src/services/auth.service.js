@@ -224,6 +224,8 @@ export async function getUserProfile(userId) {
     bio: user.bio,
     avatarUrl: user.avatar_url,
     banned: user.banned,
+    banExpiry: user.ban_expiry,
+    banReason: user.ban_reason,
     warnings: user.warnings,
     createdAt: user.created_at,
     updatedAt: user.updated_at

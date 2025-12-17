@@ -68,7 +68,6 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
   const [showWarnModal, setShowWarnModal] = useState(false);
   const [warnUsername, setWarnUsername] = useState('');
   const [warnReason, setWarnReason] = useState('');
-  const [warnDuration, setWarnDuration] = useState('7'); // Default 7 days
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [previousTab, setPreviousTab] = useState<'dashboard' | 'video-reports' | 'user-reports' | 'comment-reports' | 'comments' | 'support' | 'user-management' | 'profile'>('dashboard');
   
@@ -541,12 +540,18 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
       return;
     }
     
-    const durationValue = warnDuration ? parseInt(warnDuration, 10) : 7;
+    // Find user to get current warnings
+    const user = displayUsers.find(u => u.username === warnUsername);
+    const currentWarnings = user?.warnings || 0;
+    
+    // Calculate duration based on current warnings: 1st=30d, 2nd=60d, 3rd=90d
+    const durationValue = currentWarnings === 0 ? 30 : currentWarnings === 1 ? 60 : 90;
+    const warningLevel = currentWarnings + 1;
     
     setConfirmAction({
       type: 'warn-user',
       title: 'Cảnh báo người dùng',
-      message: `Bạn có chắc muốn cảnh báo người dùng ${warnUsername}? Cảnh báo sẽ được ghi nhận trong hồ sơ của họ trong ${durationValue} ngày.`,
+      message: `Bạn có chắc muốn cảnh báo người dùng ${warnUsername}?\n\nĐây sẽ là cảnh báo lần ${warningLevel}.\nThời hạn: ${durationValue} ngày (tự động xóa sau ${durationValue} ngày không vi phạm).`,
       confirmText: 'Cảnh báo',
       confirmColor: '#eab308',
       onConfirm: async () => {
@@ -560,7 +565,6 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
           
           setWarnUsername('');
           setWarnReason('');
-          setWarnDuration('7');
           setShowConfirmModal(false);
           setShowWarnModal(false);
         } catch (error: any) {
@@ -1619,7 +1623,6 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                                     onClick={() => {
                                       setWarnUsername(user.username);
                                       setWarnReason('');
-                                      setWarnDuration('7');
                                       setShowWarnModal(true);
                                     }}
                                     className="bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 border-yellow-500/30 h-9 rounded-lg whitespace-nowrap transition-colors"
@@ -1803,12 +1806,10 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                   Cảnh báo: <span className="text-yellow-500">{warnUsername}</span>
                 </h3>
                 <Button
-                  size="sm"
                   onClick={() => {
                     setShowWarnModal(false);
                     setWarnUsername('');
                     setWarnReason('');
-                    setWarnDuration('7');
                   }}
                   className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-8 w-8 p-0 rounded-lg"
                 >
@@ -1836,20 +1837,28 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
               </div>
               
               <div>
-                <Label className="text-zinc-400 mb-2 block text-sm">Thời hạn cảnh báo (ngày)</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="90"
-                  value={warnDuration}
-                  onChange={(e) => setWarnDuration(e.target.value)}
-                  className="bg-zinc-900/50 border-zinc-800/50 text-white h-10 rounded-lg focus:border-yellow-500"
-                  placeholder="Số ngày cảnh báo có hiệu lực"
-                />
-                <p className="text-zinc-600 text-xs mt-1">Mặc định 7 ngày (1-90 ngày), sau đó cảnh báo sẽ hết hiệu lực</p>
-                {warnDuration && (parseInt(warnDuration) < 1 || parseInt(warnDuration) > 90) && (
-                  <p className="text-red-400 text-xs mt-1">Thời hạn cảnh báo phải từ 1 đến 90 ngày</p>
-                )}
+                <Label className="text-zinc-400 mb-2 block text-sm">Thông tin cảnh báo</Label>
+                <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-3">
+                  {(() => {
+                    const user = displayUsers.find(u => u.username === warnUsername);
+                    const currentWarnings = user?.warnings || 0;
+                    const warningLevel = currentWarnings + 1;
+                    const duration = currentWarnings === 0 ? 30 : currentWarnings === 1 ? 60 : 90;
+                    return (
+                      <>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-zinc-400 text-sm">Cảnh báo lần:</span>
+                          <span className="text-white font-semibold">{warningLevel}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-400 text-sm">Thời hạn:</span>
+                          <span className="text-yellow-400 font-semibold">{duration} ngày</span>
+                        </div>
+                        <p className="text-zinc-600 text-xs mt-2">Tự động xóa sau {duration} ngày không vi phạm</p>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
 
@@ -1860,7 +1869,6 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                   setShowWarnModal(false);
                   setWarnUsername('');
                   setWarnReason('');
-                  setWarnDuration('7');
                 }}
                 className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 px-5 rounded-lg"
               >
