@@ -28,7 +28,7 @@ const videoMetadata = [
   { title: 'Meal Prep Sundays', description: 'Preparing healthy meals for the entire week' },
   { title: 'Home Workout Routine', description: 'No equipment needed - Full body workout' },
   { title: 'Morning Yoga Flow', description: '20-minute energizing yoga sequence' },
-  
+
   // Creative & DIY (user010-user018)
   { title: 'DIY Floating Shelves', description: 'Build modern floating shelves for any room' },
   { title: 'Succulent Garden Tutorial', description: 'Creating a beautiful succulent arrangement' },
@@ -40,7 +40,7 @@ const videoMetadata = [
   { title: 'Physics of Roller Coasters', description: 'Understanding forces and motion' },
   { title: 'Acoustic Guitar Cover: Wonderwall', description: 'Classic Oasis song on acoustic guitar' },
   { title: 'Piano Tutorial: River Flows in You', description: 'Learn this beautiful piano piece' },
-  
+
   // Automotive & Pets (user011-user020)
   { title: 'Tesla Model 3 Review', description: 'Is it worth it? Full review after 1 year' },
   { title: 'Basic Car Maintenance', description: 'Oil change and tire rotation guide' },
@@ -52,7 +52,7 @@ const videoMetadata = [
   { title: 'Japanese Kanji Study Tips', description: 'How I learned 2000 kanji characters' },
   { title: 'Drone Footage: Mountain Sunset', description: 'Breathtaking aerial cinematography' },
   { title: 'FPV Drone Racing', description: 'High-speed drone racing through obstacles' },
-  
+
   // Wellness & Gardening (user021-user030)
   { title: 'Guided Meditation 10 Minutes', description: 'Stress relief and mindfulness practice' },
   { title: 'Mental Health Resources', description: 'Important resources and support information' },
@@ -64,7 +64,7 @@ const videoMetadata = [
   { title: 'Marketing Strategies for Startups', description: 'Low-cost marketing tactics that work' },
   { title: 'Vinyasa Yoga for Beginners', description: 'Flowing yoga sequence for flexibility' },
   { title: 'Pilates Core Workout', description: 'Strengthen your core with pilates' },
-  
+
   // History & Beauty (user031-user040)
   { title: 'World War II: D-Day', description: 'Historical documentary about the Normandy landings' },
   { title: 'Ancient Egypt Mysteries', description: 'Exploring pyramids and pharaohs' },
@@ -76,7 +76,7 @@ const videoMetadata = [
   { title: 'Small Space Organization', description: 'Maximizing storage in tiny apartments' },
   { title: 'Mountain Biking Adventure', description: 'Epic trail riding in the Alps' },
   { title: 'Bike Repair: Fixing Flat Tires', description: 'Essential bike maintenance skills' },
-  
+
   // Food & Outdoor (user041-user050)
   { title: 'Chocolate Chip Cookies', description: 'The best cookie recipe you\'ll ever make' },
   { title: 'Sourdough Bread from Scratch', description: 'Master the art of sourdough baking' },
@@ -88,7 +88,7 @@ const videoMetadata = [
   { title: 'Mind Reading Illusion', description: 'Psychology behind mentalism tricks' },
   { title: 'Hip Hop Dance Routine', description: 'Learn this trending dance challenge' },
   { title: 'Contemporary Dance Performance', description: 'Original choreography showcase' },
-  
+
   // Tech & Finance (user001-user010 second videos)
   { title: '3D Printing Basics', description: 'Getting started with 3D printing at home' },
   { title: 'Best 3D Printer Under $500', description: 'Budget 3D printer comparison and review' },
@@ -100,7 +100,7 @@ const videoMetadata = [
   { title: 'Baby Sleep Training Guide', description: 'Gentle methods for better sleep' },
   { title: 'Espresso Making Tutorial', description: 'Pulling the perfect espresso shot' },
   { title: 'Latte Art Techniques', description: 'Creating beautiful designs in coffee' },
-  
+
   // Art & Travel (user011-user020 second videos)
   { title: 'Watercolor Painting Basics', description: 'Beginner techniques for watercolors' },
   { title: 'Oil Painting Landscape', description: 'Step by step landscape painting' },
@@ -112,7 +112,7 @@ const videoMetadata = [
   { title: 'Astrophotography Tutorial', description: 'Capturing the night sky' },
   { title: 'Wedding Planning Timeline', description: '12-month guide to planning your wedding' },
   { title: 'DIY Wedding Decorations', description: 'Beautiful budget-friendly decor ideas' },
-  
+
   // Outdoor & Creative (user021-user030 second videos)
   { title: 'Backpacking Gear Review', description: 'Ultralight gear for long distance hiking' },
   { title: 'National Parks Travel Guide', description: 'Must-visit parks in the USA' },
@@ -124,7 +124,7 @@ const videoMetadata = [
   { title: 'Beading Techniques', description: 'Designing unique beaded accessories' },
   { title: 'Ableton Live Tutorial', description: 'Music production for beginners' },
   { title: 'DJ Mixing Techniques', description: 'Beatmatching and transitions' },
-  
+
   // Design & Martial Arts (user031-user040 second videos)
   { title: 'Adobe Photoshop Basics', description: 'Essential tools every designer needs' },
   { title: 'Logo Design Process', description: 'From concept to final design' },
@@ -163,82 +163,82 @@ function getThumbnailPath(videoFilename) {
  */
 export async function seed(client) {
   console.log('   Seeding 100 videos (2 per user)...');
-  
+
   const minioClient = getMinioClient();
   const bucketName = 'clipiq-videos'; // Must match docker-compose bucket name
   const videosDir = path.join(__dirname, 'data', 'sample-videos');
-  
+
   // Check if sample videos directory exists
   if (!fs.existsSync(videosDir)) {
     console.error('   ❌ Sample videos directory not found!');
     console.error('   Run: node download-pixabay-videos.js first');
     return;
   }
-  
+
   // Get all video files
   const videoFiles = fs.readdirSync(videosDir)
     .filter(file => file.endsWith('.mp4'))
     .slice(0, 100); // Take first 100 videos
-  
+
   if (videoFiles.length < 100) {
     console.warn(`   ⚠️  Only found ${videoFiles.length} videos, expected 100`);
   }
-  
+
   // Get all regular users (role = 'user')
   const usersResult = await client.query(
     `SELECT id, username FROM users WHERE role = 'user' ORDER BY username LIMIT 50`
   );
-  
+
   const users = usersResult.rows;
-  
+
   if (users.length < 50) {
     console.error(`   ❌ Only found ${users.length} users, expected 50`);
     console.error('   Run: 004-seed-regular-users.js first');
     return;
   }
-  
+
   console.log(`   📹 Found ${videoFiles.length} video files`);
   console.log(`   👥 Found ${users.length} users`);
   console.log('   🚀 Starting upload and database insertion...');
-  
+
   let uploadedCount = 0;
   let skippedCount = 0;
   let videoIndex = 0;
-  
+
   // Distribute videos: each user gets 2 videos
   for (let userIndex = 0; userIndex < users.length && videoIndex < videoFiles.length; userIndex++) {
     const user = users[userIndex];
-    
+
     // Upload 2 videos per user
     for (let i = 0; i < 2 && videoIndex < videoFiles.length; i++) {
       const videoFile = videoFiles[videoIndex];
       const videoPath = path.join(videosDir, videoFile);
       const metadata = videoMetadata[videoIndex];
-      
+
       // Check if video already exists in database
       const existingVideo = await client.query(
         'SELECT id FROM videos WHERE video_url = $1',
         [videoFile]
       );
-      
+
       if (existingVideo.rows.length > 0) {
         skippedCount++;
         videoIndex++;
         continue;
       }
-      
+
       try {
         // Get file stats
         const stats = fs.statSync(videoPath);
         const fileSizeBytes = stats.size;
-        
+
         // Upload to MinIO
         await minioClient.fPutObject(bucketName, videoFile, videoPath, {
           'Content-Type': 'video/mp4',
           'uploaded-by': user.username,
           'upload-date': new Date().toISOString()
         });
-        
+
         // Insert video record
         const result = await client.query(
           `INSERT INTO videos (
@@ -249,8 +249,9 @@ export async function seed(client) {
             thumbnail_url,
             duration,
             status,
+            processing_status,
             views
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0)
           RETURNING id, title`,
           [
             user.id,
@@ -259,25 +260,26 @@ export async function seed(client) {
             videoFile, // Store just filename, MinIO bucket is in env config
             getThumbnailPath(videoFile),
             Math.floor(Math.random() * 600) + 30, // Random duration 30-630 seconds
-            'active' // All videos are active
+            'active', // All videos are active
+            'ready' // All seeded videos are ready
           ]
         );
-        
+
         uploadedCount++;
         videoIndex++;
-        
+
         // Log progress every 10 videos
         if (uploadedCount % 10 === 0) {
           console.log(`   ✅ Uploaded ${uploadedCount} videos...`);
         }
-        
+
       } catch (error) {
         console.error(`   ❌ Error uploading ${videoFile}:`, error.message);
         videoIndex++;
       }
     }
   }
-  
+
   console.log(`   📊 Summary: ${uploadedCount} uploaded, ${skippedCount} skipped`);
   console.log('   🎬 Video distribution: 2 videos per user (50 users × 2 = 100 videos)');
 }

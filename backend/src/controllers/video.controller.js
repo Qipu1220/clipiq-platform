@@ -23,9 +23,14 @@ export async function getVideos(req, res, next) {
     let paramIndex = 2;
 
     if (username) {
+      // Profile view: show processing and ready videos
+      conditions.push(`v.processing_status IN ('processing', 'ready', 'failed')`);
       conditions.push(`u.username = $${paramIndex}`);
       params.push(username);
       paramIndex++;
+    } else {
+      // Feed/Home view: show only ready videos
+      conditions.push(`v.processing_status = 'ready'`);
     }
 
     // Get total count
@@ -74,6 +79,7 @@ export async function getVideos(req, res, next) {
       uploaderUsername: row.username,
       uploaderDisplayName: row.display_name,
       uploaderAvatarUrl: row.avatar_url,
+      processingStatus: row.processing_status,
       createdAt: row.created_at,
     }));
 
@@ -177,31 +183,38 @@ export async function getVideoById(req, res, next) {
 export async function uploadVideo(req, res, next) {
   try {
     const { title, description, notifyFollowers } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
     // Validate required fields
     if (!title) {
       throw new ApiError(400, 'Title is required');
     }
 
-    // TODO: Upload to MinIO and get URLs
-    const videoUrl = 'video.mp4';
-    const thumbnailUrl = 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=600&fit=crop';
-    const duration = 0;
+    // Check if video file is uploaded
+    if (!req.files || !req.files.video || req.files.video.length === 0) {
+      throw new ApiError(400, 'Video file is required');
+    }
 
-    // Create video record
-    const videoId = crypto.randomUUID();
-    const result = await pool.query(
-      `INSERT INTO videos (id, title, description, uploader_id, video_url, thumbnail_url, duration, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-       RETURNING id, title, video_url, thumbnail_url, status`,
-      [videoId, title, description || '', userId, videoUrl, thumbnailUrl, duration, 'processing']
-    );
+    const videoFile = req.files.video[0];
+    const thumbnailFile = req.files.thumbnail ? req.files.thumbnail[0] : null;
+
+    // Import upload service dynamically
+    const uploadService = await import('../services/upload.service.js');
+
+    // Process video upload (includes MinIO upload, keyframe extraction, indexing)
+    const result = await uploadService.processVideoUpload(videoFile.buffer, {
+      title,
+      description,
+      uploaderId: userId,
+      thumbnailBuffer: thumbnailFile ? thumbnailFile.buffer : null
+    });
 
     return res.status(201).json({
       success: true,
-      message: 'Video uploaded successfully',
-      data: result.rows[0]
+      message: result.message || 'Video uploaded successfully',
+      data: {
+        video: result.video  // Return full video object for frontend
+      }
     });
   } catch (error) {
     next(error);
@@ -299,10 +312,12 @@ export async function searchVideos(req, res, next) {
     const searchTerm = `%${q}%`;
 
     // Get total count
-    const countResult = await pool.query(
-      `SELECT COUNT(*) as count FROM videos WHERE status = $1 AND (title ILIKE $2 OR description ILIKE $2)`,
-      ['active', searchTerm]
-    );
+    const countQuery = `
+      SELECT COUNT(*) as count 
+      FROM videos v
+      WHERE v.status = $1 AND v.processing_status = 'ready' AND (v.title ILIKE $2 OR v.description ILIKE $2)
+    `;
+    const countResult = await pool.query(countQuery, ['active', searchTerm]);
     const total = parseInt(countResult.rows[0].count);
 
     // Get videos
@@ -315,7 +330,8 @@ export async function searchVideos(req, res, next) {
        ) as is_saved
        FROM videos v
        LEFT JOIN users u ON v.uploader_id = u.id
-       WHERE v.status = $1 AND (v.title ILIKE $2 OR v.description ILIKE $2)
+       LEFT JOIN users u ON v.uploader_id = u.id
+       WHERE v.status = $1 AND v.processing_status = 'ready' AND (v.title ILIKE $2 OR v.description ILIKE $2)
        ORDER BY v.created_at DESC
        LIMIT $3 OFFSET $4`,
       ['active', searchTerm, limitNum, offset, req.user?.userId || -1]
@@ -378,7 +394,8 @@ export async function getTrendingVideos(req, res, next) {
        ) as is_saved
        FROM videos v
        LEFT JOIN users u ON v.uploader_id = u.id
-       WHERE v.status = $1 AND v.created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+       LEFT JOIN users u ON v.uploader_id = u.id
+       WHERE v.status = $1 AND v.processing_status = 'ready' AND v.created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
        ORDER BY v.views DESC
        LIMIT 20`,
       ['active', req.user?.userId || -1]
@@ -510,7 +527,7 @@ export async function getLikedVideos(req, res, next) {
       FROM videos v
       JOIN likes l ON v.id = l.video_id
       LEFT JOIN users u ON v.uploader_id = u.id
-      WHERE l.user_id = $1 AND v.status = 'active'
+       WHERE l.user_id = $1 AND v.status = 'active' AND v.processing_status = 'ready'
       ORDER BY l.created_at DESC
       LIMIT $2 OFFSET $3
     `;
@@ -519,7 +536,7 @@ export async function getLikedVideos(req, res, next) {
       SELECT COUNT(*) as count
       FROM videos v
       JOIN likes l ON v.id = l.video_id
-      WHERE l.user_id = $1 AND v.status = 'active'
+       WHERE l.user_id = $1 AND v.status = 'active' AND v.processing_status = 'ready'
     `;
 
     const [result, countResult] = await Promise.all([
@@ -604,7 +621,7 @@ export async function getSavedVideos(req, res, next) {
       FROM videos v
       JOIN playlist_videos pv ON v.id = pv.video_id
       LEFT JOIN users u ON v.uploader_id = u.id
-      WHERE pv.playlist_id = $2 AND v.status = 'active'
+       WHERE pv.playlist_id = $2 AND v.status = 'active' AND v.processing_status = 'ready'
       ORDER BY pv.added_at DESC
       LIMIT $3 OFFSET $4
     `;
@@ -613,7 +630,7 @@ export async function getSavedVideos(req, res, next) {
       SELECT COUNT(*) as count
       FROM playlist_videos pv
       JOIN videos v ON pv.video_id = v.id
-      WHERE pv.playlist_id = $1 AND v.status = 'active'
+       WHERE pv.playlist_id = $1 AND v.status = 'active' AND v.processing_status = 'ready'
     `;
 
     const [result, countResult] = await Promise.all([

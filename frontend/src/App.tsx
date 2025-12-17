@@ -3,6 +3,7 @@ import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState, AppDispatch } from './store/store';
 import { restoreSessionThunk } from './store/authSlice';
 import { fetchVideosThunk } from './store/videosSlice';
+import { Toaster } from 'sonner';
 import { LoginPage } from './components/LoginPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
 import { Header } from './components/Header';
@@ -161,6 +162,13 @@ export default function App() {
   return (
     <Provider store={store}>
       <AppContent />
+      <Toaster
+        position="top-right"
+        theme="dark"
+        richColors
+        expand={false}
+        closeButton
+      />
     </Provider>
   );
 }

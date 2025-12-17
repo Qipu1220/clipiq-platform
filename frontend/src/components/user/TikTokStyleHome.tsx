@@ -7,7 +7,7 @@ import { logoutThunk } from '../../store/authSlice';
 import {
   Play, Search, Home, Compass, Users, Video, MessageCircle,
   Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check, LogOut, ChevronDown,
-  AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2
+  AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2, Loader2
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
@@ -261,6 +261,23 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
       }
     }
   }, [currentVideoIndex, isMuted, videos.length, activeTab, pagination.hasMore, pagination.page, loading, dispatch]);
+
+  // Polling for processing videos - auto-refresh every 30s
+  useEffect(() => {
+    const hasProcessingVideos = videos.some(
+      v => v.processing_status === 'processing'
+    );
+
+    if (!hasProcessingVideos) return;
+
+    console.log('🔄 Polling: Found processing videos, refreshing every 30s...');
+    const interval = setInterval(() => {
+      console.log('🔄 Polling: Fetching updated video statuses...');
+      dispatch(fetchVideosThunk({ page: 1, limit: pagination.total || 20 }) as any);
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [videos, dispatch, pagination.total]);
 
   const handleLike = () => {
     if (!currentUser || !currentVideo) return;
@@ -708,10 +725,32 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                     poster={video.thumbnailUrl || `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=1400&fit=crop`}
                     muted={isMuted}
                     playsInline
-                    autoPlay={index === currentVideoIndex}
-                    controls={index === currentVideoIndex}
-                    className="w-full h-full object-cover"
+                    autoPlay={index === currentVideoIndex && video.processing_status !== 'processing'}
+                    controls={index === currentVideoIndex && video.processing_status !== 'processing'}
+                    className={`w-full h-full object-cover ${video.processing_status === 'processing' ? 'blur-sm opacity-60' : ''}`}
                   />
+
+                  {/* Processing Overlay */}
+                  {video.processing_status === 'processing' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
+                      <div className="text-center">
+                        <Loader2 className="w-16 h-16 animate-spin text-white mx-auto mb-4" />
+                        <p className="text-white text-lg font-semibold">Đang xử lý...</p>
+                        <p className="text-gray-300 text-sm mt-2">Video sẽ sẵn sàng trong vài phút</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Failed Overlay */}
+                  {video.processing_status === 'failed' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-red-900/60 z-10">
+                      <div className="text-center">
+                        <X className="w-16 h-16 text-red-200 mx-auto mb-4" />
+                        <p className="text-white text-lg font-semibold">Xử lý thất bại</p>
+                        <p className="text-gray-200 text-sm mt-2">Video không thể phát</p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Video Info Overlay (Bottom) */}
                   <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/60 to-transparent">
