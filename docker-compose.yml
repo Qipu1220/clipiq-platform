@@ -89,6 +89,7 @@ services:
       - JWT_REFRESH_EXPIRE=30d
       - CORS_ORIGIN=http://localhost:5173
       - QDRANT_URL=http://qdrant:6333
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
     command: sh -c "npm install && npm run migrate && npm run seed && npm run dev"
     depends_on:
       postgres:

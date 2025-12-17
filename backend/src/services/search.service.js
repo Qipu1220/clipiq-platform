@@ -114,7 +114,10 @@ async function searchByTitle(titleQuery) {
 
     try {
         const result = await pool.query(query, [`%${titleQuery}%`]);
-        return result.rows;
+        return result.rows.map(row => ({
+            ...row,
+            score: 5.0 // High score for direct title match
+        }));
     } catch (error) {
         console.error('Title search failed:', error);
         return [];
@@ -138,7 +141,7 @@ async function searchBySemantic(semanticQuery) {
         // 2. Search in Qdrant
         const searchResult = await qdrantClient.search('clipiq_vectors', {
             vector: vector,
-            limit: 10,
+            limit: 20,
             with_payload: true,
             params: {
                 exact: false,
@@ -167,16 +170,18 @@ async function searchByOcr(ocrQuery) {
     try {
         const result = await esClient.search({
             index: ELASTIC_OCR_INDEX,
+            size: 20,
             query: {
                 match: {
-                    content: ocrQuery
+                    ocr_text: ocrQuery
                 }
             }
         });
 
         return result.hits.hits.map(hit => ({
-            id: hit._source.video_id,
-            text_match: hit._source.content,
+            id: hit._source.id,
+            video_name: hit._source.video_name,
+            text_match: hit._source.ocr_text,
             score: hit._score,
             source: 'ocr_match'
         }));
@@ -197,22 +202,59 @@ export async function performMultimodalSearch(queryText) {
     console.log('Use Classification:', classification);
 
     // 2. Parallel, Independent Searches
-    const [titleResults, semanticResults, ocrResults] = await Promise.all([
-        searchByTitle(classification.title),
-        searchBySemantic(classification.semantic),
-        searchByOcr(classification.ocr)
-    ]);
+    const searchPromises = [];
+
+    if (classification.title) {
+        searchPromises.push(searchByTitle(classification.title));
+    }
+    if (classification.semantic) {
+        searchPromises.push(searchBySemantic(classification.semantic));
+    }
+    if (classification.ocr) {
+        searchPromises.push(searchByOcr(classification.ocr));
+    }
+
+    const results = await Promise.all(searchPromises);
 
     // 3. Fusion (Simple concatenation for now, distinct by ID)
     // In a real system, you'd use a re-ranker here
-    const allResults = [...titleResults, ...semanticResults, ...ocrResults];
+    const allResults = results.flat();
 
-    // Deduplicate by ID
-    const uniqueResults = Array.from(new Map(allResults.map(item => [item.id, item])).values());
+    // Deduplicate and Merge by ID
+    const mergedResults = new Map();
+
+    for (const item of allResults) {
+        if (!item.id) continue;
+
+        if (mergedResults.has(item.id)) {
+            // Merge matching items
+            const existing = mergedResults.get(item.id);
+
+            // Keep highest score
+            existing.score = Math.max(existing.score || 0, item.score || 0);
+
+            // Append unique sources
+            if (!existing.source.includes(item.source)) {
+                existing.source += `, ${item.source}`;
+            }
+
+            // Should probably prefer the one with video_name if missing
+            if (!existing.video_name && item.video_name) {
+                existing.video_name = item.video_name;
+            }
+        } else {
+            mergedResults.set(item.id, { ...item });
+        }
+    }
+
+    const uniqueResults = Array.from(mergedResults.values());
+
+    // Sort by score (descending)
+    const sortedResults = uniqueResults.sort((a, b) => (b.score || 0) - (a.score || 0));
 
     return {
         classification,
-        results: uniqueResults
+        results: sortedResults
     };
 }
 
