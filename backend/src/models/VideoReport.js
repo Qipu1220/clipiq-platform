@@ -203,13 +203,21 @@ export async function getVideoReportDetails(videoId) {
   
   const commentsResult = await pool.query(commentsQuery, [videoId]);
   
+  // Build MinIO URLs - match the format used in video.controller.js
+  const videoUrl = video.video_url ? `http://localhost:9000/clipiq-videos/${video.video_url}` : null;
+  const thumbnailUrl = video.thumbnail_url 
+    ? (video.thumbnail_url.startsWith('http') 
+        ? video.thumbnail_url 
+        : `https://images.unsplash.com/photo-${Math.abs(video.id.charCodeAt(0) * 1000)}?w=400&h=600&fit=crop`)
+    : null;
+  
   return {
     video: {
       id: video.id,
       title: video.title,
       description: video.description,
-      videoUrl: video.video_url,
-      thumbnailUrl: video.thumbnail_url,
+      videoUrl: videoUrl,
+      thumbnailUrl: thumbnailUrl,
       views: video.views,
       likes: video.like_count,
       commentCount: video.comment_count,
@@ -220,7 +228,7 @@ export async function getVideoReportDetails(videoId) {
       id: video.uploader_id,
       username: video.uploader_username,
       displayName: video.uploader_display_name,
-      avatarUrl: video.uploader_avatar_url,
+      avatarUrl: video.uploader_avatar_url ? `http://localhost:9000/clipiq-avatars/${video.uploader_avatar_url}` : null,
       email: video.uploader_email,
       role: video.uploader_role,
       banned: video.uploader_banned,
@@ -236,7 +244,7 @@ export async function getVideoReportDetails(videoId) {
       reporter: {
         username: r.reporter_username,
         displayName: r.reporter_display_name,
-        avatarUrl: r.reporter_avatar_url
+        avatarUrl: r.reporter_avatar_url ? `http://localhost:9000/clipiq-avatars/${r.reporter_avatar_url}` : null
       }
     })),
     comments: commentsResult.rows.map(c => ({
@@ -246,7 +254,7 @@ export async function getVideoReportDetails(videoId) {
       user: {
         username: c.username,
         displayName: c.display_name,
-        avatarUrl: c.avatar_url
+        avatarUrl: c.avatar_url ? `http://localhost:9000/clipiq-avatars/${c.avatar_url}` : null
       }
     })),
     reportCount: reportsResult.rows.length
