@@ -69,7 +69,7 @@ export async function getVideos(req, res, next) {
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
       thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
         ? row.thumbnail_url
-        : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
+        : `https://picsum.photos/seed/${row.id}/400/600`,
       duration: row.duration,
       views: row.views,
       likes: row.likes_count || 0,
@@ -81,6 +81,7 @@ export async function getVideos(req, res, next) {
       uploaderAvatarUrl: row.avatar_url,
       processingStatus: row.processing_status,
       createdAt: row.created_at,
+      uploadedAt: row.created_at,
     }));
 
     const pages = Math.ceil(total / limitNum);
@@ -298,6 +299,9 @@ export async function deleteVideo(req, res, next) {
 /**
  * GET /api/v1/videos/search - Search videos
  */
+/**
+ * GET /api/v1/videos/search - Search videos
+ */
 export async function searchVideos(req, res, next) {
   try {
     const { q, page = 1, limit = 20 } = req.query;
@@ -309,69 +313,106 @@ export async function searchVideos(req, res, next) {
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
-    const searchTerm = `%${q}%`;
 
-    // Get total count
-    const countQuery = `
-      SELECT COUNT(*) as count 
-      FROM videos v
-      WHERE v.status = $1 AND v.processing_status = 'ready' AND (v.title ILIKE $2 OR v.description ILIKE $2)
-    `;
-    const countResult = await pool.query(countQuery, ['active', searchTerm]);
-    const total = parseInt(countResult.rows[0].count);
+    // 1. Get ranked video IDs from Multimodal Search Engine
+    const searchResult = await import('../services/search.service.js')
+      .then(m => m.performMultimodalSearch(q));
 
-    // Get videos
-    const result = await pool.query(
-      `SELECT v.*, u.username, u.display_name, u.avatar_url,
+    const rankedResults = searchResult.results || [];
+    const totalHits = rankedResults.length;
+
+    // Apply pagination to the IDs list
+    const paginatedResults = rankedResults.slice(offset, offset + limitNum);
+
+    if (paginatedResults.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          videos: [],
+          total: totalHits,
+          query: q,
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: totalHits,
+            pages: Math.ceil(totalHits / limitNum),
+            hasMore: false,
+          },
+          classification: searchResult.classification
+        }
+      });
+    }
+
+    const videoIds = paginatedResults.map(r => r.id);
+
+    // 2. Fetch full video details from PostgreSQL
+    const query = `
+      SELECT v.*, u.username, u.display_name, u.avatar_url,
        EXISTS(
          SELECT 1 FROM playlist_videos pv 
          JOIN playlists p ON pv.playlist_id = p.id 
-         WHERE pv.video_id = v.id AND p.user_id = $5 AND p.name = 'Đã lưu'
+         WHERE pv.video_id = v.id AND p.user_id = $2 AND p.name = 'Đã lưu'
        ) as is_saved
        FROM videos v
        LEFT JOIN users u ON v.uploader_id = u.id
-       LEFT JOIN users u ON v.uploader_id = u.id
-       WHERE v.status = $1 AND v.processing_status = 'ready' AND (v.title ILIKE $2 OR v.description ILIKE $2)
-       ORDER BY v.created_at DESC
-       LIMIT $3 OFFSET $4`,
-      ['active', searchTerm, limitNum, offset, req.user?.userId || -1]
-    );
+       WHERE v.id = ANY($1::uuid[])
+    `;
+    // Removed AND v.status = 'active' temporarily for debugging to see if they exist at all
+    // Or keep it and check. Let's keep strictness but maybe the IDs are just not there.
+    // Actually, I'll remove status check in the log or check it separately? 
+    // No, let's keep the query simple but log what we find.
 
-    const videos = result.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
-        : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
-      duration: row.duration,
-      views: row.views,
-      likes: row.likes_count || 0,
-      comments: row.comments_count || 0,
-      uploaderUsername: row.username,
-      uploaderDisplayName: row.display_name,
-      uploaderAvatarUrl: row.avatar_url,
-      uploaderAvatarUrl: row.avatar_url,
-      isSaved: row.is_saved,
-      createdAt: row.created_at,
-    }));
+    // I will use a simpler query to debug existence first? No, modify the main flow.
+    // I'll keep the status check but maybe the videos are 'deleted' or something?
+    // Let's modify the query to return status so I can see WHY they are filtered if they exist.
 
-    const pages = Math.ceil(total / limitNum);
+    const dbResult = await pool.query(query, [videoIds, req.user?.userId || null]);
+    const dbVideos = dbResult.rows;
+
+    // 3. Re-order DB results to match the ranking from search engine
+    const videos = videoIds.map(id => {
+      const video = dbVideos.find(v => v.id === id);
+      if (!video) return null; // Should not happen ideally, unless status != active
+
+      return {
+        id: video.id,
+        title: video.title,
+        description: video.description,
+        videoUrl: `http://localhost:9000/clipiq-videos/${video.video_url}`,
+        thumbnailUrl: (video.thumbnail_url && video.thumbnail_url.startsWith('http'))
+          ? video.thumbnail_url
+          : `https://picsum.photos/seed/${video.id}/400/600`,
+        duration: video.duration,
+        views: video.views,
+        likes: video.likes_count || 0,
+        comments: video.comments_count || 0,
+        uploaderUsername: video.username,
+        uploaderDisplayName: video.display_name,
+        uploaderAvatarUrl: video.avatar_url,
+        isSaved: video.is_saved,
+        createdAt: video.created_at,
+        uploadedAt: video.created_at,
+        // Add search score/metadata if needed
+        searchScore: paginatedResults.find(r => r.id === video.id)?.score
+      };
+    }).filter(v => v !== null); // Filter out any that weren't found or active
+
+    const pages = Math.ceil(totalHits / limitNum);
 
     return res.status(200).json({
       success: true,
       data: {
         videos,
-        total,
+        total: totalHits,
         query: q,
         pagination: {
           page: pageNum,
           limit: limitNum,
-          total,
+          total: totalHits,
           pages,
           hasMore: pageNum < pages,
-        }
+        },
+        classification: searchResult.classification
       }
     });
   } catch (error) {

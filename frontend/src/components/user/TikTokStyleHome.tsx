@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId, searchVideosThunk, addVideo } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { logoutThunk } from '../../store/authSlice';
 import {
@@ -86,7 +86,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
-  const { pagination, loading, currentVideoComments, focusedVideoId } = useSelector((state: RootState) => state.videos);
+  const { pagination, loading, currentVideoComments, focusedVideoId, searchResults } = useSelector((state: RootState) => state.videos);
 
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -491,6 +491,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
       setActiveSearchQuery(searchQuery.trim());
+      dispatch(searchVideosThunk({ query: searchQuery.trim() }) as any);
     }
   };
 
@@ -584,9 +585,16 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
             const videoIndex = videos.findIndex(v => v.id === videoId);
             if (videoIndex !== -1) {
               setCurrentVideoIndex(videoIndex);
-              setSearchQuery('');
-              setActiveSearchQuery('');
+            } else {
+              // Video from search not in current feed. Add it!
+              const searchVideo = searchResults.find(v => v.id === videoId);
+              if (searchVideo) {
+                dispatch(addVideo(searchVideo));
+                setCurrentVideoIndex(0); // Since addVideo unshifts to start
+              }
             }
+            setSearchQuery('');
+            setActiveSearchQuery('');
           }}
           onUserClick={(username) => {
             onViewUserProfile?.(username);

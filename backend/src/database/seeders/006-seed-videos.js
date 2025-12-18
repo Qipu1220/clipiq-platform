@@ -205,6 +205,26 @@ export async function seed(client) {
   let skippedCount = 0;
   let videoIndex = 0;
 
+  // Load static IDs from ocr_es.json to sync with Search Engine
+  const ocrDataPath = path.join(__dirname, 'data', 'sample-sparse', 'ocr_es.json');
+  let videoIdMap = new Map();
+
+  if (fs.existsSync(ocrDataPath)) {
+    try {
+      const ocrData = JSON.parse(fs.readFileSync(ocrDataPath, 'utf-8'));
+      ocrData.forEach(item => {
+        // item.video_name is like 'pixabay-135658-medium'
+        // video file is like 'pixabay-135658-medium.mp4'
+        if (item.id && item.video_name) {
+          videoIdMap.set(item.video_name + '.mp4', item.id);
+        }
+      });
+      console.log(`   🗺️  Loaded ${videoIdMap.size} static IDs from ocr_es.json`);
+    } catch (e) {
+      console.warn('   ⚠️  Failed to load ocr_es.json:', e.message);
+    }
+  }
+
   // Distribute videos: each user gets 2 videos
   for (let userIndex = 0; userIndex < users.length && videoIndex < videoFiles.length; userIndex++) {
     const user = users[userIndex];
@@ -239,31 +259,69 @@ export async function seed(client) {
           'upload-date': new Date().toISOString()
         });
 
-        // Insert video record
-        const result = await client.query(
-          `INSERT INTO videos (
-            uploader_id,
-            title,
-            description,
-            video_url,
-            thumbnail_url,
-            duration,
-            status,
-            processing_status,
-            views
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0)
-          RETURNING id, title`,
-          [
-            user.id,
-            metadata.title,
-            metadata.description,
-            videoFile, // Store just filename, MinIO bucket is in env config
-            getThumbnailPath(videoFile),
-            Math.floor(Math.random() * 600) + 30, // Random duration 30-630 seconds
-            'active', // All videos are active
-            'ready' // All seeded videos are ready
-          ]
-        );
+        // Determine ID: use static ID if available, otherwise let DB generate (or generate one)
+        // Note: If we use explicit ID, we need to include it in INSERT.
+        // If map has it, use it. If not, don't include ID column?
+        // Actually simpler to generate a random one if missing so we can use same query.
+
+        let videoId = videoIdMap.get(videoFile);
+
+        // Construct query based on whether we have a specific ID to enforce
+        let result;
+        if (videoId) {
+          result = await client.query(
+            `INSERT INTO videos (
+                id,
+                uploader_id,
+                title,
+                description,
+                video_url,
+                thumbnail_url,
+                duration,
+                status,
+                processing_status,
+                views
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0)
+              RETURNING id, title`,
+            [
+              videoId,
+              user.id,
+              metadata.title,
+              metadata.description,
+              videoFile,
+              getThumbnailPath(videoFile),
+              Math.floor(Math.random() * 600) + 30,
+              'active',
+              'ready'
+            ]
+          );
+        } else {
+          // Fallback to auto-generated ID
+          result = await client.query(
+            `INSERT INTO videos (
+                uploader_id,
+                title,
+                description,
+                video_url,
+                thumbnail_url,
+                duration,
+                status,
+                processing_status,
+                views
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0)
+              RETURNING id, title`,
+            [
+              user.id,
+              metadata.title,
+              metadata.description,
+              videoFile,
+              getThumbnailPath(videoFile),
+              Math.floor(Math.random() * 600) + 30,
+              'active',
+              'ready'
+            ]
+          );
+        }
 
         uploadedCount++;
         videoIndex++;

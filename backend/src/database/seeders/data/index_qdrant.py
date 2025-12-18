@@ -49,6 +49,22 @@ def index_data():
         print(f"No .npz files found in {DATA_DIR}")
         return
 
+    # Load static IDs from ocr_es.json to sync with Search Engine and DB
+    ocr_data_file = os.path.join(os.path.dirname(__file__), "sample-sparse", "ocr_es.json")
+    video_id_map = {}
+    if os.path.exists(ocr_data_file):
+        try:
+            with open(ocr_data_file, 'r', encoding='utf-8') as f:
+                ocr_data = json.load(f)
+                for item in ocr_data:
+                    if 'video_name' in item and 'id' in item:
+                        # Map video_name (e.g., 'pixabay-135658-medium') to static UUID
+                        # Note: seeder adds .mp4, but video_name here is without extension usually
+                        video_id_map[item['video_name']] = item['id']
+            print(f"Loaded {len(video_id_map)} static IDs from ocr_es.json")
+        except Exception as e:
+            print(f"Warning: Failed to load ocr_es.json: {e}")
+
     print(f"Found {len(npz_files)} .npz files to index.")
     
     total_points = 0
@@ -64,6 +80,12 @@ def index_data():
             vectors = data['vectors']
             ids = data['ids']
             payloads = data['payloads'] if 'payloads' in data else []
+
+            # Determine video name from filename
+            video_name_base = os.path.basename(npz_file).replace(".npz", "")
+            
+            # Lookup static video_id
+            static_video_id = video_id_map.get(video_name_base)
 
             points_batch = []
             for i in range(len(vectors)):
@@ -101,7 +123,11 @@ def index_data():
 
                 # Add video_name to payload from filename helpers if not present
                 if "video_name" not in payload:
-                    payload["video_name"] = os.path.basename(npz_file).replace(".npz", "")
+                    payload["video_name"] = video_name_base
+                
+                # INJECT STATIC VIDEO_ID for synchronization
+                if static_video_id:
+                    payload["video_id"] = static_video_id
 
                 points_batch.append(models.PointStruct(
                     id=point_id,
