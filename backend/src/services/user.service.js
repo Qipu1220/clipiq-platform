@@ -239,9 +239,89 @@ export async function clearWarningsService(username) {
   };
 }
 
+/**
+ * Get user by ID
+ */
+export async function getUserByIdService(userId) {
+  const user = await UserModel.getUserById(userId);
+  
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+  
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    displayName: user.display_name,
+    bio: user.bio,
+    avatarUrl: user.avatar_url,
+    banned: user.banned,
+    banExpiry: user.ban_expiry,
+    banReason: user.ban_reason,
+    warnings: user.warnings,
+    stats: {
+      videos: parseInt(user.video_count) || 0,
+      followers: parseInt(user.follower_count) || 0,
+      following: parseInt(user.following_count) || 0
+    },
+    createdAt: user.created_at
+  };
+}
+
+/**
+ * Update user profile
+ */
+export async function updateUserProfileService(userId, updates) {
+  const { displayName, bio, avatarUrl, email } = updates;
+  
+  const updatedUser = await UserModel.updateUserProfile(userId, {
+    displayName,
+    bio,
+    avatarUrl,
+    email
+  });
+  
+  if (!updatedUser) {
+    throw new ApiError(404, 'User not found');
+  }
+  
+  return {
+    id: updatedUser.id,
+    username: updatedUser.username,
+    email: updatedUser.email,
+    role: updatedUser.role,
+    displayName: updatedUser.display_name,
+    bio: updatedUser.bio,
+    avatarUrl: updatedUser.avatar_url,
+    banned: updatedUser.banned,
+    warnings: updatedUser.warnings,
+    createdAt: updatedUser.created_at
+  };
+}
+
+/**
+ * Get staff statistics
+ */
+export async function getStaffStatsService(userId) {
+  const stats = await UserModel.getStaffStats(userId);
+  
+  return {
+    reportsProcessed: parseInt(stats.reports_processed) || 0,
+    usersWarned: parseInt(stats.users_warned) || 0,
+    usersBanned: parseInt(stats.users_banned) || 0,
+    daysActive: parseInt(stats.days_active) || 0,
+    lastActivity: stats.last_activity
+  };
+}
+
 export default {
   getAllUsersService,
   getUserByUsernameService,
+  getUserByIdService,
+  updateUserProfileService,
+  getStaffStatsService,
   banUserService,
   unbanUserService,
   warnUserService,

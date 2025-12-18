@@ -344,11 +344,25 @@ export async function resolveCommentReport(reportId, action, reviewedById, note)
   return updatedReport;
 }
 
+/**
+ * Get detailed video report information for staff review
+ */
+export async function getVideoReportDetailsService(videoId) {
+  const details = await VideoReportModel.getVideoReportDetails(videoId);
+  
+  if (!details) {
+    throw new ApiError(404, 'Video not found');
+  }
+  
+  return details;
+}
+
 export default {
   createVideoReport,
   getVideoReportById,
   getAllVideoReports,
   resolveVideoReport,
+  getVideoReportDetailsService,
   createUserReport,
   getUserReportById,
   getAllUserReports,

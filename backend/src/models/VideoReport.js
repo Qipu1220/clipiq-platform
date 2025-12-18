@@ -140,6 +140,120 @@ export async function updateVideoReportStatus(reportId, status, reviewedById, re
 }
 
 /**
+ * Get detailed video report information for staff review
+ */
+export async function getVideoReportDetails(videoId) {
+  // Get video details with uploader info
+  const videoQuery = `
+    SELECT 
+      v.*,
+      u.username as uploader_username,
+      u.display_name as uploader_display_name,
+      u.avatar_url as uploader_avatar_url,
+      u.email as uploader_email,
+      u.role as uploader_role,
+      u.banned as uploader_banned,
+      u.warnings as uploader_warnings,
+      u.created_at as uploader_joined_date,
+      COUNT(DISTINCT l.id) as like_count,
+      COUNT(DISTINCT c.id) as comment_count
+    FROM videos v
+    LEFT JOIN users u ON v.uploader_id = u.id
+    LEFT JOIN likes l ON v.id = l.video_id
+    LEFT JOIN comments c ON v.id = c.video_id
+    WHERE v.id = $1
+    GROUP BY v.id, u.id
+  `;
+  
+  const videoResult = await pool.query(videoQuery, [videoId]);
+  
+  if (videoResult.rows.length === 0) {
+    return null;
+  }
+  
+  const video = videoResult.rows[0];
+  
+  // Get all reports for this video
+  const reportsQuery = `
+    SELECT 
+      vr.*,
+      u.username as reporter_username,
+      u.display_name as reporter_display_name,
+      u.avatar_url as reporter_avatar_url
+    FROM video_reports vr
+    LEFT JOIN users u ON vr.reported_by_id = u.id
+    WHERE vr.video_id = $1
+    ORDER BY vr.created_at DESC
+  `;
+  
+  const reportsResult = await pool.query(reportsQuery, [videoId]);
+  
+  // Get comments for this video
+  const commentsQuery = `
+    SELECT 
+      c.*,
+      u.username,
+      u.display_name,
+      u.avatar_url
+    FROM comments c
+    LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.video_id = $1
+    ORDER BY c.created_at DESC
+  `;
+  
+  const commentsResult = await pool.query(commentsQuery, [videoId]);
+  
+  return {
+    video: {
+      id: video.id,
+      title: video.title,
+      description: video.description,
+      videoUrl: video.video_url,
+      thumbnailUrl: video.thumbnail_url,
+      views: video.views,
+      likes: video.like_count,
+      commentCount: video.comment_count,
+      uploadDate: video.created_at,
+      status: video.status
+    },
+    uploader: {
+      id: video.uploader_id,
+      username: video.uploader_username,
+      displayName: video.uploader_display_name,
+      avatarUrl: video.uploader_avatar_url,
+      email: video.uploader_email,
+      role: video.uploader_role,
+      banned: video.uploader_banned,
+      warnings: video.uploader_warnings,
+      joinedDate: video.uploader_joined_date
+    },
+    reports: reportsResult.rows.map(r => ({
+      id: r.id,
+      reason: r.reason,
+      evidenceUrl: r.evidence_url,
+      status: r.status,
+      createdAt: r.created_at,
+      reporter: {
+        username: r.reporter_username,
+        displayName: r.reporter_display_name,
+        avatarUrl: r.reporter_avatar_url
+      }
+    })),
+    comments: commentsResult.rows.map(c => ({
+      id: c.id,
+      text: c.text,
+      createdAt: c.created_at,
+      user: {
+        username: c.username,
+        displayName: c.display_name,
+        avatarUrl: c.avatar_url
+      }
+    })),
+    reportCount: reportsResult.rows.length
+  };
+}
+
+/**
  * Delete video report
  */
 export async function deleteVideoReport(reportId) {
@@ -153,5 +267,6 @@ export default {
   getAllVideoReports,
   hasUserReportedVideo,
   updateVideoReportStatus,
-  deleteVideoReport
+  deleteVideoReport,
+  getVideoReportDetails
 };

@@ -212,8 +212,8 @@ export async function clearWarnings(username) {
 /**
  * Update user profile
  */
-export async function updateUserProfile(username, updates) {
-  const { displayName, bio, avatarUrl } = updates;
+export async function updateUserProfile(userId, updates) {
+  const { displayName, bio, avatarUrl, email } = updates;
   
   const query = `
     UPDATE users
@@ -221,15 +221,66 @@ export async function updateUserProfile(username, updates) {
       display_name = COALESCE($1, display_name),
       bio = COALESCE($2, bio),
       avatar_url = COALESCE($3, avatar_url),
+      email = COALESCE($4, email),
       updated_at = CURRENT_TIMESTAMP
-    WHERE username = $4
+    WHERE id = $5
     RETURNING id, username, email, role, display_name, bio, avatar_url, banned, warnings, created_at, updated_at
   `;
   
-  const values = [displayName, bio, avatarUrl, username];
+  const values = [displayName, bio, avatarUrl, email, userId];
   const result = await pool.query(query, values);
   
   return result.rows[0];
+}
+
+/**
+ * Get staff statistics
+ */
+export async function getStaffStats(userId) {
+  const query = `
+    WITH report_stats AS (
+      SELECT 
+        COUNT(DISTINCT CASE WHEN vr.resolved_by = $1 THEN vr.id END) +
+        COUNT(DISTINCT CASE WHEN ur.resolved_by = $1 THEN ur.id END) +
+        COUNT(DISTINCT CASE WHEN cr.resolved_by = $1 THEN cr.id END) as reports_processed
+      FROM users u
+      LEFT JOIN video_reports vr ON vr.resolved_by = u.id
+      LEFT JOIN user_reports ur ON ur.resolved_by = u.id
+      LEFT JOIN comment_reports cr ON cr.resolved_by = u.id
+      WHERE u.id = $1
+    ),
+    user_actions AS (
+      SELECT
+        COUNT(DISTINCT u.id) FILTER (WHERE u.warnings > 0) as users_warned,
+        COUNT(DISTINCT u.id) FILTER (WHERE u.banned = true) as users_banned
+      FROM users u
+    ),
+    activity AS (
+      SELECT
+        EXTRACT(DAY FROM (CURRENT_TIMESTAMP - MIN(created_at))) as days_active,
+        MAX(updated_at) as last_activity
+      FROM users
+      WHERE id = $1
+    )
+    SELECT 
+      COALESCE(rs.reports_processed, 0) as reports_processed,
+      COALESCE(ua.users_warned, 0) as users_warned,
+      COALESCE(ua.users_banned, 0) as users_banned,
+      COALESCE(a.days_active, 0) as days_active,
+      a.last_activity
+    FROM report_stats rs
+    CROSS JOIN user_actions ua
+    CROSS JOIN activity a
+  `;
+  
+  const result = await pool.query(query, [userId]);
+  return result.rows[0] || {
+    reports_processed: 0,
+    users_warned: 0,
+    users_banned: 0,
+    days_active: 0,
+    last_activity: null
+  };
 }
 
 export default {
@@ -240,5 +291,6 @@ export default {
   unbanUser,
   warnUser,
   clearWarnings,
-  updateUserProfile
+  updateUserProfile,
+  getStaffStats
 };
