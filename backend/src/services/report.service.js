@@ -106,8 +106,8 @@ export async function resolveVideoReport(reportId, action, reviewedById, note) {
   
   // Perform the action based on the decision
   if (action === 'delete_content') {
-    // Delete the video
-    await pool.query('DELETE FROM videos WHERE id = $1', [report.video_id]);
+    // Delete the video (soft delete - set status to 'deleted')
+    await pool.query("UPDATE videos SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [report.video_id]);
   } else if (action === 'ban_user') {
     // Ban the video uploader
     await pool.query(

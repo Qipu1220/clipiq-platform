@@ -5,6 +5,7 @@
 
 import * as UserService from '../services/user.service.js';
 import * as ReportService from '../services/report.service.js';
+import * as VideoService from '../services/video.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { successResponse } from '../utils/apiResponse.js';
 
@@ -96,11 +97,31 @@ export const getVideoReportDetails = asyncHandler(async (req, res) => {
   return successResponse(res, details, 'Video report details retrieved successfully');
 });
 
+/**
+ * DELETE /staff/videos/:id
+ * Delete a video (soft delete - staff only)
+ */
+export const deleteVideo = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  // Check if video exists first
+  const video = await VideoService.getVideoByIdService(id);
+  if (!video) {
+    return res.status(404).json({ success: false, message: 'Video not found' });
+  }
+  
+  // Perform soft delete
+  await VideoService.deleteVideoService(id);
+  
+  return successResponse(res, { id, deleted: true }, 'Video deleted successfully');
+});
+
 export default {
   getAllUsers,
   banUser,
   unbanUser,
   warnUser,
   clearWarnings,
-  getVideoReportDetails
+  getVideoReportDetails,
+  deleteVideo
 };

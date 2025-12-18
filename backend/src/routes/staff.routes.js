@@ -80,4 +80,13 @@ router.get(
   staffController.getVideoReportDetails
 );
 
+/**
+ * DELETE /staff/videos/:id
+ * Delete a video (staff only)
+ */
+router.delete(
+  '/videos/:id',
+  staffController.deleteVideo
+);
+
 export default router;
