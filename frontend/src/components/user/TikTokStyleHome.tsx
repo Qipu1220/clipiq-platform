@@ -776,7 +776,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                       >
                         @{uploader?.username || video.uploaderUsername}
                       </button>
-                      <span className="text-zinc-400 text-xs">· {new Date(video.uploadDate).toLocaleDateString()}</span>
+                      <span className="text-zinc-400 text-xs">· {new Date(video.uploadedAt || video.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
 

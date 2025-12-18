@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '../../store/store';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState, AppDispatch } from '../../store/store';
 import {
   Heart, User, Play, Search, Loader2
 } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { searchUsersThunk } from '../../store/usersSlice';
+import { useEffect } from 'react';
 
 interface SearchResultsProps {
   searchQuery: string;
@@ -13,19 +15,27 @@ interface SearchResultsProps {
 }
 
 export function SearchResults({ searchQuery, onVideoClick, onUserClick }: SearchResultsProps) {
+  const dispatch = useDispatch<AppDispatch>();
   const [activeTab, setActiveTab] = useState<'top' | 'users'>('top');
   const searchResults = useSelector((state: RootState) => state.videos.searchResults);
   const searchLoading = useSelector((state: RootState) => state.videos.searchLoading);
   const users = useSelector((state: RootState) => state.users.allUsers);
+  const searchUserResults = useSelector((state: RootState) => state.users.searchUserResults);
+  const userStatus = useSelector((state: RootState) => state.users.status);
+  const videos = useSelector((state: RootState) => state.videos.videos);
+
+  // Trigger user search when tab changes or query changes
+  useEffect(() => {
+    if (activeTab === 'users' && searchQuery) {
+      dispatch(searchUsersThunk({ query: searchQuery }));
+    }
+  }, [activeTab, searchQuery, dispatch]);
 
   // Use backend results directly for videos
   const filteredVideos = searchResults;
 
-  // Filter users based on search query (keep local for now as backend is video-focused)
-  const filteredUsers = users.filter(user =>
-    user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
-  ).filter(user => user.role === 'user'); // Only show regular users
+  // Use backend results for users
+  const filteredUsers = activeTab === 'users' ? searchUserResults : [];
 
   return (
     <div className="flex-1 flex flex-col bg-black">
@@ -122,10 +132,10 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                             {video.title}
                           </p>
                           <div className="flex items-center gap-2">
-                            {uploader?.avatarUrl ? (
+                            {uploader?.avatarUrl || video.uploaderAvatarUrl ? (
                               <img
-                                src={uploader.avatarUrl}
-                                alt={uploader.username}
+                                src={uploader?.avatarUrl || video.uploaderAvatarUrl}
+                                alt={uploader?.username || video.uploaderUsername}
                                 className="w-5 h-5 rounded-full object-cover"
                               />
                             ) : (
@@ -134,7 +144,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                               </div>
                             )}
                             <span className="text-zinc-400 text-xs truncate">
-                              {uploader?.displayName || video.uploaderUsername}
+                              {uploader?.displayName || video.uploaderDisplayName || video.uploaderUsername}
                             </span>
                           </div>
                           <div className="text-zinc-500 text-xs">
@@ -209,7 +219,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                           </div>
                           <p className="text-zinc-500 text-sm mb-2">@{user.username}</p>
                           <div className="flex items-center gap-4 text-xs text-zinc-400">
-                            <span>{user.followers?.toLocaleString() || 0} Followers</span>
+                            <span>{user.followersCount?.toLocaleString() || 0} Followers</span>
                             <span className="flex items-center gap-1">
                               <Heart className="w-3 h-3" />
                               {totalLikes >= 1000 ? `${(totalLikes / 1000).toFixed(1)}K` : totalLikes}

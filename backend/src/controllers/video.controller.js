@@ -67,8 +67,8 @@ export async function getVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
+      thumbnailUrl: row.thumbnail_url
+        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
         : `https://picsum.photos/seed/${row.id}/400/600`,
       duration: row.duration,
       views: row.views,
@@ -158,8 +158,8 @@ export async function getVideoById(req, res, next) {
         title: video.title,
         description: video.description,
         videoUrl: `http://localhost:9000/clipiq-videos/${video.video_url}`,
-        thumbnailUrl: (video.thumbnail_url && video.thumbnail_url.startsWith('http'))
-          ? video.thumbnail_url
+        thumbnailUrl: video.thumbnail_url
+          ? (video.thumbnail_url.startsWith('http') ? video.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${video.thumbnail_url}`)
           : `https://images.unsplash.com/photo-${Math.abs(video.id.charCodeAt(0) * 1000 + video.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
         duration: video.duration,
         views: video.views + 1,
@@ -343,7 +343,29 @@ export async function searchVideos(req, res, next) {
       });
     }
 
-    const videoIds = paginatedResults.map(r => r.id);
+    // Filter out invalid UUIDs to prevent SQL errors
+    const videoIds = paginatedResults
+      .map(r => r.id)
+      .filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+
+    if (videoIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          videos: [],
+          total: totalHits,
+          query: q,
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: totalHits,
+            pages: Math.ceil(totalHits / limitNum),
+            hasMore: false,
+          },
+          classification: searchResult.classification
+        }
+      });
+    }
 
     // 2. Fetch full video details from PostgreSQL
     const query = `
@@ -355,7 +377,7 @@ export async function searchVideos(req, res, next) {
        ) as is_saved
        FROM videos v
        LEFT JOIN users u ON v.uploader_id = u.id
-       WHERE v.id = ANY($1::uuid[])
+       WHERE v.id = ANY($1::uuid[]) AND v.status = 'active' AND v.processing_status = 'ready'
     `;
     // Removed AND v.status = 'active' temporarily for debugging to see if they exist at all
     // Or keep it and check. Let's keep strictness but maybe the IDs are just not there.
@@ -379,8 +401,8 @@ export async function searchVideos(req, res, next) {
         title: video.title,
         description: video.description,
         videoUrl: `http://localhost:9000/clipiq-videos/${video.video_url}`,
-        thumbnailUrl: (video.thumbnail_url && video.thumbnail_url.startsWith('http'))
-          ? video.thumbnail_url
+        thumbnailUrl: video.thumbnail_url
+          ? (video.thumbnail_url.startsWith('http') ? video.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${video.thumbnail_url}`)
           : `https://picsum.photos/seed/${video.id}/400/600`,
         duration: video.duration,
         views: video.views,
@@ -389,7 +411,9 @@ export async function searchVideos(req, res, next) {
         uploaderUsername: video.username,
         uploaderDisplayName: video.display_name,
         uploaderAvatarUrl: video.avatar_url,
+        uploaderAvatarUrl: video.avatar_url,
         isSaved: video.is_saved,
+        processingStatus: video.processing_status,
         createdAt: video.created_at,
         uploadedAt: video.created_at,
         // Add search score/metadata if needed
@@ -447,8 +471,8 @@ export async function getTrendingVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
+      thumbnailUrl: row.thumbnail_url
+        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
         : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
       duration: row.duration,
       views: row.views,
@@ -593,8 +617,8 @@ export async function getLikedVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
+      thumbnailUrl: row.thumbnail_url
+        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
         : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
       duration: row.duration,
       views: row.views,
@@ -687,8 +711,8 @@ export async function getSavedVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
+      thumbnailUrl: row.thumbnail_url
+        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
         : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
       duration: row.duration,
       views: row.views,

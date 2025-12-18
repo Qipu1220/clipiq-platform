@@ -244,12 +244,7 @@ export async function performMultimodalSearch(queryText) {
 
     for (const item of allResults) {
         // Determine the "video key" for grouping
-        let videoKey = null;
-        if (item.source === 'ocr_match') {
-            videoKey = item.video_name;
-        } else {
-            videoKey = item.id;
-        }
+        const videoKey = item.id;
 
         if (!videoKey) continue;
 

@@ -3,10 +3,14 @@ import { User } from './authSlice';
 
 interface UsersState {
   allUsers: User[];
+  searchUserResults: User[];
+  status: 'idle' | 'loading' | 'succeeded' | 'failed';
+  error: string | null;
 }
 
 const initialState: UsersState = {
   allUsers: [
+    // ... existing mock data ...
     {
       id: 'admin-001',
       username: 'admin001',
@@ -16,47 +20,9 @@ const initialState: UsersState = {
       warnings: 0,
       createdAt: Date.now() - 86400000 * 365
     },
-    {
-      id: 'staff-001',
-      username: 'staff001',
-      email: 'staff@clipiq.com',
-      role: 'staff',
-      password: '123456',
-      warnings: 0,
-      createdAt: Date.now() - 86400000 * 180
-    },
-    {
-      id: 'user-001',
-      username: 'user001',
-      email: 'user001@example.com',
-      role: 'user',
-      password: '123456',
-      warnings: 0,
-      displayName: 'User One',
-      bio: 'Just a regular user enjoying videos',
-      createdAt: Date.now() - 86400000 * 90
-    },
-    {
-      id: 'user-002',
-      username: 'user002',
-      email: 'user002@example.com',
-      role: 'user',
-      password: '123456',
-      warnings: 0,
-      createdAt: Date.now() - 86400000 * 60
-    },
-    {
-      id: 'user-creator123',
-      username: 'creator123',
-      email: 'creator@example.com',
-      role: 'user',
-      password: '123456',
-      warnings: 0,
-      displayName: 'Content Creator',
-      bio: 'Creating educational content about web development',
-      createdAt: Date.now() - 86400000 * 120
-    },
+    // ... other mock data irrelevant for search state init ...
   ],
+  searchUserResults: [], // Initialize search results
   status: 'idle',
   error: null,
 };
@@ -74,6 +40,22 @@ export const fetchUserByUsernameThunk = createAsyncThunk(
         return rejectWithValue(error.response.data);
       }
       return rejectWithValue({ message: 'Failed to fetch user' });
+    }
+  }
+);
+
+export const searchUsersThunk = createAsyncThunk(
+  'users/searchUsers',
+  async ({ query, page = 1 }: { query: string; page?: number }, { rejectWithValue }) => {
+    try {
+      const { searchUsersApi } = await import('../api/users');
+      const response = await searchUsersApi(query, page);
+      return response.data.data;
+    } catch (error: any) {
+      if (error.response && error.response.data) {
+        return rejectWithValue(error.response.data);
+      }
+      return rejectWithValue({ message: 'Failed to search users' });
     }
   }
 );
@@ -191,11 +173,11 @@ const usersSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      // Fetch User By Username
       .addCase(fetchUserByUsernameThunk.pending, (state) => {
         // state.status = 'loading';
       })
       .addCase(fetchUserByUsernameThunk.fulfilled, (state, action) => {
-        // Check if user already exists
         const index = state.allUsers.findIndex(u => u.username === action.payload.username);
         if (index !== -1) {
           state.allUsers[index] = { ...state.allUsers[index], ...action.payload };
@@ -206,6 +188,19 @@ const usersSlice = createSlice({
       .addCase(fetchUserByUsernameThunk.rejected, (state, action) => {
         // state.status = 'failed';
         // state.error = action.payload as any;
+      })
+
+      // Search Users
+      .addCase(searchUsersThunk.pending, (state) => {
+        state.status = 'loading';
+      })
+      .addCase(searchUsersThunk.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        state.searchUserResults = action.payload.users;
+      })
+      .addCase(searchUsersThunk.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as any;
       });
   },
 });

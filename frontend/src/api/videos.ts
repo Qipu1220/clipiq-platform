@@ -14,7 +14,8 @@ export interface Video {
   uploaderDisplayName?: string;
   uploaderAvatarUrl?: string;
   processingStatus?: 'processing' | 'ready' | 'failed';
-  uploadDate: number;
+  uploadDate?: string; // Legacy
+  uploadedAt?: string; // Standardized
   createdAt?: string;
   updatedAt?: string;
   isLiked?: boolean; // whether current user liked this video
