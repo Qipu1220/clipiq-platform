@@ -80,7 +80,7 @@ function AppContent() {
   };
 
   const handleUploadComplete = () => {
-    setCurrentPage('home');
+    setCurrentPage('profile');
   };
 
   const handleViewUserProfile = (username: string) => {

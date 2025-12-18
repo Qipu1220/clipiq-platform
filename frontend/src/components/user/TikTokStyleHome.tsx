@@ -80,7 +80,9 @@ interface TikTokStyleHomeProps {
 
 export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHomeProps) {
   const dispatch = useDispatch();
-  const videos = useSelector((state: RootState) => state.videos.videos);
+  const allVideos = useSelector((state: RootState) => state.videos.videos);
+  // Filter out processing/failed videos for the home feed
+  const videos = allVideos.filter(v => v.processing_status === 'ready' || !v.processing_status);
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
