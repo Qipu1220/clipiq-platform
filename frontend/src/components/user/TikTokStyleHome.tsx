@@ -3,15 +3,16 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
 import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
-import { logoutThunk } from '../../store/authSlice';
 import {
   Play, Search, Home, Compass, Users, Video, MessageCircle,
-  Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check, LogOut, ChevronDown,
+  Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check,
   AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { Sidebar, SidebarItem } from '../common/Sidebar';
+import { UserMenu } from '../common/UserMenu';
 import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
 import {
@@ -898,75 +899,11 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           <>
             {/* User Menu Header */}
             <div className="p-4 border-b border-zinc-800">
-              <div className="relative mb-3 flex justify-end" ref={userMenuRef}>
-                <div
-                  className="flex items-center gap-2 cursor-pointer hover:bg-zinc-900/50 px-3 py-1.5 rounded-full transition-all border border-zinc-800 hover:border-zinc-700"
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                >
-                  {currentUser?.avatarUrl ? (
-                    <img
-                      src={currentUser.avatarUrl}
-                      alt={currentUser.username}
-                      className="w-7 h-7 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
-                      <User className="w-3.5 h-3.5 text-zinc-400" />
-                    </div>
-                  )}
-                  <span className="text-white text-sm font-medium">{currentUser?.displayName || currentUser?.username}</span>
-                  <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
-                </div>
-
-                {showUserMenu && (
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                    {/* User Info */}
-                    <div className="px-4 py-3 border-b border-zinc-800">
-                      <div className="flex items-center gap-2.5">
-                        {currentUser?.avatarUrl ? (
-                          <img
-                            src={currentUser.avatarUrl}
-                            alt={currentUser.username}
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
-                            <User className="w-5 h-5 text-zinc-400" />
-                          </div>
-                        )}
-                        <div className="flex flex-col overflow-hidden">
-                          <span className="text-white text-sm font-medium truncate">{currentUser?.displayName || currentUser?.username}</span>
-                          <span className="text-zinc-500 text-xs truncate">@{currentUser?.username}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Menu Items */}
-                    <div className="py-1">
-                      <button
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          onViewUserProfile?.(currentUser.username);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-white hover:bg-zinc-800 transition-colors text-left group"
-                      >
-                        <User className="w-4 h-4 text-zinc-400 group-hover:text-white transition-colors" />
-                        <span className="text-sm">Xem tài khoản</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          dispatch(logoutThunk());
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-red-400 hover:bg-zinc-800 transition-colors text-left group"
-                      >
-                        <LogOut className="w-4 h-4 group-hover:text-red-300 transition-colors" />
-                        <span className="text-sm">Đăng xuất</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
+              <div className="mb-3 flex justify-end">
+                <UserMenu 
+                  variant="user"
+                  onProfileClick={() => onViewUserProfile?.(currentUser.username)}
+                />
               </div>
 
               {/* Tab Switcher */}
