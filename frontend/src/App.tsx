@@ -10,6 +10,7 @@ import { WarningBanner } from './components/WarningBanner';
 import { Header } from './components/Header';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { StaffDashboard } from './components/staff/StaffDashboard';
+import { VideoReportReview } from './components/staff/VideoReportReview';
 import { HomePage } from './components/user/HomePage';
 import { TikTokStyleHome } from './components/user/TikTokStyleHome';
 import { VideoPlayer } from './components/user/VideoPlayer';
@@ -17,6 +18,8 @@ import { UploadVideo } from './components/user/UploadVideo';
 import { ReportUser } from './components/user/ReportUser';
 import { PublicUserProfile } from './components/user/PublicUserProfile';
 import { UserProfile } from './components/user/UserProfile';
+import { banUserApi, warnUserApi } from './api/admin';
+import { toast } from 'sonner';
 
 function AppContent() {
   const dispatch = useDispatch<AppDispatch>();
@@ -28,6 +31,7 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
+  const [previousTab, setPreviousTab] = useState<string>('dashboard');
 
   // Restore session and fetch videos on app load
   useEffect(() => {
@@ -97,23 +101,52 @@ function AppContent() {
     return <MaintenanceScreen />;
   }
 
+  const handleBanUser = async (userId: string, username: string, reason: string) => {
+    try {
+      await banUserApi(userId, reason || '');
+      toast.success(`Đã cấm người dùng ${username}`);
+      // @ts-ignore
+      dispatch(getCurrentUserThunk());
+    } catch (error) {
+      toast.error('Không thể cấm người dùng');
+    }
+  };
+
+  const handleWarnUser = async (userId: string, username: string, reason: string) => {
+    try {
+      await warnUserApi(userId, reason || '');
+      toast.success(`Đã cảnh báo người dùng ${username}`);
+      // @ts-ignore
+      dispatch(getCurrentUserThunk());
+    } catch (error) {
+      toast.error('Không thể cảnh báo người dùng');
+    }
+  };
+
   const handleNavigate = (page: string) => {
     setCurrentPage(page);
     setSelectedVideoId(null);
     setSelectedUsername(null);
   };
 
-  const handleVideoClick = (videoId: string) => {
+  const handleVideoClick = (videoId: string, fromTab?: string) => {
     setSelectedVideoId(videoId);
     setCurrentPage('video-player');
+    if (fromTab) {
+      setPreviousTab(fromTab);
+    }
   };
 
   const handleUploadComplete = () => {
     setCurrentPage('home');
   };
 
-  const handleViewUserProfile = (username: string) => {
+  const handleViewUserProfile = (username: string, fromTab?: string) => {
     setSelectedUsername(username);
+    // Remember which tab is viewing the profile
+    if (fromTab && currentUser?.role === 'staff') {
+      setPreviousTab(fromTab);
+    }
     // If viewing own profile, go to profile page, otherwise go to public profile page
     if (username === currentUser?.username) {
       setCurrentPage('profile');
@@ -139,16 +172,52 @@ function AppContent() {
 
     // Staff routes
     if (currentUser?.role === 'staff') {
-      if (currentPage === 'staff') {
-        return <StaffDashboard onVideoClick={handleVideoClick} onViewUserProfile={handleViewUserProfile} />;
+      if (currentPage === 'video-report-review' && selectedVideoId) {
+        return (
+          <VideoReportReview
+            videoId={selectedVideoId}
+            onBack={() => {
+              setCurrentPage('staff');
+              // Keep previousTab as is - it was set when opening VideoReportReview
+              setSelectedVideoId(null);
+            }}
+          />
+        );
       }
       if (currentPage === 'video-player' && selectedVideoId) {
-        return <VideoPlayer videoId={selectedVideoId} onBack={() => handleNavigate('staff')} onViewUserProfile={handleViewUserProfile} />;
+        return <VideoPlayer videoId={selectedVideoId} onBack={() => {
+          setCurrentPage('staff');
+          setPreviousTab('video-reports');
+          setSelectedVideoId(null);
+        }} onViewUserProfile={handleViewUserProfile} returnTab={previousTab} isStaffReview={true} />;
       }
       if (currentPage === 'view-user-profile' && selectedUsername) {
-        return <PublicUserProfile username={selectedUsername} onVideoClick={handleVideoClick} onBack={() => handleNavigate('staff')} />;
+        return <PublicUserProfile 
+          username={selectedUsername} 
+          onVideoClick={(videoId) => {
+            setSelectedVideoId(videoId);
+            setCurrentPage('video-report-review');
+            // previousTab is already set from handleViewUserProfile
+          }} 
+          onBack={() => {
+            setCurrentPage('staff');
+            // Keep previousTab as is - it was set when viewing profile
+          }}
+          isStaffView={true}
+          onBanUser={handleBanUser}
+          onWarnUser={handleWarnUser}
+        />;
       }
-      return <StaffDashboard onVideoClick={handleVideoClick} onViewUserProfile={handleViewUserProfile} />;
+      return <StaffDashboard 
+        onVideoClick={handleVideoClick} 
+        onViewUserProfile={handleViewUserProfile} 
+        initialTab={previousTab}
+        onReviewVideoReport={(videoId) => {
+          setSelectedVideoId(videoId);
+          setCurrentPage('video-report-review');
+          setPreviousTab('video-reports');
+        }}
+      />;
     }
 
     // User routes

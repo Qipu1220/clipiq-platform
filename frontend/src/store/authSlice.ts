@@ -147,6 +147,10 @@ const authSlice = createSlice({
     toggleMaintenanceMode: (state) => {
       state.maintenanceMode = !state.maintenanceMode;
     },
+    setCurrentUser: (state, action: PayloadAction<User>) => {
+      state.currentUser = action.payload;
+      localStorage.setItem('user', JSON.stringify(action.payload));
+    },
     updateDisplayName: (state, action: PayloadAction<string>) => {
       if (state.currentUser) {
         state.currentUser.displayName = action.payload;
@@ -249,5 +253,12 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, toggleMaintenanceMode, updateDisplayName, updateAvatar, updateBio } = authSlice.actions;
+export const { 
+  clearError, 
+  toggleMaintenanceMode, 
+  setCurrentUser,
+  updateDisplayName, 
+  updateAvatar, 
+  updateBio 
+} = authSlice.actions;
 export default authSlice.reducer;

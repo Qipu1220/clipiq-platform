@@ -70,31 +70,21 @@ export function UserReports({
             <div className="flex gap-2">
               <Button
                 size="sm"
-                onClick={() => onViewUserProfile(report.reported_username || '')}
+                onClick={() => onViewUserProfile(report.reported_username || '', 'user-reports')}
                 className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30 h-9 rounded-lg"
               >
                 <UserCircle className="w-4 h-4 mr-2" />
                 Xem profile
               </Button>
               {report.status === 'pending' && (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => onResolveReport(report.id, report.reported_username || '', true)}
-                    className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30 h-9 rounded-lg"
-                  >
-                    <AlertTriangle className="w-4 h-4 mr-2" />
-                    Cảnh báo
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => onResolveReport(report.id, report.reported_username || '', false)}
-                    className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Bỏ qua
-                  </Button>
-                </>
+                <Button
+                  size="sm"
+                  onClick={() => onResolveReport(report.id, report.reported_username || '', false)}
+                  className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Bỏ qua
+                </Button>
               )}
             </div>
           </CardContent>

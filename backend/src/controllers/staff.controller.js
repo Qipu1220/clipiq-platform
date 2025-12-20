@@ -6,6 +6,7 @@
 import * as UserService from '../services/user.service.js';
 import * as ReportService from '../services/report.service.js';
 import * as VideoService from '../services/video.service.js';
+import * as StaffProfileService from '../services/staffProfile.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { successResponse } from '../utils/apiResponse.js';
 
@@ -116,6 +117,18 @@ export const deleteVideo = asyncHandler(async (req, res) => {
   return successResponse(res, { id, deleted: true }, 'Video deleted successfully');
 });
 
+/**
+ * GET /staff/profile/stats
+ * Get statistics for current staff member
+ */
+export const getStaffStats = asyncHandler(async (req, res) => {
+  const staffUserId = req.user.userId;
+  
+  const stats = await StaffProfileService.getStaffStatsService(staffUserId);
+  
+  return successResponse(res, stats, 'Staff statistics retrieved successfully');
+});
+
 export default {
   getAllUsers,
   banUser,
@@ -123,5 +136,6 @@ export default {
   warnUser,
   clearWarnings,
   getVideoReportDetails,
-  deleteVideo
+  deleteVideo,
+  getStaffStats
 };

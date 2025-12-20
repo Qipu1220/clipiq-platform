@@ -1542,6 +1542,10 @@
     border-color: var(--color-red-600);
   }
 
+  .border-yellow-500 {
+    border-color: var(--color-yellow-500);
+  }
+
   .border-transparent {
     border-color: #0000;
   }

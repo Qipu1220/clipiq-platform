@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle, Eye, Search, UserX, Users, Video } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Eye, Search, UserX, Users, Video, X } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import { toast } from 'sonner';
-import { getAllUsersApi, unbanUserApi, clearWarningsApi } from '../../api/admin';
+import { getAllUsersApi, unbanUserApi, clearWarningsApi, banUserApi, warnUserApi } from '../../api/admin';
 
 interface UserManagementProps {
   displayUsers: Array<{
@@ -19,25 +20,132 @@ interface UserManagementProps {
   }>;
   videos: Array<{ id: string; uploaderUsername: string }>;
   onViewUserProfile: (username: string) => void;
-  onBanUser: (username: string) => void;
-  onWarnUser: (username: string) => void;
-  setShowConfirmModal: (show: boolean) => void;
-  setConfirmAction: (action: any) => void;
-  setApiUsers: (users: any[]) => void;
 }
 
 export function UserManagement({
   displayUsers,
   videos,
-  onViewUserProfile,
-  onBanUser,
-  onWarnUser,
-  setShowConfirmModal,
-  setConfirmAction,
-  setApiUsers
+  onViewUserProfile
 }: UserManagementProps) {
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<'' | 'banned' | 'warned'>('');
+  
+  // Modal states
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [banUsername, setBanUsername] = useState('');
+  const [banDuration, setBanDuration] = useState('');
+  const [banReason, setBanReason] = useState('');
+  
+  const [showWarnModal, setShowWarnModal] = useState(false);
+  const [warnUsername, setWarnUsername] = useState('');
+  const [warnReason, setWarnReason] = useState('');
+  
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: string;
+    title: string;
+    message: string;
+    confirmText: string;
+    confirmColor: string;
+    onConfirm: () => void;
+  } | null>(null);
+  
+  const [apiUsers, setApiUsers] = useState<any[]>([]);
+  
+  // Refresh users list
+  const refreshUsers = async () => {
+    try {
+      const response = await getAllUsersApi({ page: 1, limit: 100 });
+      setApiUsers(response.users);
+    } catch (error) {
+      console.error('Error refreshing users:', error);
+    }
+  };
+  
+  // Ban user handler
+  const handleBanUser = async () => {
+    if (!banUsername) {
+      toast.error('Vui lòng nhập tên người dùng!');
+      return;
+    }
+    // Reason is optional - can be empty
+    
+    const durationValue = banDuration ? parseInt(banDuration, 10) : null;
+    if (durationValue !== null && (Number.isNaN(durationValue) || durationValue <= 0)) {
+      toast.error('Thời hạn cấm phải là số ngày hợp lệ!');
+      return;
+    }
+    const isPermanent = !durationValue;
+    
+    setConfirmAction({
+      type: isPermanent ? 'ban-permanent' : 'ban-temp',
+      title: isPermanent ? 'Cấm vĩnh viễn người dùng' : 'Cấm tạm thời người dùng',
+      message: isPermanent 
+        ? `Bạn có chắc muốn cấm vĩnh viễn người dùng ${banUsername}?`
+        : `Bạn có chắc muốn cấm người dùng ${banUsername} trong ${durationValue} ngày?`,
+      confirmText: isPermanent ? 'Cấm vĩnh viễn' : 'Cấm tạm thời',
+      confirmColor: '#ff3b5c',
+      onConfirm: async () => {
+        try {
+          await banUserApi(banUsername, banReason, durationValue);
+          toast.success(isPermanent ? `Đã cấm vĩnh viễn người dùng ${banUsername}` : `Đã cấm người dùng ${banUsername} trong ${durationValue} ngày`);
+          await refreshUsers();
+          setBanUsername('');
+          setBanDuration('');
+          setBanReason('');
+          setShowConfirmModal(false);
+          setShowBanModal(false);
+        } catch (error: any) {
+          if (error.response?.status === 404) {
+            toast.error('Không tìm thấy người dùng');
+          } else {
+            toast.error('Không thể cấm người dùng. Vui lòng thử lại.');
+          }
+        }
+      }
+    });
+    setShowConfirmModal(true);
+  };
+  
+  // Warn user handler
+  const handleWarnUser = async () => {
+    if (!warnUsername) {
+      toast.error('Vui lòng nhập tên người dùng!');
+      return;
+    }
+    // Reason is optional - can be empty
+    
+    const user = displayUsers.find(u => u.username === warnUsername);
+    const currentWarnings = user?.warnings || 0;
+    const durationValue = currentWarnings === 0 ? 30 : currentWarnings === 1 ? 60 : 90;
+    const warningLevel = currentWarnings + 1;
+    
+    setConfirmAction({
+      type: 'warn-user',
+      title: 'Cảnh báo người dùng',
+      message: `Bạn có chắc muốn cảnh báo người dùng ${warnUsername}?\n\nĐây sẽ là cảnh báo lần ${warningLevel}.\n\nThời hạn: ${durationValue} ngày (tự động xóa sau ${durationValue} ngày không vi phạm).`,
+      confirmText: 'Cảnh báo',
+      confirmColor: '#eab308',
+      onConfirm: async () => {
+        try {
+          await warnUserApi(warnUsername, warnReason, durationValue);
+          toast.success(`Đã cảnh báo người dùng ${warnUsername}`);
+          await refreshUsers();
+          setWarnUsername('');
+          setWarnReason('');
+          setShowConfirmModal(false);
+          setShowWarnModal(false);
+        } catch (error: any) {
+          if (error.response?.status === 404) {
+            toast.error('Không tìm thấy người dùng');
+          } else {
+            toast.error('Không thể cảnh báo người dùng. Vui lòng thử lại.');
+          }
+        }
+      }
+    });
+    setShowConfirmModal(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -212,7 +320,7 @@ export function UserManagement({
                   <div className="flex flex-col gap-2 flex-shrink-0">
                     <Button
                       size="sm"
-                      onClick={() => onViewUserProfile(user.username)}
+                      onClick={() => onViewUserProfile(user.username, 'user-management')}
                       className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30 h-9 rounded-lg whitespace-nowrap"
                     >
                       <Eye className="w-4 h-4 mr-2" />
@@ -235,8 +343,7 @@ export function UserManagement({
                                 toast.success(`Đã gỡ cấm người dùng ${user.username}`);
                                 
                                 // Refresh users list
-                                const response = await getAllUsersApi({ page: 1, limit: 100 });
-                                setApiUsers(response.users);
+                                await refreshUsers();
                                 
                                 setShowConfirmModal(false);
                               } catch (error: any) {
@@ -262,7 +369,12 @@ export function UserManagement({
                       <>
                         <Button
                           size="sm"
-                          onClick={() => onBanUser(user.username)}
+                          onClick={() => {
+                            setBanUsername(user.username);
+                            setBanReason('');
+                            setBanDuration('');
+                            setShowBanModal(true);
+                          }}
                           className="bg-red-500/20 hover:bg-red-500/40 text-red-400 border-red-500/30 h-9 rounded-lg whitespace-nowrap transition-colors"
                         >
                           <UserX className="w-4 h-4 mr-2" />
@@ -270,7 +382,11 @@ export function UserManagement({
                         </Button>
                         <Button
                           size="sm"
-                          onClick={() => onWarnUser(user.username)}
+                          onClick={() => {
+                            setWarnUsername(user.username);
+                            setWarnReason('');
+                            setShowWarnModal(true);
+                          }}
                           className="bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 border-yellow-500/30 h-9 rounded-lg whitespace-nowrap transition-colors"
                         >
                           <AlertTriangle className="w-4 h-4 mr-2" />
@@ -288,8 +404,7 @@ export function UserManagement({
                             toast.success(`Đã xóa cảnh báo của ${user.username}`);
                             
                             // Refresh users list
-                            const response = await getAllUsersApi({ page: 1, limit: 100 });
-                            setApiUsers(response.users);
+                            await refreshUsers();
                           } catch (error: any) {
                             console.error('❌ Error clearing warnings:', error);
                             if (error.response?.status === 404) {
@@ -325,6 +440,164 @@ export function UserManagement({
           </div>
         )}
       </div>
+      
+      {/* Ban User Modal */}
+      {showBanModal && banUsername && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-[#ff3b5c]/30 rounded-xl w-full max-w-lg shadow-2xl">
+            <div className="px-6 py-3 border-b border-zinc-900/50 bg-[#ff3b5c]/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#ff3b5c]/20 flex items-center justify-center">
+                    <UserX className="w-5 h-5 text-[#ff3b5c]" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-medium text-lg">Cấm người dùng</h3>
+                    <p className="text-zinc-500 text-xs">@{banUsername}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowBanModal(false)} className="text-zinc-500 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div>
+                <Label className="text-zinc-400 mb-2 block text-sm">Thời hạn (ngày)</Label>
+                <Input
+                  type="number"
+                  value={banDuration}
+                  onChange={(e) => setBanDuration(e.target.value)}
+                  className="bg-zinc-900/50 border-zinc-800/50 text-white focus:border-[#ff3b5c] h-10"
+                  placeholder="Để trống = vĩnh viễn"
+                />
+                <p className="text-zinc-600 text-xs mt-1">Để trống để cấm vĩnh viễn</p>
+              </div>
+              
+              <div>
+                <Label className="text-zinc-400 mb-2 block text-sm">Lý do cấm (tùy chọn)</Label>
+                <Input
+                  value={banReason}
+                  onChange={(e) => setBanReason(e.target.value)}
+                  className="bg-zinc-900/50 border-zinc-800/50 text-white focus:border-[#ff3b5c] h-10"
+                  placeholder="Có thể để trống hoặc nhập lý do..."
+                />
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-zinc-900/50 flex gap-3 justify-end">
+              <Button onClick={() => setShowBanModal(false)} className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg">
+                Hủy
+              </Button>
+              <Button onClick={handleBanUser} className="bg-[#ff3b5c] hover:bg-[#ff3b5c]/90 text-white h-10 rounded-lg">
+                Xác nhận cấm
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Warn User Modal */}
+      {showWarnModal && warnUsername && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-yellow-500/30 rounded-xl w-full max-w-lg shadow-2xl">
+            <div className="px-6 py-3 border-b border-zinc-900/50 bg-yellow-500/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-medium text-lg">Cảnh báo người dùng</h3>
+                    <p className="text-zinc-500 text-xs">@{warnUsername}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowWarnModal(false)} className="text-zinc-500 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div>
+                <Label className="text-zinc-400 mb-2 block text-sm">Lý do cảnh báo (tùy chọn)</Label>
+                <Input
+                  value={warnReason}
+                  onChange={(e) => setWarnReason(e.target.value)}
+                  className="bg-zinc-900/50 border-zinc-800/50 text-white focus:border-yellow-500 h-10"
+                  placeholder="Có thể để trống hoặc nhập lý do..."
+                />
+                {warnReason.length > 500 && (
+                  <p className="text-red-400 text-xs mt-1">Nội dung cảnh báo không được quá 500 ký tự</p>
+                )}
+              </div>
+              
+              <div>
+                <Label className="text-zinc-400 mb-2 block text-sm">Thông tin cảnh báo</Label>
+                <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-3">
+                  {(() => {
+                    const user = displayUsers.find(u => u.username === warnUsername);
+                    const currentWarnings = user?.warnings || 0;
+                    const warningLevel = currentWarnings + 1;
+                    const duration = currentWarnings === 0 ? 30 : currentWarnings === 1 ? 60 : 90;
+                    return (
+                      <>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-zinc-400 text-sm">Cảnh báo lần:</span>
+                          <span className="text-white font-semibold">{warningLevel}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-400 text-sm">Thời hạn:</span>
+                          <span className="text-yellow-400 font-semibold">{duration} ngày</span>
+                        </div>
+                        <p className="text-zinc-600 text-xs mt-2">Tự động xóa sau {duration} ngày không vi phạm</p>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-zinc-900/50 flex gap-3 justify-end">
+              <Button onClick={() => setShowWarnModal(false)} className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg">
+                Hủy
+              </Button>
+              <Button onClick={handleWarnUser} className="bg-yellow-500 hover:bg-yellow-500/90 text-white h-10 rounded-lg">
+                Xác nhận cảnh báo
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && confirmAction && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-zinc-900/50 rounded-xl w-full max-w-md shadow-2xl">
+            <div className="p-5 border-b border-zinc-900/50">
+              <h3 className="text-white font-medium text-lg">{confirmAction.title}</h3>
+            </div>
+
+            <div className="p-5">
+              <p className="text-zinc-400 whitespace-pre-line">{confirmAction.message}</p>
+            </div>
+
+            <div className="px-5 py-3 border-t border-zinc-900/50 flex gap-3 justify-end">
+              <Button onClick={() => setShowConfirmModal(false)} className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg">
+                Hủy
+              </Button>
+              <Button
+                onClick={confirmAction.onConfirm}
+                style={{ backgroundColor: confirmAction.confirmColor }}
+                className="hover:opacity-90 text-white h-10 rounded-lg"
+              >
+                {confirmAction.confirmText}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

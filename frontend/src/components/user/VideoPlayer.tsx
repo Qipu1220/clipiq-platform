@@ -4,11 +4,12 @@ import { RootState } from '../../store/store';
 import { likeVideo, addComment, incrementViewCount } from '../../store/videosSlice';
 import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
-import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User, Bell, BellOff, MoreVertical, Copy, X } from 'lucide-react';
+import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User, Bell, BellOff, MoreVertical, Copy, X, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { reportVideoApi, reportCommentApi } from '../../api/reports';
+import { deleteVideoApi } from '../../api/admin';
 import {
   Dialog,
   DialogContent,
@@ -78,9 +79,11 @@ interface VideoPlayerProps {
   videoId: string;
   onBack: () => void;
   onViewUserProfile?: (username: string) => void;
+  returnTab?: string;
+  isStaffReview?: boolean;
 }
 
-export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerProps) {
+export function VideoPlayer({ videoId, onBack, onViewUserProfile, returnTab, isStaffReview = false }: VideoPlayerProps) {
   const dispatch = useDispatch();
   const video = useSelector((state: RootState) =>
     state.videos.videos.find(v => v.id === videoId)
@@ -96,14 +99,15 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
   const [commentReportReason, setCommentReportReason] = useState('');
   const [commentReportType, setCommentReportType] = useState('spam');
   const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
 
   // Find the uploader info from users
-  const uploaderInfo = video ? users.find(u => u.username === video.uploader) : null;
+  const uploaderInfo = video ? users.find(u => u.username === video.uploaderUsername) : null;
 
   // Check if user is subscribed to the uploader
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
-  const isSubscribed = currentUser ? subscriptions[currentUser.username]?.includes(video.uploader) : false;
+  const isSubscribed = currentUser && video ? subscriptions[currentUser.username]?.includes(video.uploaderUsername) : false;
 
   useEffect(() => {
     // Increment views only once when component mounts with this videoId
@@ -185,6 +189,20 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
     }
   };
 
+  const handleDeleteVideo = async () => {
+    try {
+      await deleteVideoApi(videoId);
+      toast.success('Đã xóa video thành công');
+      setShowDeleteConfirm(false);
+      setTimeout(() => {
+        onBack();
+      }, 500);
+    } catch (error: any) {
+      console.error('❌ Error deleting video:', error);
+      toast.error('Không thể xóa video. Vui lòng thử lại.');
+    }
+  };
+
   const formatViews = (views: number) => {
     if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
     if (views >= 1000) return `${(views / 1000).toFixed(1)}K`;
@@ -192,17 +210,17 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
   };
 
   const handleSubscribe = () => {
-    if (!currentUser || currentUser.username === video.uploader) return;
-    
+    if (!currentUser || !video || currentUser.username === video.uploaderUsername) return;
+
     if (isSubscribed) {
       dispatch(unsubscribeFromUser({
         follower: currentUser.username,
-        following: video.uploader,
+        following: video.uploaderUsername,
       }));
     } else {
       dispatch(subscribeToUser({
         follower: currentUser.username,
-        following: video.uploader,
+        following: video.uploaderUsername,
       }));
     }
   };
@@ -211,14 +229,21 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
     <div className="h-screen bg-black flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="container mx-auto px-4 py-8">
-          <Button
-            variant="ghost"
-            onClick={onBack}
-            className="text-white hover:bg-zinc-800 mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
+          <div className="flex items-center justify-between mb-4">
+            <Button
+              variant="ghost"
+              onClick={onBack}
+              className="text-white hover:bg-zinc-800"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              {isStaffReview ? `Quay lại ${returnTab === 'video-reports' ? 'Báo cáo video' : 'Dashboard'}` : 'Back'}
+            </Button>
+            {isStaffReview && (
+              <div className="bg-[#ff3b5c]/10 border border-[#ff3b5c]/30 px-4 py-2 rounded-lg">
+                <span className="text-[#ff3b5c] font-medium text-sm">🔍 Chế độ xem xét Staff</span>
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
@@ -253,41 +278,81 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
                       {video.likes}
                     </Button>
 
-                    <Dialog open={reportOpen} onOpenChange={setReportOpen}>
-                      <DialogTrigger asChild>
+                    {/* Report button - Only show if not own video */}
+                    {currentUser.username !== video.uploaderUsername && (
+                      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
+                          >
+                            <Flag className="w-4 h-4 mr-2" />
+                            Report
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-zinc-900 border-zinc-800 text-white">
+                          <DialogHeader>
+                            <DialogTitle>Report Video</DialogTitle>
+                            <DialogDescription>
+                              Please provide a reason for reporting this video.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-3">
+                            <div>
+                              <Label>Reason for report</Label>
+                              <Textarea
+                                value={reportReason}
+                                onChange={(e) => setReportReason(e.target.value)}
+                                className="bg-zinc-800 border-zinc-700 text-white"
+                                placeholder="Describe the issue..."
+                                rows={4}
+                              />
+                            </div>
+                            <Button onClick={handleReport} className="w-full bg-red-600 hover:bg-red-700">
+                              Submit Report
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+
+                    {/* Delete button for staff */}
+                    {isStaffReview && currentUser?.role === 'staff' && (
+                      <>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
+                          onClick={() => setShowDeleteConfirm(true)}
+                          className="border-red-700 bg-red-900/20 text-red-400 hover:bg-red-900/40 hover:border-red-600"
                         >
-                          <Flag className="w-4 h-4 mr-2" />
-                          Report
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Xóa video
                         </Button>
-                      </DialogTrigger>
-                      <DialogContent className="bg-zinc-900 border-zinc-800 text-white">
-                        <DialogHeader>
-                          <DialogTitle>Report Video</DialogTitle>
-                          <DialogDescription>
-                            Please provide a reason for reporting this video.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-3">
-                          <div>
-                            <Label>Reason for report</Label>
-                            <Textarea
-                              value={reportReason}
-                              onChange={(e) => setReportReason(e.target.value)}
-                              className="bg-zinc-800 border-zinc-700 text-white"
-                              placeholder="Describe the issue..."
-                              rows={4}
-                            />
-                          </div>
-                          <Button onClick={handleReport} className="w-full bg-red-600 hover:bg-red-700">
-                            Submit Report
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                        
+                        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+                          <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-white">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Xóa video này?</AlertDialogTitle>
+                              <AlertDialogDescription className="text-zinc-400">
+                                Bạn có chắc muốn xóa video này? Hành động này sẽ xóa video khỏi hệ thống (soft delete).
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700">
+                                Hủy
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={handleDeleteVideo}
+                                className="bg-[#ff3b5c] text-white hover:bg-[#ff3b5c]/90"
+                              >
+                                Xác nhận xóa
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -295,12 +360,12 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
                   <div className="flex items-center justify-between mb-3">
                     <div 
                       className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => onViewUserProfile?.(video.uploader)}
+                      onClick={() => onViewUserProfile?.(video.uploaderUsername)}
                     >
                       {uploaderInfo?.avatarUrl ? (
                         <img 
                           src={uploaderInfo.avatarUrl} 
-                          alt={video.uploader}
+                          alt={video.uploaderUsername}
                           className="w-10 h-10 rounded-full object-cover border-2 border-red-600"
                         />
                       ) : (
@@ -309,11 +374,11 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
                         </div>
                       )}
                       <p className="text-white hover:text-red-500 transition-colors">
-                        {uploaderInfo?.displayName || video.uploader}
+                        {uploaderInfo?.displayName || video.uploaderUsername}
                       </p>
                     </div>
                     
-                    {currentUser.username !== video.uploader && (
+                    {currentUser.username !== video.uploaderUsername && (
                       <Button
                         onClick={handleSubscribe}
                         className={isSubscribed 

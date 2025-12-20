@@ -16,7 +16,7 @@ interface DashboardProps {
     warnings: number;
     banned: boolean;
   }>;
-  onViewUserProfile: (username: string) => void;
+  onViewUserProfile: (username: string, fromTab?: string) => void;
 }
 
 export function Dashboard({
@@ -153,7 +153,7 @@ export function Dashboard({
                     </div>
                     <Button
                       size="sm"
-                      onClick={() => onViewUserProfile(user.username)}
+                      onClick={() => onViewUserProfile(user.username, 'dashboard')}
                       className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-8 text-xs"
                     >
                       Xem

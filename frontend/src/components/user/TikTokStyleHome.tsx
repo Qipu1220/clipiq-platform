@@ -852,16 +852,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
             <span className="text-white text-xs font-medium">Chia sẻ</span>
           </button>
 
-          {/* Report Video */}
-          <button
-            onClick={() => setShowReportModal(true)}
-            className="flex flex-col items-center gap-1 group"
-          >
-            <div className="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
-              <Flag className="w-7 h-7 text-white group-hover:text-red-400 transition-colors" />
-            </div>
-            <span className="text-white text-xs font-medium group-hover:text-red-400 transition-colors">Báo cáo</span>
-          </button>
+          {/* Report Video - Only show if not own video */}
+          {currentUser.username !== currentVideo.uploaderUsername && (
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="flex flex-col items-center gap-1 group"
+            >
+              <div className="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
+                <Flag className="w-7 h-7 text-white group-hover:text-red-400 transition-colors" />
+              </div>
+              <span className="text-white text-xs font-medium group-hover:text-red-400 transition-colors">Báo cáo</span>
+            </button>
+          )}
         </div>
 
         {/* Toggle Sidebar Button */}
@@ -989,20 +991,23 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                                     <Copy className="w-4 h-4 mr-2" />
                                     Copy bình luận
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setSelectedComment({
-                                        id: comment.id,
-                                        text: comment.text,
-                                        username: comment.username
-                                      });
-                                      setShowCommentReportModal(true);
-                                    }}
-                                    className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
-                                  >
-                                    <Flag className="w-4 h-4 mr-2" />
-                                    Báo cáo
-                                  </DropdownMenuItem>
+                                  {/* Report comment - Only show if not own comment */}
+                                  {currentUser.username !== comment.username && (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSelectedComment({
+                                          id: comment.id,
+                                          text: comment.text,
+                                          username: comment.username
+                                        });
+                                        setShowCommentReportModal(true);
+                                      }}
+                                      className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
+                                    >
+                                      <Flag className="w-4 h-4 mr-2" />
+                                      Báo cáo
+                                    </DropdownMenuItem>
+                                  )}
                                   {/* Force show delete for debugging */}
                                   <>
                                     <DropdownMenuSeparator className="bg-zinc-800" />

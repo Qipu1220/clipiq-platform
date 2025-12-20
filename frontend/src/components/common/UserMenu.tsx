@@ -62,9 +62,6 @@ export function UserMenu({ variant = 'user', onProfileClick }: UserMenuProps) {
         <span className="text-white text-sm font-medium">
           {currentUser?.displayName || currentUser?.username}
         </span>
-        {variant === 'staff' && (
-          <Shield className="w-3.5 h-3.5 text-[#ff3b5c]" />
-        )}
         <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
       </div>
 

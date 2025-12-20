@@ -10,6 +10,7 @@ interface VideoReportsProps {
   onVideoClick: (videoId: string) => void;
   onResolveReport: (reportId: string, videoId: string, shouldDelete: boolean) => void;
   getReportTypeName: (type: string) => string;
+  onReviewVideoReport?: (videoId: string) => void;
 }
 
 export function VideoReports({
@@ -17,7 +18,8 @@ export function VideoReports({
   videos,
   onVideoClick,
   onResolveReport,
-  getReportTypeName
+  getReportTypeName,
+  onReviewVideoReport
 }: VideoReportsProps) {
   const [videoReportsSubTab, setVideoReportsSubTab] = useState<'pending' | 'resolved'>('pending');
 
@@ -53,7 +55,11 @@ export function VideoReports({
       {apiVideoReports.filter((r: VideoReport) => r.status === videoReportsSubTab).map((report: VideoReport) => {
         const video = videos.find(v => v.id === report.video_id);
         return (
-          <Card key={report.id} className="bg-zinc-950/50 border-zinc-900/50 rounded-xl overflow-hidden">
+          <Card
+            key={report.id}
+            className="bg-zinc-950/50 border-zinc-900/50 rounded-xl overflow-hidden cursor-pointer hover:border-purple-500/40 transition"
+            onClick={() => onReviewVideoReport ? onReviewVideoReport(report.video_id) : onVideoClick(report.video_id)}
+          >
             <CardContent className="p-6">
               <div className="flex gap-4">
                 <div className="flex-shrink-0">
@@ -78,18 +84,25 @@ export function VideoReports({
                   </div>
                   <div className="flex gap-2">
                     <Button
+                      variant="outline"
                       size="sm"
-                      onClick={() => onVideoClick(report.video_id)}
-                      className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30 h-9 rounded-lg"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReviewVideoReport ? onReviewVideoReport(report.video_id) : onVideoClick(report.video_id);
+                      }}
+                      className="h-9 rounded-lg border border-[#ff3b5c] text-[#ff3b5c] bg-transparent hover:bg-[#ff3b5c]/10 hover:text-white hover:shadow-[0_0_0_1px_rgba(255,59,92,0.4)]"
                     >
-                      <Eye className="w-4 h-4 mr-2" />
-                      Xem video
+                      <Flag className="w-4 h-4 mr-2" />
+                      Xem xét báo cáo
                     </Button>
                     {report.status === 'pending' && (
                       <>
                         <Button
                           size="sm"
-                          onClick={() => onResolveReport(report.id, report.video_id, true)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onResolveReport(report.id, report.video_id, true);
+                          }}
                           className="bg-[#ff3b5c]/20 hover:bg-[#ff3b5c]/30 text-[#ff3b5c] border-[#ff3b5c]/30 h-9 rounded-lg"
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
@@ -97,7 +110,10 @@ export function VideoReports({
                         </Button>
                         <Button
                           size="sm"
-                          onClick={() => onResolveReport(report.id, report.video_id, false)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onResolveReport(report.id, report.video_id, false);
+                          }}
                           className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
                         >
                           <CheckCircle className="w-4 h-4 mr-2" />

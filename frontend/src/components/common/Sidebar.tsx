@@ -37,18 +37,20 @@ export function Sidebar({
         )}
       </div>
 
-      {/* Search */}
-      <div className="px-3 mb-4">
-        <div className="relative">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <Input
-            value={searchValue}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="bg-zinc-900/50 border-zinc-800 text-white text-sm pl-9 pr-3 py-1.5 h-9"
-            placeholder="Tìm kiếm"
-          />
+      {/* Search - Only show for user variant */}
+      {variant === 'user' && (
+        <div className="px-3 mb-4">
+          <div className="relative">
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Input
+              value={searchValue}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="bg-zinc-900/50 border-zinc-800 text-white text-sm pl-9 pr-3 py-1.5 h-9"
+              placeholder="Tìm kiếm"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Navigation */}
       <ScrollArea className="flex-1">

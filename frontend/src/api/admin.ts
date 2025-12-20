@@ -76,7 +76,7 @@ export const getAllUsersApi = async (filters: UserFilters = {}): Promise<UsersRe
   params.append('limit', limit.toString());
   
   const response = await axios.get(
-    `${API_BASE_URL}/admin/users?${params.toString()}`,
+    `${API_BASE_URL}/staff/users?${params.toString()}`,
     getAuthHeaders()
   );
   
@@ -97,7 +97,7 @@ export const banUserApi = async (username: string, reason: string, duration: num
   console.log('🚫 Banning user:', { username, requestBody });
   
   const response = await axios.put(
-    `${API_BASE_URL}/admin/users/${username}/ban`,
+    `${API_BASE_URL}/staff/users/${username}/ban`,
     requestBody,
     getAuthHeaders()
   );
@@ -110,7 +110,7 @@ export const banUserApi = async (username: string, reason: string, duration: num
  */
 export const unbanUserApi = async (username: string): Promise<User> => {
   const response = await axios.put(
-    `${API_BASE_URL}/admin/users/${username}/unban`,
+    `${API_BASE_URL}/staff/users/${username}/unban`,
     {},
     getAuthHeaders()
   );
@@ -130,7 +130,7 @@ export const warnUserApi = async (username: string, reason: string, duration: nu
   console.log('⚠️ Warning user:', { username, requestBody });
   
   const response = await axios.put(
-    `${API_BASE_URL}/admin/users/${username}/warn`,
+    `${API_BASE_URL}/staff/users/${username}/warn`,
     requestBody,
     getAuthHeaders()
   );
@@ -143,7 +143,7 @@ export const warnUserApi = async (username: string, reason: string, duration: nu
  */
 export const clearWarningsApi = async (username: string): Promise<User> => {
   const response = await axios.put(
-    `${API_BASE_URL}/admin/users/${username}/clear-warnings`,
+    `${API_BASE_URL}/staff/users/${username}/clear-warnings`,
     {},
     getAuthHeaders()
   );
@@ -151,10 +151,34 @@ export const clearWarningsApi = async (username: string): Promise<User> => {
   return response.data.data;
 };
 
+/**
+ * Get detailed video report information for staff review
+ */
+export const getVideoReportDetailsApi = async (videoId: string) => {
+  const response = await axios.get(
+    `${API_BASE_URL}/staff/video-report/${videoId}`,
+    getAuthHeaders()
+  );
+  
+  return response.data.data;
+};
+
+/**
+ * Delete a video (staff only)
+ */
+export const deleteVideoApi = async (videoId: string): Promise<void> => {
+  await axios.delete(
+    `${API_BASE_URL}/staff/videos/${videoId}`,
+    getAuthHeaders()
+  );
+};
+
 export default {
   getAllUsersApi,
   banUserApi,
   unbanUserApi,
   warnUserApi,
-  clearWarningsApi
+  clearWarningsApi,
+  getVideoReportDetailsApi,
+  deleteVideoApi
 };

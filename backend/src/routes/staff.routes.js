@@ -89,4 +89,13 @@ router.delete(
   staffController.deleteVideo
 );
 
+/**
+ * GET /staff/profile/stats
+ * Get statistics for current staff member
+ */
+router.get(
+  '/profile/stats',
+  staffController.getStaffStats
+);
+
 export default router;

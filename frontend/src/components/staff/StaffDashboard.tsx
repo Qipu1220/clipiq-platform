@@ -6,7 +6,7 @@ import { warnUser } from '../../store/usersSlice';
 import { deleteVideo } from '../../store/videosSlice';
 import { toast } from 'sonner';
 import { getVideoReportsApi, resolveVideoReportApi, VideoReport, getUserReportsApi, resolveUserReportApi, UserReport, getCommentReportsApi, resolveCommentReportApi, CommentReport } from '../../api/reports';
-import { getAllUsersApi, banUserApi, warnUserApi, User as ApiUser } from '../../api/admin';
+import { getAllUsersApi, User as ApiUser, deleteVideoApi } from '../../api/admin';
 import { StaffLayout } from './StaffLayout';
 import { Dashboard } from './Dashboard';
 import { VideoReports } from './VideoReports';
@@ -15,39 +15,32 @@ import { CommentReports } from './CommentReports';
 import { UserManagement } from './UserManagement';
 import { StaffProfile } from './StaffProfile';
 import { Button } from '../ui/button';
-import { Label } from '../ui/label';
-import { Input } from '../ui/input';
-import { X, AlertTriangle, UserX } from 'lucide-react';
 
 interface StaffDashboardProps {
-  onVideoClick: (videoId: string) => void;
-  onViewUserProfile: (username: string) => void;
+  onVideoClick: (videoId: string, fromTab?: string) => void;
+  onViewUserProfile: (username: string, fromTab?: string) => void;
+  initialTab?: string;
+  onReviewVideoReport?: (videoId: string) => void;
+  children?: React.ReactNode;
 }
 
-export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboardProps) {
+export function StaffDashboard({ onVideoClick, onViewUserProfile, initialTab, onReviewVideoReport, children }: StaffDashboardProps) {
   const dispatch = useDispatch<AppDispatch>();
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const appeals = useSelector((state: RootState) => state.reports.appeals);
   const videos = useSelector((state: RootState) => state.videos.videos);
   const allUsers = useSelector((state: RootState) => state.users.allUsers);
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'video-reports' | 'user-reports' | 'comment-reports' | 'user-management' | 'profile'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'video-reports' | 'user-reports' | 'comment-reports' | 'user-management' | 'profile'>(
+    (initialTab as any) || 'dashboard'
+  );
   const [apiUsers, setApiUsers] = useState<ApiUser[]>([]);
   const [apiVideoReports, setApiVideoReports] = useState<VideoReport[]>([]);
   const [apiUserReports, setApiUserReports] = useState<UserReport[]>([]);
   const [apiCommentReports, setApiCommentReports] = useState<CommentReport[]>([]);
   const [loading, setLoading] = useState(false);
   
-  // Modal states
-  const [showBanModal, setShowBanModal] = useState(false);
-  const [banUsername, setBanUsername] = useState('');
-  const [banDuration, setBanDuration] = useState('');
-  const [banReason, setBanReason] = useState('');
-  
-  const [showWarnModal, setShowWarnModal] = useState(false);
-  const [warnUsername, setWarnUsername] = useState('');
-  const [warnReason, setWarnReason] = useState('');
-  
+  // Confirmation modal for reports only
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     type: string;
@@ -182,25 +175,30 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
       setConfirmAction({
         type: 'delete-video',
         title: 'Xóa video',
-        message: 'Bạn có chắc muốn xóa video này? Video sẽ bị xóa vĩnh viễn.',
+        message: 'Bạn có chắc muốn xóa video này? Video sẽ bị đánh dấu là đã xóa (soft delete).',
         confirmText: 'Xóa video',
         confirmColor: '#ff3b5c',
         onConfirm: async () => {
           try {
-            await resolveVideoReportApi(reportId, 'delete_content', 'Video đã bị xóa vì vi phạm quy định');
+            // First delete the video from database (soft delete - status='deleted')
+            await deleteVideoApi(videoId);
+            // Then resolve the report with special marker
+            await resolveVideoReportApi(reportId, 'delete_content', 'Đã xóa video');
+            // Update Redux state
             dispatch(deleteVideo(videoId));
             dispatch(resolveVideoReport({
               id: reportId,
               reviewedBy: currentUser?.id || '',
               reviewedByUsername: currentUser?.username || '',
-              resolutionNote: 'Video đã bị xóa'
+              resolutionNote: 'Đã xóa video'
             }));
+            // Refresh reports list
             const [pendingResponse, resolvedResponse] = await Promise.all([
               getVideoReportsApi('pending', 1, 100),
               getVideoReportsApi('resolved', 1, 100)
             ]);
             setApiVideoReports([...pendingResponse.data.reports, ...resolvedResponse.data.reports]);
-            toast.success('Đã xóa video và resolve báo cáo');
+            toast.success('Đã xóa video và xử lý báo cáo');
             setShowConfirmModal(false);
           } catch (error: any) {
             console.error('❌ Error resolving report:', error);
@@ -218,12 +216,12 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         confirmColor: '#ff3b5c',
         onConfirm: async () => {
           try {
-            await resolveVideoReportApi(reportId, 'dismiss', 'Báo cáo không có căn cứ');
+            await resolveVideoReportApi(reportId, 'dismiss', 'Báo cáo được bỏ qua');
             dispatch(resolveVideoReport({
               id: reportId,
               reviewedBy: currentUser?.id || '',
               reviewedByUsername: currentUser?.username || '',
-              resolutionNote: 'Báo cáo bị bỏ qua'
+              resolutionNote: 'Báo cáo được bỏ qua'
             }));
             const [pendingResponse, resolvedResponse] = await Promise.all([
               getVideoReportsApi('pending', 1, 100),
@@ -325,7 +323,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         confirmColor: '#ff3b5c',
         onConfirm: async () => {
           try {
-            await resolveCommentReportApi(reportId, 'dismiss', 'Báo cáo không có căn cứ');
+            await resolveCommentReportApi(reportId, 'dismiss', 'Báo cáo được bỏ qua');
             const [pendingResponse, resolvedResponse] = await Promise.all([
               getCommentReportsApi('pending', 1, 100),
               getCommentReportsApi('resolved', 1, 100)
@@ -342,96 +340,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     }
   };
 
-  const handleBanUser = async () => {
-    if (!banUsername) {
-      toast.error('Vui lòng nhập tên người dùng!');
-      return;
-    }
-    if (!banReason) {
-      toast.error('Vui lòng nhập lý do cấm!');
-      return;
-    }
-    
-    const durationValue = banDuration ? parseInt(banDuration, 10) : null;
-    if (durationValue !== null && (Number.isNaN(durationValue) || durationValue <= 0)) {
-      toast.error('Thời hạn cấm phải là số ngày hợp lệ!');
-      return;
-    }
-    const isPermanent = !durationValue;
-    
-    setConfirmAction({
-      type: isPermanent ? 'ban-permanent' : 'ban-temp',
-      title: isPermanent ? 'Cấm vĩnh viễn người dùng' : 'Cấm tạm thời người dùng',
-      message: isPermanent 
-        ? `Bạn có chắc muốn cấm vĩnh viễn người dùng ${banUsername}?`
-        : `Bạn có chắc muốn cấm người dùng ${banUsername} trong ${durationValue} ngày?`,
-      confirmText: isPermanent ? 'Cấm vĩnh viễn' : 'Cấm tạm thời',
-      confirmColor: '#ff3b5c',
-      onConfirm: async () => {
-        try {
-          await banUserApi(banUsername, banReason, durationValue);
-          toast.success(isPermanent ? `Đã cấm vĩnh viễn người dùng ${banUsername}` : `Đã cấm người dùng ${banUsername} trong ${durationValue} ngày`);
-          const response = await getAllUsersApi({ page: 1, limit: 100 });
-          setApiUsers(response.users);
-          setBanUsername('');
-          setBanDuration('');
-          setBanReason('');
-          setShowConfirmModal(false);
-          setShowBanModal(false);
-        } catch (error: any) {
-          if (error.response?.status === 404) {
-            toast.error('Không tìm thấy người dùng');
-          } else {
-            toast.error('Không thể cấm người dùng. Vui lòng thử lại.');
-          }
-        }
-      }
-    });
-    setShowConfirmModal(true);
-  };
 
-  const handleWarnUser = async () => {
-    if (!warnUsername) {
-      toast.error('Vui lòng nhập tên người dùng!');
-      return;
-    }
-    if (!warnReason) {
-      toast.error('Vui lòng nhập lý do cảnh báo!');
-      return;
-    }
-    
-    const user = displayUsers.find(u => u.username === warnUsername);
-    const currentWarnings = user?.warnings || 0;
-    const durationValue = currentWarnings === 0 ? 30 : currentWarnings === 1 ? 60 : 90;
-    const warningLevel = currentWarnings + 1;
-    
-    setConfirmAction({
-      type: 'warn-user',
-      title: 'Cảnh báo người dùng',
-      message: `Bạn có chắc muốn cảnh báo người dùng ${warnUsername}?\n\nĐây sẽ là cảnh báo lần ${warningLevel}.\nThời hạn: ${durationValue} ngày (tự động xóa sau ${durationValue} ngày không vi phạm).`,
-      confirmText: 'Cảnh báo',
-      confirmColor: '#eab308',
-      onConfirm: async () => {
-        try {
-          await warnUserApi(warnUsername, warnReason, durationValue);
-          toast.success(`Đã cảnh báo người dùng ${warnUsername}`);
-          const response = await getAllUsersApi({ page: 1, limit: 100 });
-          setApiUsers(response.users);
-          setWarnUsername('');
-          setWarnReason('');
-          setShowConfirmModal(false);
-          setShowWarnModal(false);
-        } catch (error: any) {
-          if (error.response?.status === 404) {
-            toast.error('Không tìm thấy người dùng');
-          } else {
-            toast.error('Không thể cảnh báo người dùng. Vui lòng thử lại.');
-          }
-        }
-      }
-    });
-    setShowConfirmModal(true);
-  };
 
   return (
     <>
@@ -442,6 +351,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         pendingUserReports={pendingUserReports}
         pendingCommentReports={pendingCommentReports}
       >
+        {children || (
+        <>
         {activeTab === 'dashboard' && (
           <Dashboard
             pendingVideoReports={pendingVideoReports}
@@ -460,9 +371,10 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
           <VideoReports
             apiVideoReports={apiVideoReports}
             videos={videos}
-            onVideoClick={onVideoClick}
+            onVideoClick={(videoId) => onVideoClick(videoId, 'video-reports')}
             onResolveReport={handleResolveVideoReport}
             getReportTypeName={getReportTypeName}
+            onReviewVideoReport={onReviewVideoReport}
           />
         )}
         
@@ -488,159 +400,17 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             displayUsers={displayUsers}
             videos={videos}
             onViewUserProfile={onViewUserProfile}
-            onBanUser={(username) => {
-              setBanUsername(username);
-              setBanReason('');
-              setBanDuration('');
-              setShowBanModal(true);
-            }}
-            onWarnUser={(username) => {
-              setWarnUsername(username);
-              setWarnReason('');
-              setShowWarnModal(true);
-            }}
-            setShowConfirmModal={setShowConfirmModal}
-            setConfirmAction={setConfirmAction}
-            setApiUsers={setApiUsers}
           />
         )}
         
         {activeTab === 'profile' && (
           <StaffProfile onBack={() => setActiveTab('dashboard')} />
         )}
+        </>
+        )}
       </StaffLayout>
 
-      {/* Ban User Modal */}
-      {showBanModal && banUsername && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-[#ff3b5c]/30 rounded-xl w-full max-w-lg shadow-2xl">
-            <div className="px-6 py-3 border-b border-zinc-900/50 bg-[#ff3b5c]/5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-[#ff3b5c]/20 flex items-center justify-center">
-                    <UserX className="w-5 h-5 text-[#ff3b5c]" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-medium text-lg">Cấm người dùng</h3>
-                    <p className="text-zinc-500 text-xs">@{banUsername}</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowBanModal(false)} className="text-zinc-500 hover:text-white">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-5 space-y-3">
-              <div>
-                <Label className="text-zinc-400 mb-2 block text-sm">Thời hạn (ngày)</Label>
-                <Input
-                  type="number"
-                  value={banDuration}
-                  onChange={(e) => setBanDuration(e.target.value)}
-                  className="bg-zinc-900/50 border-zinc-800/50 text-white focus:border-[#ff3b5c] h-10"
-                  placeholder="Để trống = vĩnh viễn"
-                />
-                <p className="text-zinc-600 text-xs mt-1">Để trống để cấm vĩnh viễn</p>
-              </div>
-              
-              <div>
-                <Label className="text-zinc-400 mb-2 block text-sm">Lý do cấm</Label>
-                <Input
-                  value={banReason}
-                  onChange={(e) => setBanReason(e.target.value)}
-                  className="bg-zinc-900/50 border-zinc-800/50 text-white focus:border-[#ff3b5c] h-10"
-                  placeholder="Vi phạm quy định cộng đồng..."
-                />
-              </div>
-            </div>
-
-            <div className="px-5 py-3 border-t border-zinc-900/50 flex gap-3 justify-end">
-              <Button onClick={() => setShowBanModal(false)} className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg">
-                Hủy
-              </Button>
-              <Button onClick={handleBanUser} className="bg-[#ff3b5c] hover:bg-[#ff3b5c]/90 text-white h-10 rounded-lg">
-                Xác nhận cấm
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Warn User Modal */}
-      {showWarnModal && warnUsername && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-yellow-500/30 rounded-xl w-full max-w-lg shadow-2xl">
-            <div className="px-6 py-3 border-b border-zinc-900/50 bg-yellow-500/5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                    <AlertTriangle className="w-5 h-5 text-yellow-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-medium text-lg">Cảnh báo người dùng</h3>
-                    <p className="text-zinc-500 text-xs">@{warnUsername}</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowWarnModal(false)} className="text-zinc-500 hover:text-white">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-5 space-y-3">
-              <div>
-                <Label className="text-zinc-400 mb-2 block text-sm">Lý do cảnh báo</Label>
-                <Input
-                  value={warnReason}
-                  onChange={(e) => setWarnReason(e.target.value)}
-                  className="bg-zinc-900/50 border-zinc-800/50 text-white focus:border-yellow-500 h-10"
-                  placeholder="Vi phạm quy định cộng đồng..."
-                />
-                {warnReason.length > 500 && (
-                  <p className="text-red-400 text-xs mt-1">Nội dung cảnh báo không được quá 500 ký tự</p>
-                )}
-              </div>
-              
-              <div>
-                <Label className="text-zinc-400 mb-2 block text-sm">Thông tin cảnh báo</Label>
-                <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-3">
-                  {(() => {
-                    const user = displayUsers.find(u => u.username === warnUsername);
-                    const currentWarnings = user?.warnings || 0;
-                    const warningLevel = currentWarnings + 1;
-                    const duration = currentWarnings === 0 ? 30 : currentWarnings === 1 ? 60 : 90;
-                    return (
-                      <>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-zinc-400 text-sm">Cảnh báo lần:</span>
-                          <span className="text-white font-semibold">{warningLevel}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-zinc-400 text-sm">Thời hạn:</span>
-                          <span className="text-yellow-400 font-semibold">{duration} ngày</span>
-                        </div>
-                        <p className="text-zinc-600 text-xs mt-2">Tự động xóa sau {duration} ngày không vi phạm</p>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-            </div>
-
-            <div className="px-5 py-3 border-t border-zinc-900/50 flex gap-3 justify-end">
-              <Button onClick={() => setShowWarnModal(false)} className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg">
-                Hủy
-              </Button>
-              <Button onClick={handleWarnUser} className="bg-yellow-500 hover:bg-yellow-500/90 text-white h-10 rounded-lg">
-                Xác nhận cảnh báo
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Modal */}
+      {/* Confirmation Modal (for reports only) */}
       {showConfirmModal && confirmAction && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-zinc-950 border border-zinc-900/50 rounded-xl w-full max-w-md shadow-2xl">
