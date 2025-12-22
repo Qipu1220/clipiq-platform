@@ -4,7 +4,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { toast } from 'sonner';
-import { getAllUsersApi, unbanUserApi, clearWarningsApi } from '../../api/admin';
+import { fetchAllUsersApi, unbanUserApi, clearWarningsApi } from '../../api/admin';
 
 interface UserManagementProps {
   displayUsers: Array<{
@@ -235,8 +235,8 @@ export function UserManagement({
                                 toast.success(`Đã gỡ cấm người dùng ${user.username}`);
                                 
                                 // Refresh users list
-                                const response = await getAllUsersApi({ page: 1, limit: 100 });
-                                setApiUsers(response.users);
+                                const response = await fetchAllUsersApi({ page: 1, limit: 100 });
+                                setApiUsers(response.data.users);
                                 
                                 setShowConfirmModal(false);
                               } catch (error: any) {
@@ -288,8 +288,8 @@ export function UserManagement({
                             toast.success(`Đã xóa cảnh báo của ${user.username}`);
                             
                             // Refresh users list
-                            const response = await getAllUsersApi({ page: 1, limit: 100 });
-                            setApiUsers(response.users);
+                            const response = await fetchAllUsersApi({ page: 1, limit: 100 });
+                            setApiUsers(response.data.users);
                           } catch (error: any) {
                             console.error('❌ Error clearing warnings:', error);
                             if (error.response?.status === 404) {

@@ -1,160 +1,405 @@
+import apiClient from './client';
+
+export interface DashboardStats {
+  users: {
+    total: number;
+    staff: number;
+    admins: number;
+    banned: number;
+  };
+  videos: {
+    total: number;
+    uploadedToday: number;
+    totalViews: number;
+    views24h: number;
+  };
+  reports: {
+    pending: number;
+  };
+  appeals: {
+    pending: number;
+  };
+  system: {
+    maintenanceMode: boolean;
+    serviceMaintenanceMode: boolean;
+    storage: {
+      used: number;
+      max: number;
+      usedFormatted: string;
+      maxFormatted: string;
+      percentage: string;
+    };
+    uptime: string;
+  };
+}
+
+export interface SystemLog {
+  id: string;
+  action: string;
+  user: string;
+  details: string;
+  timestamp: string;
+}
+
+export interface DashboardSummaryResponse {
+  success: boolean;
+  data: {
+    stats: DashboardStats;
+    topVideos?: Array<{
+      id: string;
+      title: string;
+      views: number;
+      thumbnailUrl?: string;
+      createdAt: string;
+      uploader: {
+        username: string;
+        displayName?: string;
+        avatarUrl?: string;
+      };
+    }>;
+    reports?: {
+      userReports: Array<{
+        id: string;
+        type: string;
+        reason: string;
+        createdAt: string;
+        reportedUser?: string;
+        reportedBy?: string;
+      }>;
+      videoReports: Array<{
+        id: string;
+        type: string;
+        reason: string;
+        createdAt: string;
+        reportedVideo?: string;
+        reportedBy?: string;
+      }>;
+    };
+    appeals?: Array<{
+      id: string;
+      reason: string;
+      createdAt: string;
+      user: {
+        username: string;
+        displayName?: string;
+        avatarUrl?: string;
+      };
+    }>;
+    systemLogs?: SystemLog[];
+  };
+}
+
 /**
- * Admin/User Management API Client
- * API calls for staff user management operations
+ * Fetch admin dashboard summary data
  */
-
-import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:5000/api/v1';
-
-// Types
-export interface UserFilters {
-  role?: 'admin' | 'staff' | 'user';
-  banned?: boolean;
-  search?: string;
-  page?: number;
-  limit?: number;
-}
-
-export interface UserStats {
-  videos: number;
-  followers: number;
-  following: number;
-}
+export const fetchDashboardSummaryApi = async (): Promise<DashboardSummaryResponse> => {
+  const response = await apiClient.get<DashboardSummaryResponse>('/admin/dashboard/summary');
+  return response.data;
+};
 
 export interface User {
   id: string;
   username: string;
   email: string;
-  role: string;
+  role: 'admin' | 'staff' | 'user';
   displayName?: string;
   bio?: string;
   avatarUrl?: string;
   banned: boolean;
-  banExpiry?: string | null;
-  banReason?: string | null;
+  banExpiry?: string;
+  banReason?: string;
   warnings: number;
-  stats: UserStats;
+  isDemoted?: boolean;
   createdAt: string;
   updatedAt: string;
+  videoCount: number;
 }
 
-export interface UsersResponse {
-  users: User[];
-  pagination: {
+export interface UsersListResponse {
+  success: boolean;
+  data: {
+    users: User[];
     total: number;
-    page: number;
-    pages: number;
-    limit: number;
   };
 }
 
 /**
- * Get authentication headers with JWT token
+ * Fetch all users (admin)
  */
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('accessToken');
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  };
-};
-
-/**
- * Get all users with optional filters
- */
-export const getAllUsersApi = async (filters: UserFilters = {}): Promise<UsersResponse> => {
-  const { role, banned, search, page = 1, limit = 100 } = filters;
-  
+export const fetchAllUsersApi = async (options?: {
+  page?: number;
+  limit?: number;
+  role?: 'user' | 'staff' | 'admin';
+  banned?: boolean;
+  search?: string;
+}): Promise<UsersListResponse> => {
   const params = new URLSearchParams();
-  if (role) params.append('role', role);
-  if (banned !== undefined) params.append('banned', banned.toString());
-  if (search) params.append('search', search);
-  params.append('page', page.toString());
-  params.append('limit', limit.toString());
-  
-  const response = await axios.get(
-    `${API_BASE_URL}/admin/users?${params.toString()}`,
-    getAuthHeaders()
-  );
-  
-  return response.data.data;
+  if (options?.page) params.append('page', options.page.toString());
+  if (options?.limit) params.append('limit', options.limit.toString());
+  if (options?.role) params.append('role', options.role);
+  if (options?.banned !== undefined) params.append('banned', options.banned.toString());
+  if (options?.search) params.append('search', options.search);
+
+  const queryString = params.toString();
+  const url = `/admin/users${queryString ? `?${queryString}` : ''}`;
+
+  const response = await apiClient.get<UsersListResponse>(url);
+  // Backend returns { success: true, data: { users, total } }
+  // So response.data is already the full object
+  return response.data;
 };
 
-/**
- * Ban a user
- */
-export const banUserApi = async (username: string, reason: string, duration: number | null = null): Promise<User> => {
-  const requestBody: { reason: string; duration?: number } = { reason };
-  
-  // Only include duration if it's a valid number
-  if (duration !== null && duration > 0) {
-    requestBody.duration = duration;
-  }
-  
-  console.log('🚫 Banning user:', { username, requestBody });
-  
-  const response = await axios.put(
-    `${API_BASE_URL}/admin/users/${username}/ban`,
-    requestBody,
-    getAuthHeaders()
-  );
-  
-  return response.data.data;
-};
-
-/**
- * Unban a user
- */
-export const unbanUserApi = async (username: string): Promise<User> => {
-  const response = await axios.put(
-    `${API_BASE_URL}/admin/users/${username}/unban`,
-    {},
-    getAuthHeaders()
-  );
-  
-  return response.data.data;
-};
-
-/**
- * Warn a user
- */
-export const warnUserApi = async (username: string, reason: string, duration: number = 7): Promise<User> => {
-  const requestBody = {
-    reason,
-    duration: duration || 7 // Ensure duration is at least 7 if 0 or falsy
+export interface StaffListResponse {
+  success: boolean;
+  data: {
+    staff: User[];
   };
-  
-  console.log('⚠️ Warning user:', { username, requestBody });
-  
-  const response = await axios.put(
-    `${API_BASE_URL}/admin/users/${username}/warn`,
-    requestBody,
-    getAuthHeaders()
-  );
-  
-  return response.data.data;
+}
+
+/**
+ * Get all staff members with optional filter
+ * @param isDemoted - Filter by is_demoted status (undefined = all)
+ */
+export const getStaffMembersApi = async (isDemoted?: boolean): Promise<StaffListResponse> => {
+  const params = new URLSearchParams();
+  if (isDemoted !== undefined) {
+    params.append('isDemoted', isDemoted.toString());
+  }
+  const queryString = params.toString();
+  const url = `/admin/staff${queryString ? `?${queryString}` : ''}`;
+  const response = await apiClient.get<StaffListResponse>(url);
+  return response.data;
+};
+
+export interface UserResponse {
+  success: boolean;
+  data: {
+    user: User;
+  };
+}
+
+/**
+ * Promote user to staff or reactivate demoted staff
+ * @param username - Username to promote
+ */
+export const promoteStaffApi = async (username: string): Promise<UserResponse> => {
+  const response = await apiClient.post<UserResponse>(`/admin/staff/${username}/promote`);
+  return response.data;
 };
 
 /**
- * Clear warnings for a user
+ * Demote staff (set is_demoted flag)
+ * @param username - Username of staff to demote
  */
-export const clearWarningsApi = async (username: string): Promise<User> => {
-  const response = await axios.put(
-    `${API_BASE_URL}/admin/users/${username}/clear-warnings`,
-    {},
-    getAuthHeaders()
-  );
-  
-  return response.data.data;
+export const demoteStaffApi = async (username: string): Promise<UserResponse> => {
+  const response = await apiClient.put<UserResponse>(`/admin/staff/${username}/demote`);
+  return response.data;
 };
 
-export default {
-  getAllUsersApi,
-  banUserApi,
-  unbanUserApi,
-  warnUserApi,
-  clearWarningsApi
+/**
+ * Delete staff account permanently (only if is_demoted = true)
+ * @param username - Username of staff to delete
+ */
+export const deleteStaffAccountApi = async (username: string): Promise<void> => {
+  await apiClient.delete(`/admin/staff/${username}`);
 };
+
+/**
+ * Ban user account
+ * @param username - Username to ban
+ * @param reason - Reason for ban
+ * @param durationDays - Duration in days (optional, null = permanent)
+ */
+export const banUserApi = async (username: string, reason: string, durationDays?: number): Promise<UserResponse> => {
+  const response = await apiClient.post<UserResponse>(`/admin/users/${username}/ban`, {
+    reason,
+    durationDays: durationDays || null
+  });
+  return response.data;
+};
+
+/**
+ * Unban user account
+ * @param username - Username to unban
+ */
+export const unbanUserApi = async (username: string): Promise<UserResponse> => {
+  const response = await apiClient.post<UserResponse>(`/admin/users/${username}/unban`);
+  return response.data;
+};
+
+/**
+ * Clear user warnings
+ * @param username - Username to clear warnings
+ */
+export const clearWarningsApi = async (username: string): Promise<UserResponse> => {
+  const response = await apiClient.post<UserResponse>(`/admin/users/${username}/clear-warnings`);
+  return response.data;
+};
+
+/**
+ * Warn user account
+ * @param username - Username to warn
+ * @param reason - Reason for warning
+ * @param durationDays - Duration in days (optional, default based on warning count)
+ */
+export const warnUserApi = async (username: string, reason: string, durationDays?: number): Promise<UserResponse> => {
+  const response = await apiClient.post<UserResponse>(`/admin/users/${username}/warn`, {
+    reason,
+    durationDays: durationDays || null
+  });
+  return response.data;
+};
+
+/**
+ * Delete user account permanently
+ * @param username - Username to delete
+ */
+export const deleteUserApi = async (username: string): Promise<UserResponse> => {
+  const response = await apiClient.delete<UserResponse>(`/admin/users/${username}`);
+  return response.data;
+};
+
+export interface SystemLogsResponse {
+  success: boolean;
+  data: {
+    logs: SystemLog[];
+    pagination: {
+      total: number;
+      page: number;
+      pages: number;
+      limit: number;
+    };
+  };
+}
+
+/**
+ * Fetch system logs with pagination
+ * @param options - Query options
+ */
+export const fetchSystemLogsApi = async (options?: {
+  page?: number;
+  limit?: number;
+  actionType?: string;
+}): Promise<SystemLogsResponse> => {
+  const params = new URLSearchParams();
+  if (options?.page) params.append('page', options.page.toString());
+  if (options?.limit) params.append('limit', options.limit.toString());
+  if (options?.actionType) params.append('actionType', options.actionType);
+
+  const queryString = params.toString();
+  const url = `/admin/system-logs${queryString ? `?${queryString}` : ''}`;
+
+  const response = await apiClient.get<SystemLogsResponse>(url);
+  return response.data;
+};
+
+export interface AnalyticsStats {
+  totalViews: {
+    current: number;
+    previous: number;
+    change: number; // percentage change
+  };
+  videosUploaded: {
+    current: number;
+    previous: number;
+    change: number; // percentage change
+  };
+  activeUsers: {
+    current: number;
+    previous: number;
+    change: number; // percentage change
+  };
+  averageWatchTime: {
+    current: number; // in seconds
+    previous: number; // in seconds
+    change: number; // percentage change
+  };
+  engagementRate: {
+    current: number; // percentage
+    previous: number; // percentage
+    change: number; // percentage change
+  };
+  topVideos: Array<{
+    id: string;
+    title: string;
+    views: number;
+    thumbnailUrl?: string;
+    createdAt: string;
+    uploader: {
+      username: string;
+      displayName?: string;
+      avatarUrl?: string;
+    };
+  }>;
+}
+
+export interface AnalyticsResponse {
+  success: boolean;
+  data: AnalyticsStats;
+}
+
+/**
+ * Fetch analytics statistics
+ */
+export const fetchAnalyticsApi = async (): Promise<AnalyticsResponse> => {
+  const response = await apiClient.get<AnalyticsResponse>('/admin/analytics');
+  return response.data;
+};
+
+export interface MaintenanceModeResponse {
+  success: boolean;
+  data: {
+    maintenanceMode: boolean;
+  };
+}
+
+/**
+ * Toggle system maintenance mode
+ * @param enabled - True to enable, false to disable
+ */
+export const toggleMaintenanceModeApi = async (enabled: boolean): Promise<MaintenanceModeResponse> => {
+  const response = await apiClient.put<MaintenanceModeResponse>('/admin/settings/maintenance-mode', {
+    enabled
+  });
+  return response.data;
+};
+
+/**
+ * Toggle service maintenance mode
+ * @param enabled - True to enable, false to disable
+ */
+export const toggleServiceMaintenanceModeApi = async (enabled: boolean): Promise<MaintenanceModeResponse> => {
+  const response = await apiClient.put<MaintenanceModeResponse>('/admin/settings/service-maintenance-mode', {
+    enabled
+  });
+  return response.data;
+};
+
+export interface GeneralSettings {
+  siteName: string;
+  maxUploadSizeMB: number;
+  maxVideoDurationSeconds: number;
+}
+
+export interface GeneralSettingsResponse {
+  success: boolean;
+  data: GeneralSettings;
+}
+
+/**
+ * Fetch general settings
+ */
+export const fetchGeneralSettingsApi = async (): Promise<GeneralSettingsResponse> => {
+  const response = await apiClient.get<GeneralSettingsResponse>('/admin/settings/general');
+  return response.data;
+};
+
+/**
+ * Update general settings
+ * @param settings - General settings object
+ */
+export const updateGeneralSettingsApi = async (settings: GeneralSettings): Promise<GeneralSettingsResponse> => {
+  const response = await apiClient.put<GeneralSettingsResponse>('/admin/settings/general', settings);
+  return response.data;
+};
+

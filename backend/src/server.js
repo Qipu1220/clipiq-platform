@@ -15,6 +15,7 @@ import videoRoutes from './routes/video.routes.js';
 import userRoutes from './routes/user.routes.js';
 import reportRoutes from './routes/report.routes.js';
 import staffRoutes from './routes/staff.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
@@ -27,8 +28,15 @@ const PORT = process.env.PORT || 5000;
 // ===========================================
 
 // CORS - Allow frontend to access API
+// Parse CORS_ORIGIN from environment variable (can be comma-separated string or array)
+const corsOrigin = process.env.CORS_ORIGIN 
+  ? (typeof process.env.CORS_ORIGIN === 'string' && process.env.CORS_ORIGIN.includes(',')
+      ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
+      : process.env.CORS_ORIGIN)
+  : ['http://localhost:3000', 'http://localhost:5173'];
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: corsOrigin,
   credentials: true
 }));
 
@@ -62,6 +70,7 @@ app.use('/api/v1/videos', videoRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/staff', staffRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 // ===========================================
 // Error Handling

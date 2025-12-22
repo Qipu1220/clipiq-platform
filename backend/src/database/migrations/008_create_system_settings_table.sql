@@ -19,6 +19,7 @@ CREATE TRIGGER trigger_update_system_settings_timestamp
 -- Insert default settings
 INSERT INTO system_settings (key, value, description) VALUES
     ('maintenance_mode', 'false', 'Enable/disable maintenance mode'),
+    ('service_maintenance_mode', 'false', 'Enable/disable service maintenance mode (admin and staff can access, regular users cannot)'),
     ('app_version', '1.0.0', 'Current application version'),
     ('max_video_size_mb', '500', 'Maximum video file size in MB'),
     ('max_upload_per_day', '10', 'Maximum uploads per user per day'),

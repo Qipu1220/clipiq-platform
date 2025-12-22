@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState, AppDispatch } from './store/store';
 import { restoreSessionThunk, getCurrentUserThunk } from './store/authSlice';
+import { setMaintenanceMode, setServiceMaintenanceMode } from './store/systemSlice';
 import { fetchVideosThunk } from './store/videosSlice';
+import { getSystemStatusApi } from './api/auth';
 import { LoginPage } from './components/LoginPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
 import { BannedModal } from './components/BannedModal';
@@ -22,30 +24,119 @@ function AppContent() {
   const dispatch = useDispatch<AppDispatch>();
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
-  const maintenanceMode = useSelector((state: RootState) => state.auth.maintenanceMode);
+  const maintenanceMode = useSelector((state: RootState) => state.system?.maintenanceMode || false);
+  const serviceMaintenanceMode = useSelector((state: RootState) => state.system?.serviceMaintenanceMode || false);
+  const isStatusLoaded = useSelector((state: RootState) => state.system?.isStatusLoaded || false);
   const loading = useSelector((state: RootState) => state.auth.loading);
 
-  const [currentPage, setCurrentPage] = useState('home');
-  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
-  const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
+  const NAV_STATE_KEY = 'appNavigationState';
+
+  // Helper functions - memoized to avoid re-creating on every render
+  const loadNavState = useCallback(() => {
+    try {
+      const raw = sessionStorage.getItem(NAV_STATE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw) as { page: string; videoId: string | null; username: string | null };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const persistNavState = useCallback((page: string, videoId: string | null, username: string | null) => {
+    try {
+      const payload = { page, videoId, username };
+      sessionStorage.setItem(NAV_STATE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  const parseHash = useCallback(() => {
+    const hash = window.location.hash.substring(1); // Remove #
+    const params = new URLSearchParams(hash);
+    return {
+      page: params.get('page') || null,
+      videoId: params.get('videoId') || null,
+      username: params.get('username') || null
+    };
+  }, []);
+
+  const updateHash = useCallback((page: string, videoId: string | null = null, username: string | null = null) => {
+    const params = new URLSearchParams();
+    params.set('page', page);
+    if (videoId) params.set('videoId', videoId);
+    if (username) params.set('username', username);
+    window.location.hash = params.toString();
+  }, []);
+
+  const getDefaultPage = useCallback(() => {
+    if (currentUser?.role === 'admin') return 'admin';
+    if (currentUser?.role === 'staff') return 'staff';
+    return 'home';
+  }, [currentUser?.role]);
+
+  // Init state from hash first, then sessionStorage, fallback to home
+  // Compute initial state once using useMemo
+  const initialState = useMemo(() => {
+    try {
+      const hashParams = parseHash();
+      if (hashParams.page) {
+        return {
+          page: hashParams.page,
+          videoId: hashParams.videoId,
+          username: hashParams.username,
+        };
+      }
+      const stored = loadNavState();
+      if (stored?.page) {
+        return {
+          page: stored.page,
+          videoId: stored.videoId,
+          username: stored.username,
+        };
+      }
+      return { page: 'home', videoId: null, username: null };
+    } catch (error) {
+      console.error('Γ¥î [Navigation] Error in initial state:', error);
+      return { page: 'home', videoId: null, username: null };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only compute once on mount
+
+  const [currentPage, setCurrentPage] = useState(initialState.page);
+  const [selectedVideoId, setSelectedVideoId] = useState(initialState.videoId as string | null);
+  const [selectedUsername, setSelectedUsername] = useState(initialState.username as string | null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Restore session and fetch videos on app load
   useEffect(() => {
     dispatch(restoreSessionThunk());
+    
+    // Check maintenance mode status
+    getSystemStatusApi()
+      .then(response => {
+        dispatch(setMaintenanceMode(response.data.maintenanceMode));
+        dispatch(setServiceMaintenanceMode(response.data.serviceMaintenanceMode));
+      })
+      .catch(error => {
+        console.error('Failed to fetch system status:', error);
+      });
+    
     // Fetch videos on app load
-    console.log('🚀 Dispatching fetchVideosThunk');
-    dispatch(fetchVideosThunk()).then((result: any) => {
-      console.log('✅ fetchVideosThunk result:', result);
-      console.log('📊 Redux state after dispatch:', store.getState().videos);
+    console.log('≡ƒÜÇ Dispatching fetchVideosThunk');
+    dispatch(fetchVideosThunk({})).then((result: any) => {
+      console.log('Γ£à fetchVideosThunk result:', result);
+      console.log('≡ƒôè Redux state after dispatch:', store.getState().videos);
     }).catch((error: any) => {
-      console.error('❌ fetchVideosThunk error:', error);
+      console.error('Γ¥î fetchVideosThunk error:', error);
     });
   }, [dispatch]);
 
   // Refetch videos when user logs in to ensure like status is correct
   useEffect(() => {
     if (isAuthenticated) {
-      dispatch(fetchVideosThunk());
+      console.log('≡ƒöä User authenticated, refetching videos to update like status');
+      dispatch(fetchVideosThunk({}));
       // Also refresh user data immediately after login to ensure warnings are shown
       dispatch(getCurrentUserThunk());
     }
@@ -63,8 +154,113 @@ function AppContent() {
     return () => clearInterval(intervalId);
   }, [isAuthenticated, dispatch]);
 
-  // Show loading screen while checking session
-  if (loading && !isAuthenticated) {
+  // Restore page state from URL hash when authenticated and user info is available
+  useEffect(() => {
+    if (isAuthenticated && currentUser && !isInitialized) {
+      console.log('≡ƒöº [Navigation] Restoring page state - isAuthenticated:', isAuthenticated, 'currentUser:', currentUser?.role);
+      const hashParams = parseHash();
+      const defaultPage = getDefaultPage();
+      const stored = loadNavState();
+      
+      console.log('≡ƒöì [Navigation] Hash params:', hashParams, 'Stored:', stored, 'Default:', defaultPage);
+      
+      if (hashParams.page) {
+        // Restore from URL hash
+        console.log('Γ£à [Navigation] Restoring from hash:', hashParams);
+        setCurrentPage(hashParams.page);
+        if (hashParams.videoId) setSelectedVideoId(hashParams.videoId);
+        if (hashParams.username) setSelectedUsername(hashParams.username);
+        persistNavState(hashParams.page, hashParams.videoId, hashParams.username);
+      } else if (stored?.page) {
+        // Fallback to session storage
+        console.log('Γ£à [Navigation] Restoring from sessionStorage:', stored);
+        setCurrentPage(stored.page);
+        if (stored.videoId) setSelectedVideoId(stored.videoId);
+        if (stored.username) setSelectedUsername(stored.username);
+        updateHash(stored.page, stored.videoId, stored.username);
+      } else {
+        // No hash, set default page and update URL
+        console.log('ΓÜá∩╕Å [Navigation] No saved state, using default page:', defaultPage);
+        setCurrentPage(defaultPage);
+        updateHash(defaultPage);
+        persistNavState(defaultPage, null, null);
+      }
+      setIsInitialized(true);
+      console.log('Γ£à [Navigation] Navigation initialized');
+    }
+  }, [isAuthenticated, currentUser, isInitialized, parseHash, getDefaultPage, loadNavState, updateHash, persistNavState]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (isAuthenticated && currentUser && isInitialized) {
+        const hashParams = parseHash();
+        if (hashParams.page) {
+          setCurrentPage(hashParams.page);
+          setSelectedVideoId(hashParams.videoId);
+          setSelectedUsername(hashParams.username);
+          persistNavState(hashParams.page, hashParams.videoId, hashParams.username);
+        } else {
+          // No hash: fallback to stored nav or default, but do not push new history entry
+          const stored = loadNavState();
+          if (stored?.page) {
+            setCurrentPage(stored.page);
+            setSelectedVideoId(stored.videoId);
+            setSelectedUsername(stored.username);
+          } else {
+            const defaultPage = getDefaultPage();
+            setCurrentPage(defaultPage);
+            setSelectedVideoId(null);
+            setSelectedUsername(null);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [isAuthenticated, currentUser, isInitialized, parseHash, persistNavState, loadNavState, getDefaultPage]);
+
+  // Define all handlers BEFORE any early returns - REQUIRED by Rules of Hooks!
+  const handleNavigate = useCallback((page: string) => {
+    setCurrentPage(page);
+    setSelectedVideoId(null);
+    setSelectedUsername(null);
+    updateHash(page);
+    persistNavState(page, null, null);
+  }, [updateHash, persistNavState]);
+
+  const handleVideoClick = useCallback((videoId: string) => {
+    setSelectedVideoId(videoId);
+    setCurrentPage('video-player');
+    updateHash('video-player', videoId, null);
+    persistNavState('video-player', videoId, null);
+  }, [updateHash, persistNavState]);
+
+  const handleUploadComplete = useCallback(() => {
+    const defaultPage = getDefaultPage();
+    setCurrentPage(defaultPage);
+    updateHash(defaultPage);
+    persistNavState(defaultPage, null, null);
+  }, [getDefaultPage, updateHash, persistNavState]);
+
+  const handleViewUserProfile = useCallback((username: string) => {
+    setSelectedUsername(username);
+    // If viewing own profile, go to profile page, otherwise go to public profile page
+    if (username === currentUser?.username) {
+      setCurrentPage('profile');
+      updateHash('profile', null, null);
+      persistNavState('profile', null, null);
+    } else {
+      setCurrentPage('view-user-profile');
+      updateHash('view-user-profile', null, username);
+      persistNavState('view-user-profile', null, username);
+    }
+  }, [currentUser?.username, updateHash, persistNavState]);
+
+  // Show loading screen while checking session or system status
+  // MUST wait for status to be loaded before showing anything
+  if (loading || !isStatusLoaded) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-white text-xl">Đang tải...</div>
@@ -73,8 +269,26 @@ function AppContent() {
   }
 
   // Show login page if not authenticated
+  // Allow everyone to see login page, even during maintenance
+  // Admin needs to login first to bypass maintenance mode
   if (!isAuthenticated) {
     return <LoginPage />;
+  }
+
+  // After login, check maintenance mode based on user role
+  // System maintenance: only admin can access
+  console.log('🔍 Maintenance check - maintenanceMode:', maintenanceMode, 'user role:', currentUser?.role);
+  if (maintenanceMode && currentUser?.role !== 'admin') {
+    console.log('🚫 Showing maintenance screen (system maintenance)');
+    return <MaintenanceScreen />;
+  }
+  
+  // Check service maintenance mode
+  // Service maintenance: admin and staff can access, regular users cannot
+  console.log('🔍 Service maintenance check - serviceMaintenanceMode:', serviceMaintenanceMode, 'user role:', currentUser?.role);
+  if (serviceMaintenanceMode && currentUser?.role === 'user') {
+    console.log('🚫 Showing maintenance screen (service maintenance)');
+    return <MaintenanceScreen />;
   }
 
   // Show banned modal if user is banned (staff and admin bypass this)
@@ -92,39 +306,21 @@ function AppContent() {
     }
   }
 
-  // Show maintenance screen for non-admin users when maintenance is active
-  if (maintenanceMode && currentUser?.role !== 'admin') {
-    return <MaintenanceScreen />;
-  }
-
-  const handleNavigate = (page: string) => {
-    setCurrentPage(page);
-    setSelectedVideoId(null);
-    setSelectedUsername(null);
-  };
-
-  const handleVideoClick = (videoId: string) => {
-    setSelectedVideoId(videoId);
-    setCurrentPage('video-player');
-  };
-
-  const handleUploadComplete = () => {
-    setCurrentPage('home');
-  };
-
-  const handleViewUserProfile = (username: string) => {
-    setSelectedUsername(username);
-    // If viewing own profile, go to profile page, otherwise go to public profile page
-    if (username === currentUser?.username) {
-      setCurrentPage('profile');
-    } else {
-      setCurrentPage('view-user-profile');
-    }
-  };
-
   const renderPage = () => {
+    console.log('≡ƒôä [Navigation] Rendering page - currentPage:', currentPage, 'role:', currentUser?.role, 'videoId:', selectedVideoId, 'username:', selectedUsername);
+    
+    // If user is not loaded yet, show loading
+    if (!currentUser) {
+      console.log('ΓÅ│ [Navigation] Waiting for user data...');
+      return (
+        <div className="min-h-screen bg-black flex items-center justify-center">
+          <div className="text-white text-xl">Đang tải...</div>
+        </div>
+      );
+    }
+    
     // Admin routes
-    if (currentUser?.role === 'admin') {
+    if (currentUser.role === 'admin') {
       if (currentPage === 'admin' || currentPage === 'profile') {
         return <AdminDashboard onVideoClick={handleVideoClick} onViewUserProfile={handleViewUserProfile} />;
       }
@@ -138,7 +334,7 @@ function AppContent() {
     }
 
     // Staff routes
-    if (currentUser?.role === 'staff') {
+    if (currentUser.role === 'staff') {
       if (currentPage === 'staff') {
         return <StaffDashboard onVideoClick={handleVideoClick} onViewUserProfile={handleViewUserProfile} />;
       }
@@ -152,7 +348,7 @@ function AppContent() {
     }
 
     // User routes
-    if (currentUser?.role === 'user') {
+    if (currentUser.role === 'user') {
       if (currentPage === 'upload') {
         return <UploadVideo onUploadComplete={handleUploadComplete} />;
       }
@@ -163,19 +359,17 @@ function AppContent() {
         return <VideoPlayer videoId={selectedVideoId} onBack={() => handleNavigate('home')} onViewUserProfile={handleViewUserProfile} />;
       }
       if (currentPage === 'view-user-profile' && selectedUsername) {
-        return <PublicUserProfile username={selectedUsername} onVideoClick={() => setCurrentPage('home')} onBack={() => handleNavigate('home')} />;
+        return <PublicUserProfile username={selectedUsername} onVideoClick={() => handleNavigate('home')} onBack={() => handleNavigate('home')} />;
       }
       if (currentPage === 'profile') {
-        return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
+        return <UserProfile onVideoClick={() => handleNavigate('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
       }
       // Use TikTok-style layout for home page
       return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
     }
 
-    if (currentPage === 'profile') {
-      return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
-    }
-
+    // Fallback for unknown role
+    console.warn('ΓÜá∩╕Å [Navigation] Unknown user role:', currentUser.role);
     return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
   };
 
@@ -185,17 +379,17 @@ function AppContent() {
       {renderPage()}
       
       {/* Warning banner for users with warnings (only show for regular users, not staff/admin) */}
-      {currentUser?.role === 'user' && currentUser?.warnings > 0 && (
-        <WarningBanner warnings={currentUser.warnings} username={currentUser.username} />
-      )}
+      <WarningBanner 
+        warnings={currentUser?.warnings || 0} 
+        username={currentUser?.username || ''} 
+        userRole={currentUser?.role || 'user'}
+      />
     </div>
   );
 }
 
 export default function App() {
   return (
-    <Provider store={store}>
-      <AppContent />
-    </Provider>
+    <Provider store={store} children={<AppContent />} />
   );
 }

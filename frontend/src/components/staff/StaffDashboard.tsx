@@ -6,7 +6,7 @@ import { warnUser } from '../../store/usersSlice';
 import { deleteVideo } from '../../store/videosSlice';
 import { toast } from 'sonner';
 import { getVideoReportsApi, resolveVideoReportApi, VideoReport, getUserReportsApi, resolveUserReportApi, UserReport, getCommentReportsApi, resolveCommentReportApi, CommentReport } from '../../api/reports';
-import { getAllUsersApi, banUserApi, warnUserApi, User as ApiUser } from '../../api/admin';
+import { fetchAllUsersApi, banUserApi, warnUserApi, User as ApiUser } from '../../api/admin';
 import { StaffLayout } from './StaffLayout';
 import { Dashboard } from './Dashboard';
 import { VideoReports } from './VideoReports';
@@ -14,6 +14,7 @@ import { UserReports } from './UserReports';
 import { CommentReports } from './CommentReports';
 import { UserManagement } from './UserManagement';
 import { StaffProfile } from './StaffProfile';
+import { BanUserModal } from '../shared/BanUserModal';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
@@ -58,8 +59,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     onConfirm: () => void;
   } | null>(null);
 
-  // Use API users if available, otherwise fall back to Redux store
-  const displayUsers = apiUsers.length > 0 ? apiUsers.map(u => ({
+  // Use API users only - no fallback to mock data
+  const displayUsers = apiUsers.map(u => ({
     id: u.id,
     username: u.username,
     displayName: u.displayName,
@@ -68,9 +69,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     banReason: u.banReason,
     banExpiry: u.banExpiry,
     warnings: u.warnings,
-    videoCount: u.stats.videos,
-    followerCount: u.stats.followers
-  })) : allUsers;
+    videoCount: u.videoCount
+  }));
 
   // Helper function to get Vietnamese report type name
   const getReportTypeName = (type: string): string => {
@@ -144,10 +144,14 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
 
     const fetchUsers = async () => {
       try {
-        const response = await getAllUsersApi({ page: 1, limit: 100 });
-        setApiUsers(response.users);
+        console.log('🔍 Staff: Fetching users...');
+        const response = await fetchAllUsersApi({ page: 1, limit: 100 });
+        console.log('✅ Staff: Users fetched:', response.data.users.length, 'users');
+        console.log('📊 Staff: First user:', response.data.users[0]);
+        setApiUsers(response.data.users);
       } catch (error: any) {
         console.error('❌ Error fetching users:', error);
+        console.error('Error response:', error.response?.data);
       }
     };
 
@@ -352,8 +356,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
       return;
     }
     
-    const durationValue = banDuration ? parseInt(banDuration, 10) : null;
-    if (durationValue !== null && (Number.isNaN(durationValue) || durationValue <= 0)) {
+    const durationValue = banDuration ? parseInt(banDuration, 10) : undefined;
+    if (durationValue !== undefined && (Number.isNaN(durationValue) || durationValue <= 0)) {
       toast.error('Thời hạn cấm phải là số ngày hợp lệ!');
       return;
     }
@@ -371,8 +375,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         try {
           await banUserApi(banUsername, banReason, durationValue);
           toast.success(isPermanent ? `Đã cấm vĩnh viễn người dùng ${banUsername}` : `Đã cấm người dùng ${banUsername} trong ${durationValue} ngày`);
-          const response = await getAllUsersApi({ page: 1, limit: 100 });
-          setApiUsers(response.users);
+          const response = await fetchAllUsersApi({ page: 1, limit: 100 });
+          setApiUsers(response.data.users);
           setBanUsername('');
           setBanDuration('');
           setBanReason('');
@@ -415,8 +419,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         try {
           await warnUserApi(warnUsername, warnReason, durationValue);
           toast.success(`Đã cảnh báo người dùng ${warnUsername}`);
-          const response = await getAllUsersApi({ page: 1, limit: 100 });
-          setApiUsers(response.users);
+          const response = await fetchAllUsersApi({ page: 1, limit: 100 });
+          setApiUsers(response.data.users);
           setWarnUsername('');
           setWarnReason('');
           setShowConfirmModal(false);
@@ -451,7 +455,11 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             resolvedToday={resolvedToday}
             apiVideoReports={apiVideoReports}
             apiUserReports={apiUserReports}
-            allUsers={allUsers}
+            allUsers={displayUsers.map(u => ({
+              username: u.username,
+              warnings: u.warnings,
+              banned: u.banned
+            }))}
             onViewUserProfile={onViewUserProfile}
           />
         )}
@@ -506,66 +514,21 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         )}
         
         {activeTab === 'profile' && (
-          <StaffProfile onBack={() => setActiveTab('dashboard')} />
+          <StaffProfile />
         )}
       </StaffLayout>
 
       {/* Ban User Modal */}
-      {showBanModal && banUsername && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-[#ff3b5c]/30 rounded-xl w-full max-w-lg shadow-2xl">
-            <div className="px-6 py-3 border-b border-zinc-900/50 bg-[#ff3b5c]/5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-[#ff3b5c]/20 flex items-center justify-center">
-                    <UserX className="w-5 h-5 text-[#ff3b5c]" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-medium text-lg">Cấm người dùng</h3>
-                    <p className="text-zinc-500 text-xs">@{banUsername}</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowBanModal(false)} className="text-zinc-500 hover:text-white">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-5 space-y-3">
-              <div>
-                <Label className="text-zinc-400 mb-2 block text-sm">Thời hạn (ngày)</Label>
-                <Input
-                  type="number"
-                  value={banDuration}
-                  onChange={(e) => setBanDuration(e.target.value)}
-                  className="bg-zinc-900/50 border-zinc-800/50 text-white focus:border-[#ff3b5c] h-10"
-                  placeholder="Để trống = vĩnh viễn"
-                />
-                <p className="text-zinc-600 text-xs mt-1">Để trống để cấm vĩnh viễn</p>
-              </div>
-              
-              <div>
-                <Label className="text-zinc-400 mb-2 block text-sm">Lý do cấm</Label>
-                <Input
-                  value={banReason}
-                  onChange={(e) => setBanReason(e.target.value)}
-                  className="bg-zinc-900/50 border-zinc-800/50 text-white focus:border-[#ff3b5c] h-10"
-                  placeholder="Vi phạm quy định cộng đồng..."
-                />
-              </div>
-            </div>
-
-            <div className="px-5 py-3 border-t border-zinc-900/50 flex gap-3 justify-end">
-              <Button onClick={() => setShowBanModal(false)} className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg">
-                Hủy
-              </Button>
-              <Button onClick={handleBanUser} className="bg-[#ff3b5c] hover:bg-[#ff3b5c]/90 text-white h-10 rounded-lg">
-                Xác nhận cấm
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <BanUserModal
+        isOpen={showBanModal}
+        onClose={() => setShowBanModal(false)}
+        username={banUsername}
+        banDuration={banDuration}
+        setBanDuration={setBanDuration}
+        banReason={banReason}
+        setBanReason={setBanReason}
+        onConfirm={handleBanUser}
+      />
 
       {/* Warn User Modal */}
       {showWarnModal && warnUsername && (

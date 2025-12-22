@@ -46,7 +46,7 @@ export async function getAllUsers(filters = {}) {
     paramIndex++;
   }
   
-  if (banned !== undefined) {
+  if (banned !== undefined && banned !== null) {
     conditions.push(`u.banned = $${paramIndex}`);
     params.push(banned);
     paramIndex++;
@@ -79,7 +79,7 @@ export async function getAllUsers(filters = {}) {
       countParams.push(role);
       countParamIndex++;
     }
-    if (banned !== undefined) {
+    if (banned !== undefined && banned !== null) {
       countConditions.push(`u.banned = $${countParamIndex}`);
       countParams.push(banned);
       countParamIndex++;
