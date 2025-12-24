@@ -88,14 +88,39 @@ services:
       - JWT_REFRESH_SECRET=clipiq-refresh-token-secret
       - JWT_REFRESH_EXPIRE=30d
       - CORS_ORIGIN=http://localhost:5173
-    command: sh -c "npm install && npm run migrate && npm run seed && npm run dev"
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+
+    command: sh -c "npm install && npm run db:migrate && npm run db:seed && npm run dev"
     depends_on:
       postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
+    networks:
+      - clipiq_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: clipiq_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - clipiq_network
 
@@ -125,6 +150,8 @@ volumes:
   postgres_data:
     driver: local
   minio_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:

@@ -4,6 +4,9 @@ import {
   fetchVideoByIdApi,
   searchVideosApi,
   getTrendingVideosApi,
+  Video,
+} from '../api/videos';
+import {
   fetchLikedVideosApi,
   fetchSavedVideosApi,
   likeVideoApi,
@@ -12,10 +15,8 @@ import {
   addCommentApi,
   deleteCommentApi,
   toggleSaveVideoApi,
-  Video,
-  VideoResponse,
   Comment,
-} from '../api/videos';
+} from '../api/interactionVideo';
 
 export interface VideosState {
   videos: Video[];
@@ -24,10 +25,12 @@ export interface VideosState {
   savedVideos: Video[];
   trendingVideos: Video[];
   searchResults: Video[];
+  explorerVideos: Video[];
   selectedVideo: Video | null;
   focusedVideoId: string | null;
   currentVideoComments: Comment[];
   loading: boolean;
+  explorerLoading: boolean;
   error: string | null;
   pagination: {
     page: number;
@@ -45,10 +48,12 @@ const initialState: VideosState = {
   savedVideos: [],
   trendingVideos: [],
   searchResults: [],
+  explorerVideos: [],
   selectedVideo: null,
   focusedVideoId: null,
   currentVideoComments: [],
   loading: false,
+  explorerLoading: false,
   error: null,
   pagination: {
     page: 1,
@@ -301,6 +306,21 @@ const videosSlice = createSlice({
     setVideos: (state, action: PayloadAction<Video[]>) => {
       state.videos = action.payload;
     },
+    appendVideos: (state, action: PayloadAction<Video[]>) => {
+      // Append new videos, avoiding duplicates and ensuring all fields exist
+      const existingIds = new Set(state.videos.map(v => v.id));
+      const newVideos = action.payload
+        .filter(v => !existingIds.has(v.id))
+        .map(v => ({
+          ...v,
+          likes: v.likes || 0,
+          comments: v.comments || 0,
+          views: v.views || 0,
+          isLiked: v.isLiked || false,
+          isSaved: v.isSaved || false,
+        }));
+      state.videos = [...state.videos, ...newVideos];
+    },
     setFocusedVideoId: (state, action: PayloadAction<string | null>) => {
       state.focusedVideoId = action.payload;
     },
@@ -519,6 +539,7 @@ export const {
 
   addVideo,
   setVideos,
+  appendVideos,
   setFocusedVideoId,
 } = videosSlice.actions;
 

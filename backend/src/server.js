@@ -12,7 +12,10 @@ import cors from 'cors';
 // Import routes
 import authRoutes from './routes/auth.routes.js';
 import videoRoutes from './routes/video.routes.js';
+import videoInteractionRoutes from './routes/videointeraction.routes.js';
 import userRoutes from './routes/user.routes.js';
+import recommendationRoutes from './routes/recommendation.routes.js';
+
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
@@ -56,8 +59,11 @@ app.get('/health', (req, res) => {
 
 // API v1 routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/videos', videoInteractionRoutes); // Must be before videoRoutes for /liked, /saved
 app.use('/api/v1/videos', videoRoutes);
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/recommendations', recommendationRoutes);
+
 
 // ===========================================
 // Error Handling
