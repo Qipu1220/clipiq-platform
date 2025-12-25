@@ -16,6 +16,7 @@ import {
   VideoResponse,
   Comment,
 } from '../api/videos';
+import { getPersonalFeed, getTrendingFeed, FeedVideo } from '../api/feed';
 
 export interface VideosState {
   videos: Video[];
@@ -71,6 +72,46 @@ export const fetchVideosThunk = createAsyncThunk(
     } catch (error: any) {
       console.error('💥 fetchVideosThunk error:', error);
       return rejectWithValue(error.response?.data?.detail || 'Failed to fetch videos');
+    }
+  }
+);
+
+export const fetchPersonalFeedThunk = createAsyncThunk(
+  'videos/fetchPersonalFeed',
+  async (limit: number = 20, { rejectWithValue }) => {
+    try {
+      console.log('[Feed] Fetching personal feed, limit:', limit);
+      const response = await getPersonalFeed(limit);
+      console.log('[Feed] Personal feed response:', response);
+      
+      // Transform FeedVideo to Video format
+      const videos = response.data.items.map((item: FeedVideo) => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        thumbnailUrl: item.thumbnail_url,
+        videoUrl: item.video_url,
+        duration: item.duration,
+        views: item.views,
+        uploadDate: item.upload_date,
+        uploaderUsername: item.uploader_username,
+        uploaderDisplayName: item.uploader_display_name,
+        uploaderAvatarUrl: item.uploader_avatar,
+        uploaderAvatar: item.uploader_avatar,
+        likes: parseInt(item.likes_count) || 0,
+        comments: parseInt(item.comments_count) || 0,
+        source: item.source,
+        impressionId: item.impression_id,
+        position: item.position,
+        isLiked: false,
+        isSaved: false,
+        processing_status: item.status === 'active' ? 'ready' : 'processing'
+      }));
+      
+      return { videos, pagination: { page: 1, hasMore: false, total: response.data.total } };
+    } catch (error: any) {
+      console.error('[Feed] Error fetching personal feed:', error);
+      return rejectWithValue(error.response?.data?.error || 'Failed to fetch personal feed');
     }
   }
 );
@@ -342,6 +383,29 @@ const videosSlice = createSlice({
       .addCase(fetchVideosThunk.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
+      });
+
+    // Fetch Personal Feed
+    builder
+      .addCase(fetchPersonalFeedThunk.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchPersonalFeedThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        console.log('[Feed] fetchPersonalFeedThunk fulfilled:', action.payload);
+        
+        state.videos = action.payload.videos || [];
+        state.pagination = action.payload.pagination || {
+          page: 1,
+          hasMore: false,
+          total: 0
+        };
+      })
+      .addCase(fetchPersonalFeedThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+        console.error('[Feed] fetchPersonalFeedThunk rejected:', action.payload);
       });
 
     // Fetch User Videos

@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { loginApi, logoutApi, getCurrentUserApi, updateProfileApi, LoginRequest, UpdateProfileRequest } from '../api/auth';
+import { clearSessionId } from '../utils/sessionManager';
 import { handleApiError } from '../api/client';
 
 export interface User {
@@ -64,11 +65,17 @@ export const logoutThunk = createAsyncThunk(
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      
+      // Clear session ID to reset impression tracking
+      clearSessionId();
+      console.log('[Auth] Logout: Cleared session and tokens');
     } catch (error: any) {
-      // Even if API call fails, clear local storage
+      // Even if API call fails, clear local storage AND session
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      clearSessionId();
+      console.log('[Auth] Logout failed but cleared session anyway');
       return rejectWithValue(handleApiError(error));
     }
   }

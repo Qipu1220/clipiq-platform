@@ -15,6 +15,7 @@ import pool from '../config/database.js';
 import qdrantClient from '../config/qdrant.js';
 import esClient, { ELASTIC_OCR_INDEX } from '../config/elasticsearch.js';
 import minioService from './minio.service.js';
+import qdrantService from './qdrant.service.js';
 
 // Temp directory for keyframe processing
 const TEMP_DIR = path.join(process.cwd(), 'temp', 'keyframes');
@@ -370,6 +371,66 @@ async function processVideoInBackground(videoBuffer, videoId, sanitizedTitle, ti
 }
 
 /**
+ * Create video-level embedding by pooling frame embeddings
+ * @param {string} videoId - Video UUID
+ * @param {string} videoName - Video name
+ */
+export async function createVideoLevelEmbedding(videoId, videoName) {
+    try {
+        console.log(`  Retrieving frame vectors for video ${videoId}...`);
+
+        // Get all frame vectors from Qdrant
+        const frameVectors = await qdrantService.getFrameVectors(videoId);
+
+        if (!frameVectors || frameVectors.length === 0) {
+            console.warn(`  No frame vectors found for video ${videoId}, skipping video-level embedding`);
+            return false;
+        }
+
+        console.log(`  Found ${frameVectors.length} frame vectors`);
+
+        // L2 normalize each frame vector
+        const normalizedFrames = frameVectors.map(vec => qdrantService.l2Normalize(vec));
+
+        // Mean pool normalized frames
+        const pooledVector = qdrantService.meanPool(normalizedFrames);
+
+        // L2 normalize the pooled vector
+        const normalizedPooled = qdrantService.l2Normalize(pooledVector);
+
+        // Get video metadata from database
+        const videoResult = await pool.query(
+            'SELECT uploader_id, status, created_at, duration, title FROM videos WHERE id = $1',
+            [videoId]
+        );
+
+        if (videoResult.rows.length === 0) {
+            console.warn(`  Video ${videoId} not found in database`);
+            return false;
+        }
+
+        const video = videoResult.rows[0];
+
+        // Upsert to Qdrant videos collection
+        await qdrantService.upsertVideoEmbedding(videoId, normalizedPooled, {
+            video_id: videoId,
+            uploader_id: video.uploader_id,
+            status: video.status,
+            upload_date: video.created_at.toISOString(),
+            duration: video.duration || 0,
+            title: video.title || videoName
+        });
+
+        console.log(`✅ Video-level embedding created for ${videoId} (${frameVectors.length} frames pooled)`);
+        return true;
+
+    } catch (error) {
+        console.error(`❌ Failed to create video-level embedding for ${videoId}:`, error);
+        return false;
+    }
+}
+
+/**
  * Process keyframes in background (non-blocking)
  * @param {string} videoId - Video ID
  * @param {Array} keyframePaths - Array of keyframe paths
@@ -403,6 +464,10 @@ async function processKeyframesAsync(videoId, keyframePaths, videoName) {
         }
 
         console.log(`\n✅ Background: All keyframes processed for video ${videoId}`);
+
+        // Step 4: Pool frame embeddings into video-level embedding
+        console.log(`\n🔄 Background: Pooling frame embeddings to video-level...`);
+        await createVideoLevelEmbedding(videoId, videoName);
 
         // Cleanup temp files after processing
         cleanupTempFiles(videoId);
@@ -524,5 +589,6 @@ export default {
     indexToElasticsearch,
     cleanupTempFiles,
     createVideoRecord,
-    updateVideoStatus
+    updateVideoStatus,
+    createVideoLevelEmbedding  // Export for backfill script
 };

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId, searchVideosThunk, addVideo } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId, searchVideosThunk, addVideo, fetchPersonalFeedThunk } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { logoutThunk } from '../../store/authSlice';
 import {
@@ -9,6 +9,7 @@ import {
   Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check, LogOut, ChevronDown,
   AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2, Loader2
 } from 'lucide-react';
+import { useVideoImpression } from '../../hooks/useVideoImpression';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
@@ -116,6 +117,10 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const isScrollingRef = useRef(false);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const videoStartTimeRef = useRef<number>(0); // Track video start time
+
+  // Initialize impression tracking hook
+  const { trackImpression, trackWatch } = useVideoImpression();
 
   // Filter videos based on active tab - WITH SAFE CHECKS
   const filteredVideos = activeTab === 'following'
@@ -137,7 +142,16 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   // Reset video index when tab changes
   useEffect(() => {
     setCurrentVideoIndex(0);
-  }, [activeTab]);
+    
+    // Fetch appropriate content based on tab
+    if (activeTab === 'for-you') {
+      console.log('[Feed] Switching to For You tab, fetching personal feed...');
+      dispatch(fetchPersonalFeedThunk(20) as any);
+    } else if (activeTab === 'following') {
+      console.log('[Feed] Switching to Following tab, keeping current videos');
+      // Keep existing videos, filter in component
+    }
+  }, [activeTab, dispatch]);
 
   useEffect(() => {
     if (currentVideo) {
@@ -222,6 +236,33 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     };
   }, [filteredVideos]); // Only recreate if video list changes
 
+  // Track impression when video becomes visible (>600ms visibility)
+  useEffect(() => {
+    if (!currentVideo) return;
+
+    console.log(`[Impression] Video ${currentVideo.id} became visible at index ${currentVideoIndex}`);
+    
+    // Track impression with 600ms delay (handled by hook)
+    // Source: 'personal' for For You tab, 'trending' for Following tab
+    const source = activeTab === 'for-you' ? 'personal' : 'trending';
+    trackImpression(currentVideo.id, currentVideoIndex, source);
+
+    // Record start time for watch duration calculation
+    videoStartTimeRef.current = Date.now();
+
+    // Cleanup: track watch event when leaving this video
+    return () => {
+      const watchDuration = Math.floor((Date.now() - videoStartTimeRef.current) / 1000);
+      if (watchDuration > 0) {
+        console.log(`[Watch] Leaving video ${currentVideo.id} after ${watchDuration}s`);
+        const videoElement = videoRefs.current[currentVideoIndex]?.querySelector('video');
+        const completed = videoElement ? videoElement.ended : false;
+        trackWatch(currentVideo.id, watchDuration, completed);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentVideoIndex, currentVideo?.id]); // Only re-run when video changes, not when tab/functions change
+
   // Scroll to video when index changes (for programmatic navigation) & Auto-play logic
   useEffect(() => {
     const videoContainer = videoRefs.current[currentVideoIndex];
@@ -258,11 +299,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     if (activeTab === 'for-you' && currentVideoIndex >= videos.length - 3) {
       const { hasMore, page } = pagination;
       if (hasMore && !loading) {
-        console.log(`📜 Infinite Scroll: Fetching page ${page + 1}`);
+        console.log(`[Feed] Infinite Scroll: Fetching page ${page + 1}`);
+        dispatch(fetchVideosThunk({ page: page + 1, limit: 10 }) as any);
+      }
+    } else if (activeTab === 'following' && currentVideoIndex >= filteredVideos.length - 3) {
+      // For following tab, fetch more if needed
+      const { hasMore, page } = pagination;
+      if (hasMore && !loading) {
+        console.log(`📜 Infinite Scroll (Following): Fetching page ${page + 1}`);
         dispatch(fetchVideosThunk({ page: page + 1, limit: 10 }) as any);
       }
     }
-  }, [currentVideoIndex, isMuted, videos.length, activeTab, pagination.hasMore, pagination.page, loading, dispatch]);
+  }, [currentVideoIndex, isMuted, videos.length, filteredVideos.length, activeTab, pagination.hasMore, pagination.page, loading, dispatch]);
 
   // Polling for processing videos - auto-refresh every 30s
   useEffect(() => {
@@ -363,7 +411,8 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     }
   };
 
-  const formatCount = (count: number) => {
+  const formatCount = (count: number | undefined) => {
+    if (!count || typeof count !== 'number') return '0';
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count.toString();
@@ -377,110 +426,189 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     );
   }
 
-  // Empty state for following tab
-  if (activeTab === 'following' && filteredVideos.length === 0) {
-    return (
-      <div className="h-screen bg-black flex overflow-hidden">
-        {/* Left Sidebar - Same as main */}
-        <div className="w-60 bg-black flex flex-col border-r border-zinc-900">
-          {/* Logo */}
-          <div className="p-4 flex items-center gap-2">
-            <img
-              src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
-              alt="ShortV Logo"
-              className="w-6 h-6 object-contain"
-            />
-            <h1 className="text-white text-xl logo-text">shortv</h1>
-          </div>
-
-          {/* Search */}
-          <div className="px-3 mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-zinc-900/50 border-zinc-800 text-white text-sm pl-9 pr-3 py-1.5 h-9"
-                placeholder="Tìm kiếm"
-              />
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <ScrollArea className="flex-1">
-            <div className="px-2 space-y-1">
-              <button
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm text-zinc-400 hover:bg-zinc-900/40"
-                onClick={() => setActiveTab('for-you')}
-              >
-                <Home className="w-5 h-5" />
-                <span>Dành cho bạn</span>
-              </button>
-
-              <button
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showFollowingList ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
-                  }`}
-                onClick={() => {
-                  setShowFollowingList(!showFollowingList);
-                  setActiveTab('for-you');
-                }}
-              >
-                <Users className="w-5 h-5" />
-                <span>Đã follow</span>
-              </button>
-
-              <button
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
-                onClick={() => onNavigate?.('upload')}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <span>Tải lên</span>
-              </button>
-
-              <button
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
-                onClick={() => onNavigate?.('profile')}
-              >
-                <User className="w-5 h-5" />
-                <span>Hồ sơ</span>
-              </button>
-            </div>
-          </ScrollArea>
+  // Main render with sidebar always visible
+  const renderMainLayout = (content: React.ReactNode) => (
+    <div className="h-screen bg-black flex overflow-hidden">
+      {/* Left Sidebar - Always visible */}
+      <div className="w-60 bg-black flex flex-col border-r border-zinc-900">
+        {/* Logo */}
+        <div className="p-4 flex items-center gap-2">
+          <img
+            src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
+            alt="ShortV Logo"
+            className="w-6 h-6 object-contain"
+          />
+          <h1 className="text-white text-xl logo-text">shortv</h1>
         </div>
 
-        {/* Empty State Center */}
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-md px-6">
-            <div className="w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: 'rgba(255, 59, 92, 0.1)' }}>
-              <Users className="w-12 h-12" style={{ color: '#ff3b5c' }} />
-            </div>
-            <h2 className="text-white text-2xl mb-3">Chưa có video nào</h2>
-            <p className="text-zinc-400 text-sm mb-6">
-              {subscriptions[currentUser.username]?.length > 0
-                ? 'Những người bạn follow chưa đăng video nào. Hãy khám phá thêm người sáng tạo mới!'
-                : 'Bạn chưa follow ai. Hãy follow những người sáng tạo để xem video của họ!'}
-            </p>
-            <button
-              onClick={() => setActiveTab('for-you')}
-              className="px-6 py-3 rounded-lg text-white transition-all"
-              style={{ backgroundColor: '#ff3b5c' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e6344f'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff3b5c'}
-            >
-              Khám phá ngay
-            </button>
+        {/* Search */}
+        <div className="px-3 mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  handleSearch();
+                }
+              }}
+              className="bg-zinc-900/50 border-zinc-800 text-white text-sm pl-9 pr-3 py-1.5 h-9"
+              placeholder="Tìm kiếm"
+            />
           </div>
+        </div>
+
+        {/* Navigation */}
+        <ScrollArea className="flex-1">
+          <div className="px-2 space-y-1">
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${activeTab === 'for-you' ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
+              onClick={() => setActiveTab('for-you')}
+            >
+              <Home className="w-5 h-5" />
+              <span>Dành cho bạn</span>
+            </button>
+
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showFollowingList ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
+              onClick={() => {
+                setShowFollowingList(!showFollowingList);
+                setActiveTab('for-you');
+              }}
+            >
+              <Users className="w-5 h-5" />
+              <span>Đã follow</span>
+            </button>
+
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
+              onClick={() => onNavigate?.('upload')}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span>Tải lên</span>
+            </button>
+
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
+              onClick={() => onViewUserProfile?.(currentUser.username)}
+            >
+              <User className="w-5 h-5" />
+              <span>Hồ sơ</span>
+            </button>
+
+            <div className="h-px bg-zinc-800 my-3" />
+
+            <div className="text-zinc-500 text-xs px-3 mb-2 font-medium">Tài khoản đã follow</div>
+            {subscriptions[currentUser.username]?.slice(0, 8).map((username) => {
+              const user = users.find(u => u.username === username);
+              return (
+                <button
+                  key={username}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors"
+                  onClick={() => onViewUserProfile?.(username)}
+                >
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={username} className="w-7 h-7 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
+                      <User className="w-4 h-4 text-zinc-500" />
+                    </div>
+                  )}
+                  <span className="text-xs truncate">{user?.displayName || username}</span>
+                </button>
+              );
+            })}
+          </div>
+        </ScrollArea>
+
+        {/* User Menu at Bottom */}
+        <div className="p-3 border-t border-zinc-800" ref={userMenuRef}>
+          <DropdownMenu open={showUserMenu} onOpenChange={setShowUserMenu}>
+            <DropdownMenuTrigger asChild>
+              <button className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors">
+                {currentUser.avatarUrl ? (
+                  <img src={currentUser.avatarUrl} alt={currentUser.username} className="w-8 h-8 rounded-full object-cover" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
+                    <User className="w-4 h-4 text-zinc-500" />
+                  </div>
+                )}
+                <div className="flex-1 text-left">
+                  <p className="text-white text-sm font-medium">{currentUser.displayName}</p>
+                  <p className="text-zinc-500 text-xs">@{currentUser.username}</p>
+                </div>
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 bg-zinc-900 border-zinc-800">
+              <DropdownMenuItem
+                onClick={() => onViewUserProfile?.(currentUser.username)}
+                className="text-white hover:bg-zinc-800 cursor-pointer"
+              >
+                <User className="mr-2 h-4 w-4" />
+                <span>Xem hồ sơ</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-zinc-800" />
+              <DropdownMenuItem
+                onClick={() => {
+                  dispatch(logoutThunk());
+                }}
+                className="text-red-400 hover:bg-zinc-800 hover:text-red-300 cursor-pointer"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Đăng xuất</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Center Content Area */}
+      {content}
+    </div>
+  );
+
+  // Loading state - only in center area
+  if (!currentVideo) {
+    return renderMainLayout(
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-white mx-auto mb-4" />
+          <p className="text-white text-lg">Đang tải videos...</p>
         </div>
       </div>
     );
   }
 
-  if (!currentVideo) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <p className="text-white">Loading...</p>
+  // Empty state for following tab
+  if (activeTab === 'following' && filteredVideos.length === 0) {
+    return renderMainLayout(
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center max-w-md px-6">
+          <div className="w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: 'rgba(255, 59, 92, 0.1)' }}>
+            <Users className="w-12 h-12" style={{ color: '#ff3b5c' }} />
+          </div>
+          <h2 className="text-white text-2xl mb-3">Chưa có video nào</h2>
+          <p className="text-zinc-400 text-sm mb-6">
+            {subscriptions[currentUser.username]?.length > 0
+              ? 'Những người bạn follow chưa đăng video nào. Hãy khám phá thêm người sáng tạo mới!'
+              : 'Bạn chưa follow ai. Hãy follow những người sáng tạo để xem video của họ!'}
+          </p>
+          <button
+            onClick={() => setActiveTab('for-you')}
+            className="px-6 py-3 rounded-lg text-white transition-all"
+            style={{ backgroundColor: '#ff3b5c' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e6344f'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff3b5c'}
+          >
+            Khám phá ngay
+          </button>
+        </div>
       </div>
     );
   }

@@ -14,9 +14,14 @@ import authRoutes from './routes/auth.routes.js';
 import videoRoutes from './routes/video.routes.js';
 import userRoutes from './routes/user.routes.js';
 import searchRoutes from './routes/search.routes.js';
+import impressionRoutes from './routes/impression.routes.js';
+import feedRoutes from './routes/feed.routes.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
+
+// Import maintenance scheduler
+import setupMaintenanceJobs from './scripts/maintenance.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -56,10 +61,12 @@ app.get('/health', (req, res) => {
 });
 
 // API v1 routes
-app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/auth', authRoutes); 
 app.use('/api/v1/videos', videoRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/search', searchRoutes);
+app.use('/api/v1/events', impressionRoutes); // Changed from /impressions to avoid ad blockers
+app.use('/api/v1/feed', feedRoutes);
 
 // ===========================================
 // Error Handling
@@ -90,6 +97,9 @@ app.listen(PORT, () => {
   console.log('   POST   /api/v1/auth/refresh    - Refresh token');
   console.log('   GET    /api/v1/auth/me         - Get current user');
   console.log('='.repeat(50));
+  
+  // Setup automated maintenance tasks
+  setupMaintenanceJobs();
 });
 
 // Handle graceful shutdown
