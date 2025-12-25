@@ -1542,6 +1542,10 @@
     border-color: var(--color-red-600);
   }
 
+  .border-yellow-500 {
+    border-color: var(--color-yellow-500);
+  }
+
   .border-transparent {
     border-color: #0000;
   }
@@ -4035,4 +4039,19 @@ html {
     opacity: var(--tw-exit-opacity, 1);
     transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1)) rotate(var(--tw-exit-rotate, 0));
   }
+}
+
+@keyframes slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in-up {
+  animation: slide-in-up 0.5s ease-out;
 }

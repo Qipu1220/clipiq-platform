@@ -3,15 +3,16 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
 import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
-import { logoutThunk } from '../../store/authSlice';
 import {
   Play, Search, Home, Compass, Users, Video, MessageCircle,
-  Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check, LogOut, ChevronDown,
+  Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check,
   AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { Sidebar, SidebarItem } from '../common/Sidebar';
+import { UserMenu } from '../common/UserMenu';
 import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
 import {
@@ -34,6 +35,7 @@ import {
 import { toast } from 'sonner';
 import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
 import { SearchResults } from './SearchResults';
+import { reportVideoApi, reportCommentApi } from '../../api/reports';
 
 // Helper function to copy text with fallback
 const copyToClipboard = (text: string) => {
@@ -107,6 +109,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const [showCommentReportModal, setShowCommentReportModal] = useState(false);
   const [selectedComment, setSelectedComment] = useState<{ id: string; text: string; username: string } | null>(null);
   const [commentReportReason, setCommentReportReason] = useState('');
+  const [commentReportType, setCommentReportType] = useState('spam');
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
   const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
 
@@ -849,16 +852,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
             <span className="text-white text-xs font-medium">Chia sẻ</span>
           </button>
 
-          {/* Report Video */}
-          <button
-            onClick={() => setShowReportModal(true)}
-            className="flex flex-col items-center gap-1 group"
-          >
-            <div className="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
-              <Flag className="w-7 h-7 text-white group-hover:text-red-400 transition-colors" />
-            </div>
-            <span className="text-white text-xs font-medium group-hover:text-red-400 transition-colors">Báo cáo</span>
-          </button>
+          {/* Report Video - Only show if not own video */}
+          {currentUser.username !== currentVideo.uploaderUsername && (
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="flex flex-col items-center gap-1 group"
+            >
+              <div className="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
+                <Flag className="w-7 h-7 text-white group-hover:text-red-400 transition-colors" />
+              </div>
+              <span className="text-white text-xs font-medium group-hover:text-red-400 transition-colors">Báo cáo</span>
+            </button>
+          )}
         </div>
 
         {/* Toggle Sidebar Button */}
@@ -896,75 +901,11 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           <>
             {/* User Menu Header */}
             <div className="p-4 border-b border-zinc-800">
-              <div className="relative mb-3 flex justify-end" ref={userMenuRef}>
-                <div
-                  className="flex items-center gap-2 cursor-pointer hover:bg-zinc-900/50 px-3 py-1.5 rounded-full transition-all border border-zinc-800 hover:border-zinc-700"
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                >
-                  {currentUser?.avatarUrl ? (
-                    <img
-                      src={currentUser.avatarUrl}
-                      alt={currentUser.username}
-                      className="w-7 h-7 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
-                      <User className="w-3.5 h-3.5 text-zinc-400" />
-                    </div>
-                  )}
-                  <span className="text-white text-sm font-medium">{currentUser?.displayName || currentUser?.username}</span>
-                  <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
-                </div>
-
-                {showUserMenu && (
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                    {/* User Info */}
-                    <div className="px-4 py-3 border-b border-zinc-800">
-                      <div className="flex items-center gap-2.5">
-                        {currentUser?.avatarUrl ? (
-                          <img
-                            src={currentUser.avatarUrl}
-                            alt={currentUser.username}
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
-                            <User className="w-5 h-5 text-zinc-400" />
-                          </div>
-                        )}
-                        <div className="flex flex-col overflow-hidden">
-                          <span className="text-white text-sm font-medium truncate">{currentUser?.displayName || currentUser?.username}</span>
-                          <span className="text-zinc-500 text-xs truncate">@{currentUser?.username}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Menu Items */}
-                    <div className="py-1">
-                      <button
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          onViewUserProfile?.(currentUser.username);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-white hover:bg-zinc-800 transition-colors text-left group"
-                      >
-                        <User className="w-4 h-4 text-zinc-400 group-hover:text-white transition-colors" />
-                        <span className="text-sm">Xem tài khoản</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          dispatch(logoutThunk());
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-red-400 hover:bg-zinc-800 transition-colors text-left group"
-                      >
-                        <LogOut className="w-4 h-4 group-hover:text-red-300 transition-colors" />
-                        <span className="text-sm">Đăng xuất</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
+              <div className="mb-3 flex justify-end">
+                <UserMenu 
+                  variant="user"
+                  onProfileClick={() => onViewUserProfile?.(currentUser.username)}
+                />
               </div>
 
               {/* Tab Switcher */}
@@ -1050,20 +991,23 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                                     <Copy className="w-4 h-4 mr-2" />
                                     Copy bình luận
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setSelectedComment({
-                                        id: comment.id,
-                                        text: comment.text,
-                                        username: comment.username
-                                      });
-                                      setShowCommentReportModal(true);
-                                    }}
-                                    className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
-                                  >
-                                    <Flag className="w-4 h-4 mr-2" />
-                                    Báo cáo
-                                  </DropdownMenuItem>
+                                  {/* Report comment - Only show if not own comment */}
+                                  {currentUser.username !== comment.username && (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSelectedComment({
+                                          id: comment.id,
+                                          text: comment.text,
+                                          username: comment.username
+                                        });
+                                        setShowCommentReportModal(true);
+                                      }}
+                                      className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
+                                    >
+                                      <Flag className="w-4 h-4 mr-2" />
+                                      Báo cáo
+                                    </DropdownMenuItem>
+                                  )}
                                   {/* Force show delete for debugging */}
                                   <>
                                     <DropdownMenuSeparator className="bg-zinc-800" />
@@ -1234,6 +1178,12 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               </button>
               <button
                 onClick={() => {
+                  // Validate trước khi mở confirmation
+                  if (!reportType) {
+                    toast.error('Vui lòng chọn lý do báo cáo');
+                    return;
+                  }
+                  console.log('Opening report confirmation with:', { reportType, reportReason, videoId: currentVideo?.id });
                   setShowVideoReportConfirm(true);
                 }}
                 className="flex-1 text-white py-3 rounded-lg transition-all"
@@ -1265,6 +1215,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   setShowCommentReportModal(false);
                   setSelectedComment(null);
                   setCommentReportReason('');
+                  setCommentReportType('spam');
                 }}
                 className="text-zinc-400 hover:text-white transition-colors"
               >
@@ -1281,13 +1232,38 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               </div>
 
               <div>
-                <label className="text-white text-sm mb-2 block">Lý do báo cáo</label>
+                <label className="block text-white text-sm mb-2">Loại vi phạm:</label>
+                <select
+                  value={commentReportType}
+                  onChange={(e) => setCommentReportType(e.target.value)}
+                  className="w-full bg-zinc-800 text-white p-3 rounded-lg border border-zinc-700 focus:border-red-500 focus:outline-none transition-colors"
+                >
+                  <option value="spam">Spam hoặc quảng cáo</option>
+                  <option value="harassment">Quấy rối hoặc bắt nạt</option>
+                  <option value="hate_speech">Ngôn từ gây thù ghét</option>
+                  <option value="violence_threat">Đe dọa bạo lực</option>
+                  <option value="sexual_content">Nội dung khiêu dâm</option>
+                  <option value="misinformation">Thông tin sai lệch</option>
+                  <option value="impersonation">Mạo danh</option>
+                  <option value="off_topic">Nội dung không liên quan</option>
+                  <option value="other">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-white text-sm mb-2">Chi tiết (không bắt buộc):</label>
                 <Textarea
                   value={commentReportReason}
                   onChange={(e) => setCommentReportReason(e.target.value)}
-                  placeholder="Mô tả lý do bạn báo cáo bình luận này..."
-                  className="bg-zinc-800 border-zinc-700 text-white min-h-[120px] resize-none"
+                  placeholder="Mô tả thêm về vấn đề bạn gặp phải..."
+                  className="bg-zinc-800 border-zinc-700 text-white min-h-[100px] resize-none"
                 />
+              </div>
+
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                <p className="text-yellow-500 text-xs">
+                  ⚠️ Báo cáo sai sự thật có thể bị xử phạt. Staff sẽ xem xét trong 24-48 giờ.
+                </p>
               </div>
             </div>
 
@@ -1298,6 +1274,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   setShowCommentReportModal(false);
                   setSelectedComment(null);
                   setCommentReportReason('');
+                  setCommentReportType('spam');
                 }}
                 className="flex-1 bg-zinc-800 text-white py-3 rounded-lg hover:bg-zinc-700 transition-colors"
               >
@@ -1305,10 +1282,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               </button>
               <button
                 onClick={() => {
-                  if (!commentReportReason.trim()) {
-                    toast.error('Vui lòng nhập lý do báo cáo');
-                    return;
-                  }
+                  // Reason dropdown is always selected, optional details
                   setShowCommentReportConfirm(true);
                 }}
                 className="flex-1 text-white py-3 rounded-lg transition-all"
@@ -1345,18 +1319,52 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                dispatch(addVideoReport({
-                  videoId: currentVideo.id,
-                  userId: currentUser.id,
-                  type: reportType,
-                  reason: reportReason,
-                }));
-                toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
-                setShowReportModal(false);
-                setShowVideoReportConfirm(false);
-                setReportReason('');
-                setReportType('spam');
+              onClick={async () => {
+                try {
+                  console.log('🚀 Submitting report:', {
+                    videoId: currentVideo.id,
+                    reason: reportType,
+                    description: reportReason
+                  });
+                  
+                  // Gọi API để báo cáo video
+                  const response = await reportVideoApi(currentVideo.id, reportType, reportReason);
+                  console.log('✅ Report API response:', response);
+                  
+                  // Cũng dispatch vào Redux store cho local state (optional)
+                  dispatch(addVideoReport({
+                    videoId: currentVideo.id,
+                    userId: currentUser.id,
+                    type: reportType,
+                    reason: reportReason,
+                  }));
+                  
+                  toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
+                  setShowReportModal(false);
+                  setShowVideoReportConfirm(false);
+                  setReportReason('');
+                  setReportType('spam');
+                } catch (error: any) {
+                  console.error('❌ Error reporting video:', error);
+                  console.error('Error details:', {
+                    response: error.response?.data,
+                    status: error.response?.status,
+                    message: error.message
+                  });
+                  
+                  // Hiển thị thông báo lỗi cụ thể
+                  if (error.response?.data?.detail) {
+                    toast.error(error.response.data.detail);
+                  } else if (error.response?.data?.message) {
+                    toast.error(error.response.data.message);
+                  } else if (error.response?.data?.errors) {
+                    // Hiển thị validation errors
+                    const errorMsg = error.response.data.errors.map((e: any) => e.message).join(', ');
+                    toast.error(`Lỗi validation: ${errorMsg}`);
+                  } else {
+                    toast.error('Không thể gửi báo cáo. Vui lòng thử lại sau.');
+                  }
+                }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
@@ -1388,26 +1396,45 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
                 if (selectedComment && currentVideo) {
-                  dispatch(addCommentReport({
-                    id: Date.now().toString(),
-                    commentId: selectedComment.id,
-                    commentText: selectedComment.text,
-                    commentUsername: selectedComment.username,
-                    videoId: currentVideo.id,
-                    videoTitle: currentVideo.title,
-                    reportedBy: currentUser!.id,
-                    reportedByUsername: currentUser!.username,
-                    reason: commentReportReason,
-                    timestamp: Date.now(),
-                    status: 'pending',
-                  }));
-                  toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
-                  setShowCommentReportModal(false);
-                  setShowCommentReportConfirm(false);
-                  setSelectedComment(null);
-                  setCommentReportReason('');
+                  try {
+                    const reason = `${commentReportType}${commentReportReason ? ': ' + commentReportReason : ''}`;
+                    await reportCommentApi(selectedComment.id, reason, commentReportReason || undefined);
+                    
+                    // Redux dispatch for UI consistency
+                    dispatch(addCommentReport({
+                      id: Date.now().toString(),
+                      commentId: selectedComment.id,
+                      commentText: selectedComment.text,
+                      commentUsername: selectedComment.username,
+                      videoId: currentVideo.id,
+                      videoTitle: currentVideo.title,
+                      reportedBy: currentUser!.id,
+                      reportedByUsername: currentUser!.username,
+                      reason: reason,
+                      timestamp: Date.now(),
+                      status: 'pending',
+                    }));
+                    
+                    toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
+                    setShowCommentReportModal(false);
+                    setShowCommentReportConfirm(false);
+                    setSelectedComment(null);
+                    setCommentReportReason('');
+                    setCommentReportType('spam');
+                  } catch (error: any) {
+                    console.error('Lỗi khi gửi báo cáo bình luận:', error);
+                    if (error.response?.status === 409) {
+                      toast.error('Bạn đã báo cáo bình luận này rồi!');
+                    } else if (error.response?.status === 400) {
+                      toast.error('Không thể báo cáo bình luận của chính mình!');
+                    } else if (error.response?.status === 404) {
+                      toast.error('Bình luận không tồn tại!');
+                    } else {
+                      toast.error('Không thể gửi báo cáo. Vui lòng thử lại sau!');
+                    }
+                  }
                 }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"

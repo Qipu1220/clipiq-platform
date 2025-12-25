@@ -212,28 +212,77 @@ export function checkSelfOrAdmin(userIdParam = 'userId') {
  * Check If User Is Not Banned
  * 
  * Verifies that the authenticated user is not banned from the platform.
- * Should query the database to check the user's ban status.
+ * Queries the database to check the user's current ban status.
+ * Staff and admin users bypass this check.
  * 
  * Usage:
  *   app.post('/videos', authenticateToken, checkNotBanned, (req, res) => {
  *     // Only non-banned users can upload videos
  *   });
  */
-export function checkNotBanned(req, res, next) {
-  // This is a placeholder - implement actual ban checking logic
-  // You would typically query the database here to check if user is banned
-  
-  if (req.user && req.user.banned) {
-    return res.status(403).json({
-      error: 'Account suspended',
-      code: 'ACCOUNT_BANNED',
-      message: 'Your account has been suspended',
-      banReason: req.user.banReason,
-      banExpiry: req.user.banExpiry
+export async function checkNotBanned(req, res, next) {
+  try {
+    // Skip ban check for staff and admin
+    if (req.user && (req.user.role === 'staff' || req.user.role === 'admin')) {
+      return next();
+    }
+
+    // Import pool dynamically to avoid circular dependencies
+    const { default: pool } = await import('../config/database.js');
+    
+    // Query database for current ban status
+    const query = `
+      SELECT banned, ban_expiry, ban_reason
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+    `;
+    
+    const result = await pool.query(query, [req.user.userId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'User not found',
+        code: 'USER_NOT_FOUND',
+        message: 'The authenticated user no longer exists'
+      });
+    }
+    
+    const user = result.rows[0];
+    
+    // Check if user is banned
+    if (user.banned) {
+      const isBanActive = !user.ban_expiry || new Date(user.ban_expiry) > new Date();
+      
+      if (isBanActive) {
+        return res.status(403).json({
+          error: 'Account suspended',
+          code: 'ACCOUNT_BANNED',
+          message: 'Your account has been suspended and you cannot use this platform',
+          data: {
+            banReason: user.ban_reason,
+            banExpiry: user.ban_expiry,
+            isPermanent: !user.ban_expiry
+          }
+        });
+      }
+      
+      // Ban has expired, auto-unban user
+      await pool.query(
+        'UPDATE users SET banned = false, ban_expiry = NULL, ban_reason = NULL WHERE id = $1',
+        [req.user.userId]
+      );
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Error checking ban status:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR',
+      message: 'Unable to verify account status'
     });
   }
-
-  next();
 }
 
 /**

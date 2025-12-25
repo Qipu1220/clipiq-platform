@@ -1,0 +1,141 @@
+/**
+ * Staff Controller
+ * Handles staff operations for user management
+ */
+
+import * as UserService from '../services/user.service.js';
+import * as ReportService from '../services/report.service.js';
+import * as VideoService from '../services/video.service.js';
+import * as StaffProfileService from '../services/staffProfile.service.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { successResponse } from '../utils/apiResponse.js';
+
+/**
+ * GET /staff/users
+ * Get all users with optional filters
+ */
+export const getAllUsers = asyncHandler(async (req, res) => {
+  const { role, banned, search, page, limit } = req.query;
+  
+  const filters = {
+    role,
+    banned: banned !== undefined ? banned === 'true' : undefined,
+    search,
+    page: parseInt(page) || 1,
+    limit: parseInt(limit) || 100
+  };
+  
+  const result = await UserService.getAllUsersService(filters);
+  
+  return successResponse(res, result, 'Users retrieved successfully');
+});
+
+/**
+ * PUT /staff/users/:username/ban
+ * Ban a user (temporary or permanent)
+ */
+export const banUser = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+  const { reason, duration } = req.body;
+  const bannedById = req.user.userId;
+  
+  console.log(`👮 Staff ban request: ${username}, by: ${bannedById}, duration: ${duration}`);
+  console.log('Request body:', req.body);
+  
+  const result = await UserService.banUserService(username, reason, bannedById, duration);
+  
+  console.log('✅ Ban completed successfully');
+  return successResponse(res, result, 'User banned successfully');
+});
+
+/**
+ * PUT /staff/users/:username/unban
+ * Unban a user
+ */
+export const unbanUser = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+  
+  const result = await UserService.unbanUserService(username);
+  
+  return successResponse(res, result, 'User unbanned successfully');
+});
+
+/**
+ * PUT /staff/users/:username/warn
+ * Warn a user
+ */
+export const warnUser = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+  const { reason, duration } = req.body;
+  const warnedById = req.user.userId;
+  
+  const result = await UserService.warnUserService(username, reason, warnedById, duration);
+  
+  return successResponse(res, result, 'User warned successfully');
+});
+
+/**
+ * PUT /staff/users/:username/clear-warnings
+ * Clear all warnings for a user
+ */
+export const clearWarnings = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+  
+  const result = await UserService.clearWarningsService(username);
+  
+  return successResponse(res, result, 'Warnings cleared successfully');
+});
+
+/**
+ * GET /staff/video-report/:videoId
+ * Get detailed video report information for review
+ */
+export const getVideoReportDetails = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  
+  const details = await ReportService.getVideoReportDetailsService(videoId);
+  
+  return successResponse(res, details, 'Video report details retrieved successfully');
+});
+
+/**
+ * DELETE /staff/videos/:id
+ * Delete a video (soft delete - staff only)
+ */
+export const deleteVideo = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  // Check if video exists first
+  const video = await VideoService.getVideoByIdService(id);
+  if (!video) {
+    return res.status(404).json({ success: false, message: 'Video not found' });
+  }
+  
+  // Perform soft delete
+  await VideoService.deleteVideoService(id);
+  
+  return successResponse(res, { id, deleted: true }, 'Video deleted successfully');
+});
+
+/**
+ * GET /staff/profile/stats
+ * Get statistics for current staff member
+ */
+export const getStaffStats = asyncHandler(async (req, res) => {
+  const staffUserId = req.user.userId;
+  
+  const stats = await StaffProfileService.getStaffStatsService(staffUserId);
+  
+  return successResponse(res, stats, 'Staff statistics retrieved successfully');
+});
+
+export default {
+  getAllUsers,
+  banUser,
+  unbanUser,
+  warnUser,
+  clearWarnings,
+  getVideoReportDetails,
+  deleteVideo,
+  getStaffStats
+};
