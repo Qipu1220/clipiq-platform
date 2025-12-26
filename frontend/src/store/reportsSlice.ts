@@ -103,6 +103,9 @@ const reportsSlice = createSlice({
   name: 'reports',
   initialState,
   reducers: {
+    setVideoReports: (state, action: PayloadAction<VideoReport[]>) => {
+      state.videoReports = action.payload;
+    },
     addVideoReport: (state, action: PayloadAction<VideoReport>) => {
       state.videoReports.push(action.payload);
     },
@@ -180,6 +183,7 @@ const reportsSlice = createSlice({
 });
 
 export const { 
+  setVideoReports,
   addVideoReport, 
   addUserReport, 
   addCommentReport,

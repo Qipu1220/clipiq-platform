@@ -26,11 +26,28 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor - Handle token refresh
+// Response interceptor - Handle token refresh and ban status
 apiClient.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
+  async (error: AxiosError<any>) => {
     const originalRequest = error.config as any;
+
+    // Handle account banned error (403 with ACCOUNT_BANNED code)
+    if (error.response?.status === 403 && error.response?.data?.code === 'ACCOUNT_BANNED') {
+      // Update user in localStorage with ban info
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const banData = error.response.data.data || {};
+      
+      user.banned = true;
+      user.banReason = banData.banReason || error.response.data.message;
+      user.banExpiry = banData.banExpiry;
+      
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      // Reload the app to show the banned modal
+      window.location.reload();
+      return Promise.reject(error);
+    }
 
     // If error is 401 and we haven't tried to refresh yet
     if (error.response?.status === 401 && !originalRequest._retry) {

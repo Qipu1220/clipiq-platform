@@ -33,7 +33,7 @@ export async function authenticateUser(login, password) {
 
   // Find user by email or username
   const query = `
-    SELECT id, username, email, password, role, banned, ban_expiry, ban_reason
+    SELECT id, username, email, password, role, banned, ban_expiry, ban_reason, warnings
     FROM users
     WHERE email = $1 OR username = $1
     LIMIT 1
@@ -50,23 +50,6 @@ export async function authenticateUser(login, password) {
   }
 
   const user = result.rows[0];
-
-  // Check if user is banned
-  if (user.banned) {
-    const isBanActive = !user.ban_expiry || new Date(user.ban_expiry) > new Date();
-
-    if (isBanActive) {
-      throw ApiError.forbidden(
-        'Your account has been suspended',
-        'ACCOUNT_BANNED',
-        {
-          banReason: user.ban_reason,
-          banExpiry: user.ban_expiry,
-          isPermanent: !user.ban_expiry
-        }
-      );
-    }
-  }
 
   // Verify password
   const isPasswordValid = await verifyPassword(password, user.password);
@@ -97,12 +80,16 @@ export async function authenticateUser(login, password) {
     [user.id]
   );
 
-  // Return user data (without password)
+  // Return user data (without password) with ban and warning information
   const userData = {
     id: user.id,
     username: user.username,
     email: user.email,
-    role: user.role
+    role: user.role,
+    banned: user.banned,
+    banReason: user.ban_reason,
+    banExpiry: user.ban_expiry,
+    warnings: user.warnings || 0
   };
 
   return { user: userData, tokens };
@@ -237,6 +224,8 @@ export async function getUserProfile(userId) {
     bio: user.bio,
     avatarUrl: user.avatar_url,
     banned: user.banned,
+    banExpiry: user.ban_expiry,
+    banReason: user.ban_reason,
     warnings: user.warnings,
     createdAt: user.created_at,
     updatedAt: user.updated_at
