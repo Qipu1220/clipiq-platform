@@ -109,6 +109,7 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState(initialState.page);
   const [selectedVideoId, setSelectedVideoId] = useState(initialState.videoId as string | null);
   const [selectedUsername, setSelectedUsername] = useState(initialState.username as string | null);
+  const [previousTab, setPreviousTab] = useState<string | undefined>(undefined);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Restore session and fetch videos on app load
@@ -149,9 +150,12 @@ function AppContent() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Refresh user data every 30 seconds
+    // Refresh user data every 30 seconds, but skip when modal is open to prevent interference
     const intervalId = setInterval(() => {
-      dispatch(getCurrentUserThunk());
+      // Check if any modal is open before refreshing
+      if (!document.querySelector('[data-modal-open="true"]')) {
+        dispatch(getCurrentUserThunk());
+      }
     }, 30000); // 30 seconds
 
     return () => clearInterval(intervalId);
@@ -280,17 +284,13 @@ function AppContent() {
 
   // After login, check maintenance mode based on user role
   // System maintenance: only admin can access
-  console.log('🔍 Maintenance check - maintenanceMode:', maintenanceMode, 'user role:', currentUser?.role);
   if (maintenanceMode && currentUser?.role !== 'admin') {
-    console.log('🚫 Showing maintenance screen (system maintenance)');
     return <MaintenanceScreen />;
   }
   
   // Check service maintenance mode
   // Service maintenance: admin and staff can access, regular users cannot
-  console.log('🔍 Service maintenance check - serviceMaintenanceMode:', serviceMaintenanceMode, 'user role:', currentUser?.role);
   if (serviceMaintenanceMode && currentUser?.role === 'user') {
-    console.log('🚫 Showing maintenance screen (service maintenance)');
     return <MaintenanceScreen />;
   }
 
@@ -333,38 +333,6 @@ function AppContent() {
       dispatch(getCurrentUserThunk());
     } catch (error) {
       toast.error('Không thể cảnh báo người dùng');
-    }
-  };
-
-  const handleNavigate = (page: string) => {
-    setCurrentPage(page);
-    setSelectedVideoId(null);
-    setSelectedUsername(null);
-  };
-
-  const handleVideoClick = (videoId: string, fromTab?: string) => {
-    setSelectedVideoId(videoId);
-    setCurrentPage('video-player');
-    if (fromTab) {
-      setPreviousTab(fromTab);
-    }
-  };
-
-  const handleUploadComplete = () => {
-    setCurrentPage('home');
-  };
-
-  const handleViewUserProfile = (username: string, fromTab?: string) => {
-    setSelectedUsername(username);
-    // Remember which tab is viewing the profile
-    if (fromTab && currentUser?.role === 'staff') {
-      setPreviousTab(fromTab);
-    }
-    // If viewing own profile, go to profile page, otherwise go to public profile page
-    if (username === currentUser?.username) {
-      setCurrentPage('profile');
-    } else {
-      setCurrentPage('view-user-profile');
     }
   };
 

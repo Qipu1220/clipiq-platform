@@ -97,6 +97,123 @@ export const fetchDashboardSummaryApi = async (): Promise<DashboardSummaryRespon
   return response.data;
 };
 
+// ==================== STAFF API ====================
+
+export interface UserStats {
+  videos: number;
+  followers: number;
+  following: number;
+}
+
+export interface StaffUser {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  displayName?: string;
+  bio?: string;
+  avatarUrl?: string;
+  banned: boolean;
+  banExpiry?: string | null;
+  banReason?: string | null;
+  warnings: number;
+  stats: UserStats;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StaffUsersResponse {
+  users: StaffUser[];
+  pagination: {
+    total: number;
+    page: number;
+    pages: number;
+    limit: number;
+  };
+}
+
+/**
+ * Get all users for staff management (Staff only)
+ * Uses /staff/users endpoint
+ */
+export const getAllUsersApi = async (options?: {
+  page?: number;
+  limit?: number;
+  role?: 'user' | 'staff' | 'admin';
+  banned?: boolean;
+  search?: string;
+}): Promise<StaffUsersResponse> => {
+  const params = new URLSearchParams();
+  if (options?.page) params.append('page', options.page.toString());
+  if (options?.limit) params.append('limit', options.limit.toString());
+  if (options?.role) params.append('role', options.role);
+  if (options?.banned !== undefined) params.append('banned', options.banned.toString());
+  if (options?.search) params.append('search', options.search);
+
+  const queryString = params.toString();
+  const url = `/staff/users${queryString ? `?${queryString}` : ''}`;
+
+  const response = await apiClient.get(url);
+  return response.data.data;
+};
+
+/**
+ * Delete video by staff (soft delete)
+ * @param videoId - Video ID to delete
+ */
+export const staffDeleteVideoApi = async (videoId: string): Promise<void> => {
+  await apiClient.delete(`/staff/videos/${videoId}`);
+};
+
+/**
+ * Ban user (Staff only) - Uses PUT /staff/users/:username/ban
+ * @param username - Username to ban
+ * @param reason - Reason for ban
+ * @param duration - Duration in days (optional, null = permanent)
+ */
+export const staffBanUserApi = async (username: string, reason: string, duration?: number | null): Promise<StaffUser> => {
+  const requestBody: { reason: string; duration?: number } = { reason };
+  if (duration !== null && duration !== undefined && duration > 0) {
+    requestBody.duration = duration;
+  }
+  const response = await apiClient.put(`/staff/users/${username}/ban`, requestBody);
+  return response.data.data;
+};
+
+/**
+ * Unban user (Staff only) - Uses PUT /staff/users/:username/unban
+ * @param username - Username to unban
+ */
+export const staffUnbanUserApi = async (username: string): Promise<StaffUser> => {
+  const response = await apiClient.put(`/staff/users/${username}/unban`, {});
+  return response.data.data;
+};
+
+/**
+ * Warn user (Staff only) - Uses PUT /staff/users/:username/warn
+ * @param username - Username to warn
+ * @param reason - Reason for warning
+ * @param duration - Duration in days (default 7)
+ */
+export const staffWarnUserApi = async (username: string, reason: string, duration: number = 7): Promise<StaffUser> => {
+  const response = await apiClient.put(`/staff/users/${username}/warn`, {
+    reason,
+    duration: duration || 7
+  });
+  return response.data.data;
+};
+
+/**
+ * Clear warnings (Staff only) - Uses PUT /staff/users/:username/clear-warnings
+ * @param username - Username to clear warnings
+ */
+export const staffClearWarningsApi = async (username: string): Promise<StaffUser> => {
+  const response = await apiClient.put(`/staff/users/${username}/clear-warnings`, {});
+  return response.data.data;
+};
+
+// ==================== ADMIN API ====================
+
 export interface User {
   id: string;
   username: string;
@@ -210,6 +327,15 @@ export const deleteStaffAccountApi = async (username: string): Promise<void> => 
  */
 export const deleteVideoApi = async (videoId: string): Promise<void> => {
   await apiClient.delete(`/videos/${videoId}`);
+};
+
+/**
+ * Get video report details for review (Staff/Admin only)
+ * @param videoId - Video ID to get report details
+ */
+export const getVideoReportDetailsApi = async (videoId: string): Promise<any> => {
+  const response = await apiClient.get(`/staff/video-report/${videoId}`);
+  return response.data.data;
 };
 
 /**

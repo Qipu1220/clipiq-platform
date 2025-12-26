@@ -106,7 +106,7 @@ services:
     working_dir: /app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "5173:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules

@@ -6,7 +6,7 @@ import { warnUser } from '../../store/usersSlice';
 import { deleteVideo } from '../../store/videosSlice';
 import { toast } from 'sonner';
 import { getVideoReportsApi, resolveVideoReportApi, VideoReport, getUserReportsApi, resolveUserReportApi, UserReport, getCommentReportsApi, resolveCommentReportApi, CommentReport } from '../../api/reports';
-import { fetchAllUsersApi, banUserApi, warnUserApi, deleteVideoApi, User as ApiUser } from '../../api/admin';
+import { getAllUsersApi, staffBanUserApi, staffWarnUserApi, staffDeleteVideoApi, StaffUser } from '../../api/admin';
 import { StaffLayout } from './StaffLayout';
 import { Dashboard } from './Dashboard';
 import { VideoReports } from './VideoReports';
@@ -33,7 +33,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
   const allUsers = useSelector((state: RootState) => state.users.allUsers);
   
   const [activeTab, setActiveTab] = useState<'dashboard' | 'video-reports' | 'user-reports' | 'comment-reports' | 'user-management' | 'profile'>('dashboard');
-  const [apiUsers, setApiUsers] = useState<ApiUser[]>([]);
+  const [apiUsers, setApiUsers] = useState<StaffUser[]>([]);
   const [apiVideoReports, setApiVideoReports] = useState<VideoReport[]>([]);
   const [apiUserReports, setApiUserReports] = useState<UserReport[]>([]);
   const [apiCommentReports, setApiCommentReports] = useState<CommentReport[]>([]);
@@ -59,8 +59,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     onConfirm: () => void;
   } | null>(null);
 
-  // Use API users only - no fallback to mock data
-  const displayUsers = apiUsers.map(u => ({
+  // Use API users if available, otherwise fall back to Redux store
+  const displayUsers = apiUsers.length > 0 ? apiUsers.map(u => ({
     id: u.id,
     username: u.username,
     displayName: u.displayName,
@@ -69,8 +69,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     banReason: u.banReason,
     banExpiry: u.banExpiry,
     warnings: u.warnings,
-    videoCount: u.videoCount
-  }));
+    videoCount: u.stats?.videos || 0
+  })) : allUsers;
 
   // Helper function to get Vietnamese report type name
   const getReportTypeName = (type: string): string => {
@@ -86,6 +86,9 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     };
     return typeMap[type] || type;
   };
+
+  // Check if any modal is open to prevent background refetch interference
+  const isModalOpen = showBanModal || showWarnModal || showConfirmModal;
 
   // Fetch data
   useEffect(() => {
@@ -144,27 +147,29 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
 
     const fetchUsers = async () => {
       try {
-        console.log('🔍 Staff: Fetching users...');
-        const response = await fetchAllUsersApi({ page: 1, limit: 100 });
-        console.log('✅ Staff: Users fetched:', response.data.users.length, 'users');
-        console.log('📊 Staff: First user:', response.data.users[0]);
-        setApiUsers(response.data.users);
+        const response = await getAllUsersApi({ page: 1, limit: 100 });
+        setApiUsers(response.users);
       } catch (error: any) {
         console.error('❌ Error fetching users:', error);
-        console.error('Error response:', error.response?.data);
       }
     };
 
+    // Initial fetch
     fetchReports();
     fetchUserReports();
     fetchCommentReports();
     fetchUsers();
 
+    // Background refresh - but skip when modal is open
     const interval = setInterval(() => {
-      fetchReports();
-      fetchUserReports();
-      fetchCommentReports();
-      fetchUsers();
+      // Check modal state at interval time, not at useEffect creation time
+      // We use a ref-like approach by checking the current state
+      if (!document.querySelector('[data-modal-open="true"]')) {
+        fetchReports();
+        fetchUserReports();
+        fetchCommentReports();
+        fetchUsers();
+      }
     }, 30000);
 
     return () => clearInterval(interval);
@@ -373,10 +378,10 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
       confirmColor: '#ff3b5c',
       onConfirm: async () => {
         try {
-          await banUserApi(banUsername, banReason, durationValue);
+          await staffBanUserApi(banUsername, banReason, durationValue);
           toast.success(isPermanent ? `Đã cấm vĩnh viễn người dùng ${banUsername}` : `Đã cấm người dùng ${banUsername} trong ${durationValue} ngày`);
-          const response = await fetchAllUsersApi({ page: 1, limit: 100 });
-          setApiUsers(response.data.users);
+          const response = await getAllUsersApi({ page: 1, limit: 100 });
+          setApiUsers(response.users);
           setBanUsername('');
           setBanDuration('');
           setBanReason('');
@@ -417,10 +422,10 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
       confirmColor: '#eab308',
       onConfirm: async () => {
         try {
-          await warnUserApi(warnUsername, warnReason, durationValue);
+          await staffWarnUserApi(warnUsername, warnReason, durationValue);
           toast.success(`Đã cảnh báo người dùng ${warnUsername}`);
-          const response = await fetchAllUsersApi({ page: 1, limit: 100 });
-          setApiUsers(response.data.users);
+          const response = await getAllUsersApi({ page: 1, limit: 100 });
+          setApiUsers(response.users);
           setWarnUsername('');
           setWarnReason('');
           setShowConfirmModal(false);
@@ -532,7 +537,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
 
       {/* Warn User Modal */}
       {showWarnModal && warnUsername && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div data-modal-open="true" className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-zinc-950 border border-yellow-500/30 rounded-xl w-full max-w-lg shadow-2xl">
             <div className="px-6 py-3 border-b border-zinc-900/50 bg-yellow-500/5">
               <div className="flex items-center justify-between">
@@ -605,7 +610,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
 
       {/* Confirmation Modal */}
       {showConfirmModal && confirmAction && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div data-modal-open="true" className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-zinc-950 border border-zinc-900/50 rounded-xl w-full max-w-md shadow-2xl">
             <div className="p-5 border-b border-zinc-900/50">
               <h3 className="text-white font-medium text-lg">{confirmAction.title}</h3>

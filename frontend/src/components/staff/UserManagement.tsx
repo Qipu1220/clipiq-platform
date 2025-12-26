@@ -4,7 +4,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { toast } from 'sonner';
-import { fetchAllUsersApi, unbanUserApi, clearWarningsApi } from '../../api/admin';
+import { getAllUsersApi, staffUnbanUserApi, staffClearWarningsApi } from '../../api/admin';
 
 interface UserManagementProps {
   displayUsers: Array<{
@@ -231,12 +231,12 @@ export function UserManagement({
                             confirmColor: '#22c55e',
                             onConfirm: async () => {
                               try {
-                                await unbanUserApi(user.username);
+                                await staffUnbanUserApi(user.username);
                                 toast.success(`Đã gỡ cấm người dùng ${user.username}`);
                                 
                                 // Refresh users list
-                                const response = await fetchAllUsersApi({ page: 1, limit: 100 });
-                                setApiUsers(response.data.users);
+                                const response = await getAllUsersApi({ page: 1, limit: 100 });
+                                setApiUsers(response.users);
                                 
                                 setShowConfirmModal(false);
                               } catch (error: any) {
@@ -284,12 +284,12 @@ export function UserManagement({
                         size="sm"
                         onClick={async () => {
                           try {
-                            await clearWarningsApi(user.username);
+                            await staffClearWarningsApi(user.username);
                             toast.success(`Đã xóa cảnh báo của ${user.username}`);
                             
                             // Refresh users list
-                            const response = await fetchAllUsersApi({ page: 1, limit: 100 });
-                            setApiUsers(response.data.users);
+                            const response = await getAllUsersApi({ page: 1, limit: 100 });
+                            setApiUsers(response.users);
                           } catch (error: any) {
                             console.error('❌ Error clearing warnings:', error);
                             if (error.response?.status === 404) {
