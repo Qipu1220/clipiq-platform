@@ -9,6 +9,15 @@ import {
   deleteVideo,
   searchVideos,
   getTrendingVideos,
+  likeVideo,
+  unlikeVideo,
+  toggleSaveVideo,
+
+  getLikedVideos,
+  getSavedVideos,
+  getComments,
+  addComment,
+  deleteComment,
 } from '../controllers/video.controller.js';
 import { authenticateToken, optionalAuth, checkNotBanned } from '../middlewares/auth.middleware.js';
 
@@ -17,7 +26,7 @@ const router = express.Router();
 // Public routes - MUST be before /:id
 router.get('/search', searchVideos); // Search videos
 router.get('/trending', getTrendingVideos); // Get trending videos
-router.get('/', getVideos); // Get video feed
+router.get('/', optionalAuth, getVideos); // Get video feed
 
 // Protected routes
 router.post('/', authenticateToken, checkNotBanned, uploadVideo);

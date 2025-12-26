@@ -17,6 +17,7 @@ export interface Video {
   createdAt?: string;
   updatedAt?: string;
   isLiked?: boolean; // whether current user liked this video
+  isSaved?: boolean;
 }
 
 export interface VideoResponse {
@@ -37,10 +38,10 @@ export interface SingleVideoResponse {
 }
 
 // Fetch videos (For You feed)
-export const fetchVideosApi = async (page: number = 1, limit: number = 10): Promise<VideoResponse> => {
-  console.log(`🌍 fetchVideosApi called with page=${page}, limit=${limit}`);
+export const fetchVideosApi = async (page: number = 1, limit: number = 10, username?: string): Promise<VideoResponse> => {
+  console.log(`🌍 fetchVideosApi called with page=${page}, limit=${limit}, username=${username}`);
   const response = await apiClient.get<VideoResponse>('/videos', {
-    params: { page, limit }
+    params: { page, limit, username }
   });
   console.log(`✅ fetchVideosApi response:`, response.data);
   return response.data;
@@ -66,9 +67,91 @@ export const getTrendingVideosApi = async (): Promise<VideoResponse> => {
   return response.data;
 };
 
+// Fetch liked videos
+export const fetchLikedVideosApi = async (page: number = 1, limit: number = 10): Promise<VideoResponse> => {
+  const response = await apiClient.get<VideoResponse>('/videos/liked', {
+    params: { page, limit }
+  });
+  return response.data;
+};
+
+// Fetch saved videos
+export const fetchSavedVideosApi = async (page: number = 1, limit: number = 10): Promise<VideoResponse> => {
+  const response = await apiClient.get<VideoResponse>('/videos/saved', {
+    params: { page, limit }
+  });
+  return response.data;
+};
+
+// Like video
+export const likeVideoApi = async (videoId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await apiClient.post<{ success: boolean; message: string }>(`/videos/${videoId}/like`);
+  return response.data;
+};
+
+// Unlike video
+export const unlikeVideoApi = async (videoId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await apiClient.delete<{ success: boolean; message: string }>(`/videos/${videoId}/like`);
+  return response.data;
+};
+
+export interface Comment {
+  id: string;
+  text: string;
+  userId: string;
+  username: string;
+  userDisplayName?: string;
+  userAvatarUrl?: string;
+  createdAt: string;
+}
+
+export interface CommentsResponse {
+  success: boolean;
+  data: Comment[];
+}
+
+export interface AddCommentResponse {
+  success: boolean;
+  data: Comment;
+}
+
+// Get comments
+export const getCommentsApi = async (videoId: string, page: number = 1): Promise<CommentsResponse> => {
+  const response = await apiClient.get<CommentsResponse>(`/videos/${videoId}/comments`, {
+    params: { page }
+  });
+  return response.data;
+};
+
+// Add comment
+export const addCommentApi = async (videoId: string, text: string): Promise<AddCommentResponse> => {
+  const response = await apiClient.post<AddCommentResponse>(`/videos/${videoId}/comments`, { text });
+  return response.data;
+};
+
+// Delete comment
+export const deleteCommentApi = async (videoId: string, commentId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await apiClient.delete<{ success: boolean; message: string }>(`/videos/${videoId}/comments/${commentId}`);
+  return response.data;
+};
+
+// Toggle save video
+export const toggleSaveVideoApi = async (videoId: string): Promise<{ success: boolean; data: { isSaved: boolean }; message: string }> => {
+  const response = await apiClient.post(`/videos/${videoId}/save`);
+  return response.data;
+};
+
 export default {
   fetchVideosApi,
   fetchVideoByIdApi,
   searchVideosApi,
-  getTrendingVideosApi
+  getTrendingVideosApi,
+  fetchLikedVideosApi,
+  fetchSavedVideosApi,
+  likeVideoApi,
+  unlikeVideoApi,
+  toggleSaveVideoApi,
+  getCommentsApi,
+  addCommentApi,
+  deleteCommentApi
 };

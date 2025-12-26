@@ -18,6 +18,8 @@ import { UploadVideo } from './components/user/UploadVideo';
 import { ReportUser } from './components/user/ReportUser';
 import { PublicUserProfile } from './components/user/PublicUserProfile';
 import { UserProfile } from './components/user/UserProfile';
+import { banUserApi, warnUserApi } from './api/admin';
+import { toast } from 'sonner';
 
 function AppContent() {
   const dispatch = useDispatch<AppDispatch>();
@@ -47,9 +49,22 @@ function AppContent() {
   // Refetch videos when user logs in to ensure like status is correct
   useEffect(() => {
     if (isAuthenticated) {
-      console.log('🔄 User authenticated, refetching videos to update like status');
       dispatch(fetchVideosThunk());
+      // Also refresh user data immediately after login to ensure warnings are shown
+      dispatch(getCurrentUserThunk());
     }
+  }, [isAuthenticated, dispatch]);
+
+  // Periodically refresh user data to get updated warnings, ban status, etc.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Refresh user data every 30 seconds
+    const intervalId = setInterval(() => {
+      dispatch(getCurrentUserThunk());
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(intervalId);
   }, [isAuthenticated, dispatch]);
 
   // Show loading screen while checking session
@@ -217,13 +232,20 @@ function AppContent() {
         return <VideoPlayer videoId={selectedVideoId} onBack={() => handleNavigate('home')} onViewUserProfile={handleViewUserProfile} />;
       }
       if (currentPage === 'view-user-profile' && selectedUsername) {
-        return <PublicUserProfile username={selectedUsername} onVideoClick={handleVideoClick} onBack={() => handleNavigate('home')} />;
+        return <PublicUserProfile username={selectedUsername} onVideoClick={() => setCurrentPage('home')} onBack={() => handleNavigate('home')} />;
+      }
+      if (currentPage === 'profile') {
+        return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
       }
       // Use TikTok-style layout for home page
       return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
     }
 
-    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} />;
+    if (currentPage === 'profile') {
+      return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
+    }
+
+    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
   };
 
   return (

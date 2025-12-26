@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
-import { 
-  Play, Search, Home, Compass, Users, Video, MessageCircle, 
+import {
+  Play, Search, Home, Compass, Users, Video, MessageCircle,
   Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check,
-  AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy
+  AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
@@ -15,11 +15,12 @@ import { Sidebar, SidebarItem } from '../common/Sidebar';
 import { UserMenu } from '../common/UserMenu';
 import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
-import { 
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '../ui/dropdown-menu';
 import {
   AlertDialog,
@@ -63,14 +64,14 @@ const fallbackCopy = (text: string) => {
   document.body.appendChild(textArea);
   textArea.focus();
   textArea.select();
-  
+
   try {
     document.execCommand('copy');
     toast.success('Đã copy bình luận');
   } catch (err) {
     toast.error('Không thể copy bình luận');
   }
-  
+
   document.body.removeChild(textArea);
 };
 
@@ -85,11 +86,12 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
-  
+  const { pagination, loading, currentVideoComments, focusedVideoId } = useSelector((state: RootState) => state.videos);
+
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [commentText, setCommentText] = useState('');
   const [activeTab, setActiveTab] = useState('for-you');
   const [rightTab, setRightTab] = useState<'comments' | 'suggestions'>('comments');
@@ -99,7 +101,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const [bookmarkAnimation, setBookmarkAnimation] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'up' | 'down' | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Default hidden comments
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportType, setReportType] = useState('spam');
   const [reportReason, setReportReason] = useState('');
@@ -110,27 +112,27 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const [commentReportType, setCommentReportType] = useState('spam');
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
   const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
-  
+
   const userMenuRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
-  
+
   // Filter videos based on active tab - WITH SAFE CHECKS
-  const filteredVideos = activeTab === 'following' 
+  const filteredVideos = activeTab === 'following'
     ? videos.filter(v => {
-        // Ensure currentUser exists and has subscriptions
-        if (!currentUser) return false;
-        const userSubscriptions = subscriptions[currentUser.username];
-        if (!userSubscriptions || !Array.isArray(userSubscriptions)) return false;
-        return userSubscriptions.includes(v.uploaderUsername);
-      })
+      // Ensure currentUser exists and has subscriptions
+      if (!currentUser) return false;
+      const userSubscriptions = subscriptions[currentUser.username];
+      if (!userSubscriptions || !Array.isArray(userSubscriptions)) return false;
+      return userSubscriptions.includes(v.uploaderUsername);
+    })
     : videos;
-  
+
   const currentVideo = filteredVideos[currentVideoIndex];
   const uploaderInfo = currentVideo ? users.find(u => u.username === currentVideo.uploaderUsername) : null;
-  const isSubscribed = currentUser && currentVideo 
-    ? subscriptions[currentUser.username]?.includes(currentVideo.uploaderUsername) 
+  const isSubscribed = currentUser && currentVideo
+    ? subscriptions[currentUser.username]?.includes(currentVideo.uploaderUsername)
     : false;
 
   // Reset video index when tab changes
@@ -141,8 +143,25 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   useEffect(() => {
     if (currentVideo) {
       dispatch(incrementViewCount(currentVideo.id));
+      setIsBookmarked(!!currentVideo.isSaved);
     }
-  }, [currentVideo?.id, dispatch]);
+  }, [currentVideo?.id, currentVideo?.isSaved, dispatch]);
+
+  // Handle initial video focus from profile click
+  useEffect(() => {
+    if (focusedVideoId && videos.length > 0) {
+      const index = videos.findIndex(v => v.id === focusedVideoId);
+      if (index !== -1) {
+        setCurrentVideoIndex(index);
+        // Scroll to it
+        setTimeout(() => {
+          videoRefs.current[index]?.scrollIntoView({ behavior: 'auto' });
+        }, 100);
+        // Clear focus
+        dispatch(setFocusedVideoId(null));
+      }
+    }
+  }, [focusedVideoId, videos, dispatch]);
 
   // Click outside to close user menu
   useEffect(() => {
@@ -161,11 +180,21 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     };
   }, [showUserMenu]);
 
+  // Refs for state accessed inside IntersectionObserver
+  const isSidebarOpenRef = useRef(isSidebarOpen);
+  const rightTabRef = useRef(rightTab);
+
+  // Update refs when state changes
+  useEffect(() => {
+    isSidebarOpenRef.current = isSidebarOpen;
+    rightTabRef.current = rightTab;
+  }, [isSidebarOpen, rightTab]);
+
   // IntersectionObserver to track which video is currently visible
   useEffect(() => {
     const options = {
       root: videoContainerRef.current,
-      threshold: 0.5, // Video is considered visible when 50% is in view
+      threshold: 0.6,
     };
 
     const observer = new IntersectionObserver((entries) => {
@@ -174,6 +203,12 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           const index = videoRefs.current.findIndex(ref => ref === entry.target);
           if (index !== -1 && index !== currentVideoIndex) {
             setCurrentVideoIndex(index);
+
+            // Auto-close comments when scrolling to new video
+            // Use refs to get the latest state without recreating the observer
+            if (isSidebarOpenRef.current && rightTabRef.current === 'comments') {
+              setIsSidebarOpen(false);
+            }
           }
         }
       });
@@ -186,40 +221,80 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     return () => {
       observer.disconnect();
     };
-  }, [filteredVideos]);
+  }, [filteredVideos]); // Only recreate if video list changes
 
-  // Scroll to video when index changes (for programmatic navigation)
+  // Scroll to video when index changes (for programmatic navigation) & Auto-play logic
   useEffect(() => {
-    const videoElement = videoRefs.current[currentVideoIndex];
-    if (videoElement && videoContainerRef.current) {
-      videoElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const videoContainer = videoRefs.current[currentVideoIndex];
+    if (videoContainer && videoContainerRef.current) {
+      videoContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // Programmatically play the video
+      const videoElement = videoContainer.querySelector('video');
+      if (videoElement) {
+        // Reset other videos
+        videoRefs.current.forEach((ref, index) => {
+          if (index !== currentVideoIndex && ref) {
+            const otherVideo = ref.querySelector('video');
+            if (otherVideo) {
+              otherVideo.pause();
+              otherVideo.currentTime = 0;
+            }
+          }
+        });
+
+        // Play current video
+        videoElement.muted = isMuted;
+        const playPromise = videoElement.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.log("Auto-play prevented:", error);
+            // Auto-play might be blocked by browser policy if not muted
+          });
+        }
+      }
     }
-  }, [currentVideoIndex]);
+
+    // Infinite Scroll Logic: Fetch more videos when approaching the end
+    if (activeTab === 'for-you' && currentVideoIndex >= videos.length - 3) {
+      const { hasMore, page } = pagination;
+      if (hasMore && !loading) {
+        console.log(`📜 Infinite Scroll: Fetching page ${page + 1}`);
+        dispatch(fetchVideosThunk({ page: page + 1, limit: 10 }) as any);
+      }
+    }
+  }, [currentVideoIndex, isMuted, videos.length, activeTab, pagination.hasMore, pagination.page, loading, dispatch]);
 
   const handleLike = () => {
     if (!currentUser || !currentVideo) return;
-    dispatch(likeVideo({ videoId: currentVideo.id, userId: currentUser.id }));
+    dispatch(toggleLikeVideoThunk({ videoId: currentVideo.id, isLiked: !!currentVideo.isLiked }) as any);
     setLikeAnimation(true);
     setTimeout(() => setLikeAnimation(false), 500);
   };
 
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!currentVideo) return;
+    try {
+      await dispatch(deleteCommentThunk({ videoId: currentVideo.id, commentId })).unwrap();
+      toast.success('Đã xóa bình luận');
+    } catch (error) {
+      toast.error('Không thể xóa bình luận');
+    }
+  };
+
   const handleComment = () => {
     if (!commentText.trim() || !currentUser || !currentVideo) return;
-    dispatch(addComment({
+    dispatch(addCommentThunk({
       videoId: currentVideo.id,
-      comment: {
-        id: Date.now().toString(),
-        username: currentUser.username,
-        text: commentText,
-        timestamp: Date.now(),
-      },
-    }));
+      text: commentText,
+    }) as any);
     setCommentText('');
   };
 
   const handleSubscribe = () => {
     if (!currentUser || !currentVideo || currentUser.username === currentVideo.uploaderUsername) return;
-    
+
     if (isSubscribed) {
       dispatch(unsubscribeFromUser({
         follower: currentUser.username,
@@ -243,6 +318,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
       // Mở và chuyển sang comments
       setIsSidebarOpen(true);
       setRightTab('comments');
+      if (currentVideo) {
+        dispatch(fetchCommentsThunk(currentVideo.id) as any);
+      }
     }
   };
 
@@ -291,9 +369,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
         <div className="w-60 bg-black flex flex-col border-r border-zinc-900">
           {/* Logo */}
           <div className="p-4 flex items-center gap-2">
-            <img 
-              src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png" 
-              alt="ShortV Logo" 
+            <img
+              src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
+              alt="ShortV Logo"
               className="w-6 h-6 object-contain"
             />
             <h1 className="text-white text-xl logo-text">shortv</h1>
@@ -315,7 +393,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           {/* Navigation */}
           <ScrollArea className="flex-1">
             <div className="px-2 space-y-1">
-              <button 
+              <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm text-zinc-400 hover:bg-zinc-900/40"
                 onClick={() => setActiveTab('for-you')}
               >
@@ -323,10 +401,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                 <span>Dành cho bạn</span>
               </button>
 
-              <button 
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${
-                  showFollowingList ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
-                }`}
+              <button
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showFollowingList ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                  }`}
                 onClick={() => {
                   setShowFollowingList(!showFollowingList);
                   setActiveTab('for-you');
@@ -336,7 +413,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                 <span>Đã follow</span>
               </button>
 
-              <button 
+              <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
                 onClick={() => onNavigate?.('upload')}
               >
@@ -346,9 +423,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                 <span>Tải lên</span>
               </button>
 
-              <button 
+              <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
-                onClick={() => onViewUserProfile?.(currentUser.username)}
+                onClick={() => onNavigate?.('profile')}
               >
                 <User className="w-5 h-5" />
                 <span>Hồ sơ</span>
@@ -365,7 +442,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
             </div>
             <h2 className="text-white text-2xl mb-3">Chưa có video nào</h2>
             <p className="text-zinc-400 text-sm mb-6">
-              {subscriptions[currentUser.username]?.length > 0 
+              {subscriptions[currentUser.username]?.length > 0
                 ? 'Những người bạn follow chưa đăng video nào. Hãy khám phá thêm người sáng tạo mới!'
                 : 'Bạn chưa follow ai. Hãy follow những người sáng tạo để xem video của họ!'}
             </p>
@@ -409,9 +486,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
         <div className="w-60 bg-black flex flex-col border-r border-zinc-900">
           {/* Logo */}
           <div className="p-4 flex items-center gap-2">
-            <img 
-              src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png" 
-              alt="ShortV Logo" 
+            <img
+              src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
+              alt="ShortV Logo"
               className="w-6 h-6 object-contain"
             />
             <h1 className="text-white text-xl logo-text">shortv</h1>
@@ -439,7 +516,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           {/* Navigation */}
           <ScrollArea className="flex-1">
             <div className="px-2 space-y-1">
-              <button 
+              <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm text-zinc-400 hover:bg-zinc-900/40"
                 onClick={() => {
                   setSearchQuery('');
@@ -451,7 +528,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                 <span>Dành cho bạn</span>
               </button>
 
-              <button 
+              <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm text-zinc-400 hover:bg-zinc-900/40"
                 onClick={() => {
                   setSearchQuery('');
@@ -462,7 +539,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                 <span>Đã follow</span>
               </button>
 
-              <button 
+              <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
                 onClick={() => onNavigate?.('upload')}
               >
@@ -472,9 +549,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                 <span>Tải lên</span>
               </button>
 
-              <button 
+              <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
-                onClick={() => onViewUserProfile?.(currentUser.username)}
+                onClick={() => onNavigate?.('profile')}
               >
                 <User className="w-5 h-5" />
                 <span>Hồ sơ</span>
@@ -511,9 +588,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
       <div className="w-60 bg-black flex flex-col border-r border-zinc-900">
         {/* Logo */}
         <div className="p-4 flex items-center gap-2">
-          <img 
-            src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png" 
-            alt="ShortV Logo" 
+          <img
+            src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
+            alt="ShortV Logo"
             className="w-6 h-6 object-contain"
           />
           <h1 className="text-white text-xl logo-text">shortv</h1>
@@ -540,20 +617,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
         {/* Navigation */}
         <ScrollArea className="flex-1">
           <div className="px-2 space-y-1">
-            <button 
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${
-                activeTab === 'for-you' ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
-              }`}
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${activeTab === 'for-you' ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
               onClick={() => setActiveTab('for-you')}
             >
               <Home className="w-5 h-5" />
               <span>Dành cho bạn</span>
             </button>
 
-            <button 
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${
-                showFollowingList ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
-              }`}
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showFollowingList ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
               onClick={() => {
                 setShowFollowingList(!showFollowingList);
                 setActiveTab('for-you');
@@ -563,7 +638,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               <span>Đã follow</span>
             </button>
 
-            <button 
+            <button
               className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
               onClick={() => onNavigate?.('upload')}
             >
@@ -573,7 +648,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               <span>Tải lên</span>
             </button>
 
-            <button 
+            <button
               className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
               onClick={() => onViewUserProfile?.(currentUser.username)}
             >
@@ -610,10 +685,10 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
       {/* Center Video Player */}
       <div className="flex-1 relative flex items-center justify-center overflow-hidden">
         {/* Scrollable Video Container with snap */}
-        <div 
+        <div
           ref={videoContainerRef}
           className="relative w-full max-w-[420px] h-full overflow-y-scroll snap-y snap-mandatory hide-scrollbar"
-          style={{ 
+          style={{
             scrollBehavior: 'smooth',
           }}
         >
@@ -622,7 +697,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
             const uploader = users.find(u => u.username === video.uploaderUsername);
             const isVideoLiked = video.isLiked || false;
             const isVideoSubscribed = subscriptions[currentUser.username]?.includes(video.uploaderUsername);
-            
+
             return (
               <div
                 key={video.id}
@@ -635,6 +710,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                     src={video.videoUrl}
                     poster={video.thumbnailUrl || `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=1400&fit=crop`}
                     muted={isMuted}
+                    playsInline
                     autoPlay={index === currentVideoIndex}
                     controls={index === currentVideoIndex}
                     className="w-full h-full object-cover"
@@ -644,9 +720,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/60 to-transparent">
                     <p className="text-white mb-1 font-medium">{video.title}</p>
                     <p className="text-zinc-300 text-sm line-clamp-2">{video.description}</p>
-                    <p className="text-zinc-400 text-xs mt-2">
-                      @{uploader?.username || video.uploaderUsername} · {new Date(video.uploadDate).toLocaleDateString()}
-                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent video click/toggle
+                          onViewUserProfile?.(uploader?.username || video.uploaderUsername);
+                        }}
+                        className="text-zinc-400 text-xs hover:text-white hover:underline transition-colors font-medium z-50 relative"
+                      >
+                        @{uploader?.username || video.uploaderUsername}
+                      </button>
+                      <span className="text-zinc-400 text-xs">· {new Date(video.uploadDate).toLocaleDateString()}</span>
+                    </div>
                   </div>
 
                   {/* Mute Button (Top Right) - Only show on current video */}
@@ -669,16 +754,16 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
         </div>
 
         {/* Right Side Action Buttons (Fixed position, always visible) */}
-        <div className="absolute right-6 bottom-28 flex flex-col gap-4 items-center z-10">
+        <div className="absolute right-6 bottom-28 flex flex-col gap-4 items-center z-50">
           {/* Uploader Avatar with Follow Button */}
           <div className="relative">
             <button
               onClick={() => onViewUserProfile?.(currentVideo.uploaderUsername)}
               className="block"
             >
-              {uploaderInfo?.avatarUrl ? (
-                <img 
-                  src={uploaderInfo.avatarUrl} 
+              {(currentVideo.uploaderAvatarUrl || uploaderInfo?.avatarUrl) ? (
+                <img
+                  src={currentVideo.uploaderAvatarUrl || uploaderInfo?.avatarUrl}
                   alt={currentVideo.uploaderUsername}
                   className="w-12 h-12 rounded-full object-cover border-2 border-zinc-800"
                 />
@@ -691,9 +776,8 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
             {currentUser.username !== currentVideo.uploaderUsername && (
               <button
                 onClick={handleSubscribe}
-                className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
-                  followAnimation ? 'scale-125' : ''
-                }`}
+                className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${followAnimation ? 'scale-125' : ''
+                  }`}
                 style={{ backgroundColor: '#ff3b5c' }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e6344f'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff3b5c'}
@@ -712,13 +796,11 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
             onClick={handleLike}
             className="flex flex-col items-center gap-1 group"
           >
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all group-hover:scale-110 ${
-              likeAnimation ? 'animate-bounce' : ''
-            }`}>
-              <Heart 
-                className={`w-7 h-7 transition-all duration-300 ${
-                  isLiked ? 'scale-110' : ''
-                }`}
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all group-hover:scale-110 ${likeAnimation ? 'animate-bounce' : ''
+              }`}>
+              <Heart
+                className={`w-7 h-7 transition-all duration-300 ${isLiked ? 'scale-110' : ''
+                  }`}
                 style={{
                   fill: isLiked ? '#ff3b5c' : 'none',
                   stroke: isLiked ? '#ff3b5c' : 'white',
@@ -743,19 +825,20 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           {/* Bookmark */}
           <button
             onClick={() => {
-              setIsBookmarked(!isBookmarked);
-              setBookmarkAnimation(true);
-              setTimeout(() => setBookmarkAnimation(false), 500);
+              if (currentVideo) {
+                dispatch(toggleSaveVideoThunk(currentVideo.id) as any);
+                setIsBookmarked(!isBookmarked); // Optimistic toggle
+                setBookmarkAnimation(true);
+                setTimeout(() => setBookmarkAnimation(false), 500);
+              }
             }}
             className="flex flex-col items-center gap-1 group"
           >
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all group-hover:scale-110 ${
-              bookmarkAnimation ? 'animate-bounce' : ''
-            }`}>
-              <Bookmark 
-                className={`w-7 h-7 transition-all duration-300 ${
-                  isBookmarked ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-white'
-                }`} 
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all group-hover:scale-110 ${bookmarkAnimation ? 'animate-bounce' : ''
+              }`}>
+              <Bookmark
+                className={`w-7 h-7 transition-all duration-300 ${isBookmarked ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-white'
+                  }`}
               />
             </div>
             <span className="text-white text-xs font-medium">Lưu</span>
@@ -787,7 +870,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 backdrop-blur-md"
-          style={{ 
+          style={{
             backgroundColor: 'rgba(255, 59, 92, 0.15)',
             border: '1px solid rgba(255, 59, 92, 0.3)'
           }}
@@ -809,107 +892,40 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
       </div>
 
       {/* Right Sidebar - Recommendations & Comments */}
-      <div 
-        className={`bg-black border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out ${
-          isSidebarOpen ? 'w-96' : 'w-0'
-        }`}
+      <div
+        className={`bg-black border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-96' : 'w-0'
+          }`}
         style={{ overflow: isSidebarOpen ? 'visible' : 'hidden' }}
       >
         {isSidebarOpen && (
           <>
-        {/* User Menu Header */}
-        <div className="p-4 border-b border-zinc-800">
-          <div className="relative mb-3 flex justify-end" ref={userMenuRef}>
-            <div 
-              className="flex items-center gap-2 cursor-pointer hover:bg-zinc-900/50 px-3 py-1.5 rounded-full transition-all border border-zinc-800 hover:border-zinc-700"
-              onClick={() => setShowUserMenu(!showUserMenu)}
-            >
-              {currentUser?.avatarUrl ? (
-                <img 
-                  src={currentUser.avatarUrl} 
-                  alt={currentUser.username}
-                  className="w-7 h-7 rounded-full object-cover"
+            {/* User Menu Header */}
+            <div className="p-4 border-b border-zinc-800">
+              <div className="mb-3 flex justify-end">
+                <UserMenu 
+                  variant="user"
+                  onProfileClick={() => onViewUserProfile?.(currentUser.username)}
                 />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
-                  <User className="w-3.5 h-3.5 text-zinc-400" />
-                </div>
-              )}
-              <span className="text-white text-sm font-medium">{currentUser?.displayName || currentUser?.username}</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
-            </div>
-
-            {showUserMenu && (
-              <div className="absolute top-full right-0 mt-2 w-56 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                {/* User Info */}
-                <div className="px-4 py-3 border-b border-zinc-800">
-                  <div className="flex items-center gap-2.5">
-                    {currentUser?.avatarUrl ? (
-                      <img 
-                        src={currentUser.avatarUrl} 
-                        alt={currentUser.username}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
-                        <User className="w-5 h-5 text-zinc-400" />
-                      </div>
-                    )}
-                    <div className="flex flex-col overflow-hidden">
-                      <span className="text-white text-sm font-medium truncate">{currentUser?.displayName || currentUser?.username}</span>
-                      <span className="text-zinc-500 text-xs truncate">@{currentUser?.username}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Menu Items */}
-                <div className="py-1">
-                  <button
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      onViewUserProfile?.(currentUser.username);
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-white hover:bg-zinc-800 transition-colors text-left group"
-                  >
-                    <User className="w-4 h-4 text-zinc-400 group-hover:text-white transition-colors" />
-                    <span className="text-sm">Xem tài khoản</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      dispatch(logoutThunk());
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-red-400 hover:bg-zinc-800 transition-colors text-left group"
-                  >
-                    <LogOut className="w-4 h-4 group-hover:text-red-300 transition-colors" />
-                    <span className="text-sm">Đăng xuất</span>
-                  </button>
-                </div>
               </div>
-            )}
-          </div>
 
-          {/* Tab Switcher */}
-          <div className="flex gap-0 bg-zinc-900 rounded-lg p-1">
-            <button 
-              onClick={handleCommentClick}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                rightTab === 'comments' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              Bình luận
-            </button>
-            <button 
-              onClick={handleSuggestionsClick}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                rightTab === 'suggestions' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              Bạn có thể thích
-            </button>
-          </div>
-        </div>
+              {/* Tab Switcher */}
+              <div className="flex gap-0 bg-zinc-900 rounded-lg p-1">
+                <button
+                  onClick={handleCommentClick}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${rightTab === 'comments' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                >
+                  Bình luận
+                </button>
+                <button
+                  onClick={handleSuggestionsClick}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${rightTab === 'suggestions' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                >
+                  Bạn có thể thích
+                </button>
+              </div>
+            </div>
 
             {/* Tab Content */}
             {rightTab === 'comments' ? (
@@ -1436,9 +1452,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           <div className="w-60 bg-black flex flex-col border-r border-zinc-900">
             {/* Logo */}
             <div className="p-4 flex items-center gap-2">
-              <img 
-                src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png" 
-                alt="ShortV Logo" 
+              <img
+                src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
+                alt="ShortV Logo"
                 className="w-6 h-6 object-contain"
               />
               <h1 className="text-white text-xl logo-text">shortv</h1>
@@ -1465,7 +1481,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
             {/* Navigation */}
             <ScrollArea className="flex-1">
               <div className="px-2 space-y-1">
-                <button 
+                <button
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm text-zinc-400 hover:bg-zinc-900/40"
                   onClick={() => setShowFollowingList(false)}
                 >
@@ -1473,14 +1489,14 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   <span>Dành cho bạn</span>
                 </button>
 
-                <button 
+                <button
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm bg-zinc-900/80 text-white font-medium"
                 >
                   <Users className="w-5 h-5" />
                   <span>Đã follow</span>
                 </button>
 
-                <button 
+                <button
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
                   onClick={() => {
                     setShowFollowingList(false);
@@ -1493,7 +1509,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   <span>Tải lên</span>
                 </button>
 
-                <button 
+                <button
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
                   onClick={() => {
                     setShowFollowingList(false);
@@ -1557,7 +1573,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* Top Bar */}
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
               <h2 className="text-white text-xl logo-text">Đã follow</h2>
@@ -1589,7 +1605,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                     {subscriptions[currentUser.username].map((username) => {
                       const user = users.find(u => u.username === username);
                       const isCurrentlyFollowing = subscriptions[currentUser.username]?.includes(username);
-                      
+
                       return (
                         <div
                           key={username}
@@ -1604,9 +1620,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                             className="mb-3"
                           >
                             {user?.avatarUrl ? (
-                              <img 
-                                src={user.avatarUrl} 
-                                alt={username} 
+                              <img
+                                src={user.avatarUrl}
+                                alt={username}
                                 className="w-20 h-20 rounded-full object-cover ring-2 ring-zinc-800 hover:ring-zinc-700 transition-all"
                               />
                             ) : (
@@ -1645,11 +1661,10 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                                 }));
                               }
                             }}
-                            className={`w-full py-2 rounded-lg transition-all font-medium text-sm ${
-                              isCurrentlyFollowing
-                                ? 'bg-zinc-800 text-white hover:bg-zinc-700'
-                                : 'text-white hover:opacity-90'
-                            }`}
+                            className={`w-full py-2 rounded-lg transition-all font-medium text-sm ${isCurrentlyFollowing
+                              ? 'bg-zinc-800 text-white hover:bg-zinc-700'
+                              : 'text-white hover:opacity-90'
+                              }`}
                             style={isCurrentlyFollowing ? {} : { backgroundColor: '#ff3b5c' }}
                             onMouseEnter={(e) => {
                               if (!isCurrentlyFollowing) e.currentTarget.style.backgroundColor = '#e6344f';
