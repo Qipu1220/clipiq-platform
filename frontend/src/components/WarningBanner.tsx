@@ -3,12 +3,14 @@ import { useState } from 'react';
 interface WarningBannerProps {
   warnings: number;
   username: string;
+  userRole?: 'admin' | 'staff' | 'user';
 }
 
-export function WarningBanner({ warnings, username }: WarningBannerProps) {
+export function WarningBanner({ warnings, username, userRole = 'user' }: WarningBannerProps) {
   const [isMinimized, setIsMinimized] = useState(false);
 
-  if (warnings === 0) return null;
+  // Don't show banner for staff/admin or if no warnings
+  if (warnings === 0 || userRole !== 'user') return null;
 
   const getAccentColor = () => {
     if (warnings >= 3) return '#ef4444'; // red-500

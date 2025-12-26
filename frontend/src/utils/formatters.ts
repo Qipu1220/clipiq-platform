@@ -78,3 +78,12 @@ export function formatDateTime(timestamp: number): string {
     minute: '2-digit',
   });
 }
+
+/**
+ * Format seconds to minutes with decimal (e.g., 744 seconds -> "12.4 phút")
+ */
+export function formatWatchTime(seconds: number): string {
+  if (!seconds || seconds === 0) return '0 phút';
+  const minutes = seconds / 60;
+  return `${minutes.toFixed(1)} phút`;
+}

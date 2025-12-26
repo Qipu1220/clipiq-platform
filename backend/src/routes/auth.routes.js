@@ -9,7 +9,7 @@
  */
 
 import express from 'express';
-import { login, logout, refreshToken, getMe, updateProfile } from '../controllers/auth.controller.js';
+import { login, logout, refreshToken, getMe, updateProfile, getSystemStatus } from '../controllers/auth.controller.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { body, validationResult } from 'express-validator';
 
@@ -136,5 +136,13 @@ router.patch('/me',
   validate,
   updateProfile
 );
+
+/**
+ * GET /api/v1/auth/status
+ * 
+ * Get system status including maintenance mode
+ * Public endpoint - no authentication required
+ */
+router.get('/status', getSystemStatus);
 
 export default router;

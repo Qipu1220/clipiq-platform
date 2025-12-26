@@ -9,6 +9,7 @@
 
 import * as authService from '../services/auth.service.js';
 import ApiError from '../utils/apiError.js';
+import { SystemSettings } from '../models/SystemSettings.js';
 
 /**
  * Login Controller
@@ -213,10 +214,34 @@ export async function updateProfile(req, res, next) {
   }
 }
 
+/**
+ * Get system status including maintenance mode
+ * Public endpoint - no authentication required
+ * 
+ * GET /api/v1/auth/status
+ */
+export async function getSystemStatus(req, res, next) {
+  try {
+    const maintenanceMode = await SystemSettings.getMaintenanceMode();
+    const serviceMaintenanceMode = await SystemSettings.getServiceMaintenanceMode();
+    
+    return res.status(200).json({
+      success: true,
+      data: {
+        maintenanceMode,
+        serviceMaintenanceMode
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export default {
   login,
   logout,
   refreshToken,
   getMe,
-  updateProfile
+  updateProfile,
+  getSystemStatus
 };

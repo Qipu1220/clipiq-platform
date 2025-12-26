@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
     ban_expiry TIMESTAMP NULL, -- NULL means permanent ban
     ban_reason TEXT NULL,
     warnings INTEGER DEFAULT 0 CHECK (warnings >= 0),
+    is_demoted BOOLEAN DEFAULT FALSE,
     display_name VARCHAR(100),
     bio TEXT,
     avatar_url VARCHAR(500), -- MinIO S3 URL
@@ -28,6 +29,7 @@ CREATE INDEX idx_users_username ON users(username);
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_users_banned_expiry ON users(banned, ban_expiry) WHERE banned = TRUE;
+CREATE INDEX idx_users_is_demoted ON users(is_demoted) WHERE role = 'staff';
 CREATE INDEX idx_users_created_at ON users(created_at);
 
 -- Auto-update updated_at trigger
@@ -55,6 +57,7 @@ COMMENT ON COLUMN users.banned IS 'Whether user is currently banned';
 COMMENT ON COLUMN users.ban_expiry IS 'Ban expiration timestamp (NULL = permanent)';
 COMMENT ON COLUMN users.ban_reason IS 'Reason for ban (shown to user)';
 COMMENT ON COLUMN users.warnings IS 'Number of warnings received';
+COMMENT ON COLUMN users.is_demoted IS 'Flag indicating if staff member has been demoted (still has staff role but cannot access staff features)';
 COMMENT ON COLUMN users.display_name IS 'Display name (can be changed, optional)';
 COMMENT ON COLUMN users.bio IS 'User biography/description';
 COMMENT ON COLUMN users.avatar_url IS 'Avatar image URL from MinIO S3';
