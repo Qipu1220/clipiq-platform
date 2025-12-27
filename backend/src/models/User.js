@@ -11,67 +11,74 @@ import pool from '../config/database.js';
 export async function getAllUsers(filters = {}) {
   const { role, banned, search, page = 1, limit = 100 } = filters;
   const offset = (page - 1) * limit;
-  
+
   let query = `
     SELECT 
       u.id,
       u.username,
       u.email,
       u.role,
-      u.display_name,
+      u.display_name as "displayName",
       u.bio,
-      u.avatar_url,
+      u.avatar_url as "avatarUrl",
       u.banned,
-      u.ban_expiry,
-      u.ban_reason,
+      u.ban_expiry as "banExpiry",
+      u.ban_reason as "banReason",
       u.warnings,
-      u.created_at,
-      u.updated_at,
-      COUNT(DISTINCT v.id) as video_count,
-      COUNT(DISTINCT sub_followers.id) as follower_count,
-      COUNT(DISTINCT sub_following.id) as following_count
+      u.is_demoted as "isDemoted",
+      u.created_at as "createdAt",
+      u.updated_at as "updatedAt",
+      COUNT(DISTINCT v.id) as "videoCount",
+      COUNT(DISTINCT sub_followers.id) as "followerCount",
+      COUNT(DISTINCT sub_following.id) as "followingCount"
     FROM users u
     LEFT JOIN videos v ON u.id = v.uploader_id AND v.status = 'active'
     LEFT JOIN subscriptions sub_followers ON u.id = sub_followers.following_id
     LEFT JOIN subscriptions sub_following ON u.id = sub_following.follower_id
   `;
-  
+
   const conditions = [];
   const params = [];
   let paramIndex = 1;
-  
+
   if (role) {
     conditions.push(`u.role = $${paramIndex}`);
     params.push(role);
     paramIndex++;
   }
-  
+
   if (banned !== undefined && banned !== null) {
     conditions.push(`u.banned = $${paramIndex}`);
     params.push(banned);
     paramIndex++;
   }
-  
+
+  if (filters.isDemoted !== undefined && filters.isDemoted !== null) {
+    conditions.push(`u.is_demoted = $${paramIndex}`);
+    params.push(filters.isDemoted);
+    paramIndex++;
+  }
+
   if (search) {
     conditions.push(`(u.username ILIKE $${paramIndex} OR u.display_name ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex})`);
     params.push(`%${search}%`);
     paramIndex++;
   }
-  
+
   if (conditions.length > 0) {
     query += ` WHERE ${conditions.join(' AND ')}`;
   }
-  
+
   query += ` GROUP BY u.id ORDER BY u.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
   params.push(limit, offset);
-  
+
   const result = await pool.query(query, params);
-  
+
   // Get total count
   let countQuery = 'SELECT COUNT(*) FROM users u';
   const countParams = [];
   let countParamIndex = 1;
-  
+
   if (conditions.length > 0) {
     const countConditions = [];
     if (role) {
@@ -84,6 +91,11 @@ export async function getAllUsers(filters = {}) {
       countParams.push(banned);
       countParamIndex++;
     }
+    if (filters.isDemoted !== undefined && filters.isDemoted !== null) {
+      countConditions.push(`u.is_demoted = $${countParamIndex}`);
+      countParams.push(filters.isDemoted);
+      countParamIndex++;
+    }
     if (search) {
       countConditions.push(`(u.username ILIKE $${countParamIndex} OR u.display_name ILIKE $${countParamIndex} OR u.email ILIKE $${countParamIndex})`);
       countParams.push(`%${search}%`);
@@ -91,10 +103,10 @@ export async function getAllUsers(filters = {}) {
     }
     countQuery += ` WHERE ${countConditions.join(' AND ')}`;
   }
-  
+
   const countResult = await pool.query(countQuery, countParams);
   const total = parseInt(countResult.rows[0].count);
-  
+
   return {
     users: result.rows,
     total,
@@ -109,10 +121,23 @@ export async function getAllUsers(filters = {}) {
 export async function getUserByUsername(username) {
   const query = `
     SELECT 
-      u.*,
-      COUNT(DISTINCT v.id) as video_count,
-      COUNT(DISTINCT sub_followers.id) as follower_count,
-      COUNT(DISTINCT sub_following.id) as following_count
+      u.id,
+      u.username,
+      u.email,
+      u.role,
+      u.display_name as "displayName",
+      u.bio,
+      u.avatar_url as "avatarUrl",
+      u.banned,
+      u.ban_expiry as "banExpiry",
+      u.ban_reason as "banReason",
+      u.warnings,
+      u.is_demoted as "isDemoted",
+      u.created_at as "createdAt",
+      u.updated_at as "updatedAt",
+      COUNT(DISTINCT v.id) as "videoCount",
+      COUNT(DISTINCT sub_followers.id) as "followerCount",
+      COUNT(DISTINCT sub_following.id) as "followingCount"
     FROM users u
     LEFT JOIN videos v ON u.id = v.uploader_id AND v.status = 'active'
     LEFT JOIN subscriptions sub_followers ON u.id = sub_followers.following_id
@@ -120,7 +145,7 @@ export async function getUserByUsername(username) {
     WHERE u.username = $1
     GROUP BY u.id
   `;
-  
+
   const result = await pool.query(query, [username]);
   return result.rows[0] || null;
 }
@@ -131,10 +156,23 @@ export async function getUserByUsername(username) {
 export async function getUserById(userId) {
   const query = `
     SELECT 
-      u.*,
-      COUNT(DISTINCT v.id) as video_count,
-      COUNT(DISTINCT sub_followers.id) as follower_count,
-      COUNT(DISTINCT sub_following.id) as following_count
+      u.id,
+      u.username,
+      u.email,
+      u.role,
+      u.display_name as "displayName",
+      u.bio,
+      u.avatar_url as "avatarUrl",
+      u.banned,
+      u.ban_expiry as "banExpiry",
+      u.ban_reason as "banReason",
+      u.warnings,
+      u.is_demoted as "isDemoted",
+      u.created_at as "createdAt",
+      u.updated_at as "updatedAt",
+      COUNT(DISTINCT v.id) as "videoCount",
+      COUNT(DISTINCT sub_followers.id) as "followerCount",
+      COUNT(DISTINCT sub_following.id) as "followingCount"
     FROM users u
     LEFT JOIN videos v ON u.id = v.uploader_id AND v.status = 'active'
     LEFT JOIN subscriptions sub_followers ON u.id = sub_followers.following_id
@@ -142,7 +180,7 @@ export async function getUserById(userId) {
     WHERE u.id = $1
     GROUP BY u.id
   `;
-  
+
   const result = await pool.query(query, [userId]);
   return result.rows[0] || null;
 }
@@ -155,12 +193,12 @@ export async function banUser(username, reason, bannedById, expiryDate = null) {
     UPDATE users
     SET banned = true, ban_reason = $1, ban_expiry = $2, updated_at = CURRENT_TIMESTAMP
     WHERE username = $3
-    RETURNING id, username, email, role, display_name, banned, ban_expiry, ban_reason, warnings
+    RETURNING id, username, email, role, display_name as "displayName", banned, ban_expiry as "banExpiry", ban_reason as "banReason", warnings
   `;
-  
+
   const values = [reason, expiryDate, username];
   const result = await pool.query(query, values);
-  
+
   return result.rows[0];
 }
 
@@ -172,9 +210,9 @@ export async function unbanUser(username) {
     UPDATE users
     SET banned = false, ban_reason = NULL, ban_expiry = NULL, updated_at = CURRENT_TIMESTAMP
     WHERE username = $1
-    RETURNING id, username, email, role, display_name, banned, ban_expiry, ban_reason, warnings
+    RETURNING id, username, email, role, display_name as "displayName", banned, ban_expiry as "banExpiry", ban_reason as "banReason", warnings
   `;
-  
+
   const result = await pool.query(query, [username]);
   return result.rows[0];
 }
@@ -187,9 +225,9 @@ export async function warnUser(username, reason, warnedById) {
     UPDATE users
     SET warnings = warnings + 1, updated_at = CURRENT_TIMESTAMP
     WHERE username = $1
-    RETURNING id, username, email, role, display_name, banned, ban_expiry, ban_reason, warnings
+    RETURNING id, username, email, role, display_name as "displayName", banned, ban_expiry as "banExpiry", ban_reason as "banReason", warnings
   `;
-  
+
   const result = await pool.query(query, [username]);
   return result.rows[0];
 }
@@ -202,9 +240,9 @@ export async function clearWarnings(username) {
     UPDATE users
     SET warnings = 0, updated_at = CURRENT_TIMESTAMP
     WHERE username = $1
-    RETURNING id, username, email, role, display_name, banned, ban_expiry, ban_reason, warnings
+    RETURNING id, username, email, role, display_name as "displayName", banned, ban_expiry as "banExpiry", ban_reason as "banReason", warnings
   `;
-  
+
   const result = await pool.query(query, [username]);
   return result.rows[0];
 }
@@ -214,7 +252,7 @@ export async function clearWarnings(username) {
  */
 export async function updateUserProfile(userId, updates) {
   const { displayName, bio, avatarUrl, email } = updates;
-  
+
   const query = `
     UPDATE users
     SET 
@@ -224,12 +262,12 @@ export async function updateUserProfile(userId, updates) {
       email = COALESCE($4, email),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = $5
-    RETURNING id, username, email, role, display_name, bio, avatar_url, banned, warnings, created_at, updated_at
+    RETURNING id, username, email, role, display_name as "displayName", bio, avatar_url as "avatarUrl", banned, warnings, created_at as "createdAt", updated_at as "updatedAt"
   `;
-  
+
   const values = [displayName, bio, avatarUrl, email, userId];
   const result = await pool.query(query, values);
-  
+
   return result.rows[0];
 }
 
@@ -272,7 +310,7 @@ export async function getStaffStats(userId) {
     CROSS JOIN user_actions ua
     CROSS JOIN activity a
   `;
-  
+
   const result = await pool.query(query, [userId]);
   return result.rows[0] || {
     reports_processed: 0,
@@ -281,6 +319,44 @@ export async function getStaffStats(userId) {
     days_active: 0,
     last_activity: null
   };
+}
+
+/**
+ * Promote user to staff
+ */
+export async function promoteToStaff(username) {
+  const query = `
+    UPDATE users
+    SET role = 'staff', is_demoted = false, updated_at = CURRENT_TIMESTAMP
+    WHERE username = $1
+    RETURNING id, username, email, role, display_name as "displayName", is_demoted as "isDemoted"
+  `;
+
+  const result = await pool.query(query, [username]);
+  return result.rows[0];
+}
+
+/**
+ * Demote staff member
+ */
+export async function demoteStaff(username) {
+  const query = `
+    UPDATE users
+    SET is_demoted = true, updated_at = CURRENT_TIMESTAMP
+    WHERE username = $1 AND role = 'staff'
+    RETURNING id, username, email, role, display_name as "displayName", is_demoted as "isDemoted"
+  `;
+
+  const result = await pool.query(query, [username]);
+  return result.rows[0];
+}
+
+/**
+ * Get staff members with optional filters
+ */
+export async function getStaffMembers(filters = {}) {
+  // Reuse getAllUsers but force role='staff'
+  return getAllUsers({ ...filters, role: 'staff' });
 }
 
 export default {
@@ -292,5 +368,8 @@ export default {
   warnUser,
   clearWarnings,
   updateUserProfile,
-  getStaffStats
+  getStaffStats,
+  promoteToStaff,
+  demoteStaff,
+  getStaffMembers
 };

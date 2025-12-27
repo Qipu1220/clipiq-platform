@@ -1,20 +1,56 @@
-import 'dotenv/config';
-import pool from './src/config/database.js';
 
-async function listUsers() {
-    console.log('CWD:', process.cwd());
-    console.log('DB_USER:', process.env.DB_USER);
-    console.log('DB_PASSWORD loaded:', !!process.env.DB_PASSWORD);
+import pg from 'pg';
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
+const pool = new pg.Pool({
+    user: 'clipiq_user',
+    host: 'localhost',
+    database: 'clipiq_db',
+    password: 'clipiq_password',
+    port: 5432,
+});
+
+async function debug() {
     try {
-        console.log('Querying users...');
-        const result = await pool.query('SELECT id, username, email FROM users');
-        console.log('Users found:', result.rows.length);
-        console.table(result.rows);
-        process.exit(0);
+        console.log('Connected to DB');
+
+        // Check for is_demoted column
+        const schemaRes = await pool.query(`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'is_demoted';
+    `);
+
+        console.log('Column is_demoted exists:', schemaRes.rows.length > 0);
+        if (schemaRes.rows.length > 0) {
+            console.log('Column details:', schemaRes.rows[0]);
+        } else {
+            console.log('WARNING: is_demoted column MISSING!');
+        }
+
+        // Check admin user
+        const adminRes = await pool.query("SELECT id, username, email, role FROM users WHERE username = 'admin'");
+        console.log('Admin user found:', adminRes.rows.length > 0);
+        if (adminRes.rows.length > 0) {
+            console.log('Admin user details:', adminRes.rows[0]);
+        } else {
+            console.log('WARNING: Admin user NOT FOUND!');
+        }
+
+        // Check who user001 is
+        const user001Res = await pool.query("SELECT id, username, email, role FROM users WHERE username = 'user001'");
+        if (user001Res.rows.length > 0) {
+            console.log('User001 details:', user001Res.rows[0]);
+        }
+
     } catch (err) {
         console.error('Error:', err);
-        process.exit(1);
+    } finally {
+        await pool.end();
     }
 }
 
-listUsers();
+debug();
