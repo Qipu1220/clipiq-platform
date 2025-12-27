@@ -1,0 +1,18 @@
+Starting Full Validation...
+
+=== 1. Testing Title Search (PostgreSQL) ===
+✅ Database connected
+✅ Title search successful. Found 0 matches for term 'video'.
+
+=== 2. Testing Semantic Search (Qdrant) ===
+Fetching embedding from https://c0930c5f183a.ngrok-free.app/search...
+✅ Embedding generated
+✅ Semantic search successful. Found 3 matches.
+- [0.30] No Title
+- [0.30] No Title
+- [0.30] No Title
+
+=== 3. Testing OCR Search (Elasticsearch) ===
+✅ OCR search successful. Index 'clipiq_ocr' has 881 documents.
+
+✅ Validation Complete

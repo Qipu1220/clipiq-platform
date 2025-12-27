@@ -16,6 +16,7 @@ import userRoutes from './routes/user.routes.js';
 import reportRoutes from './routes/report.routes.js';
 import staffRoutes from './routes/staff.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import searchRoutes from './routes/search.routes.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
@@ -71,6 +72,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/staff', staffRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/search', searchRoutes);
 
 // ===========================================
 // Error Handling

@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId, searchVideosThunk, addVideo } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import {
   Play, Search, Home, Compass, Users, Video, MessageCircle,
-  Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check,
-  AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2
+  Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check, LogOut, ChevronDown,
+  AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2, Loader2
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
@@ -82,11 +82,13 @@ interface TikTokStyleHomeProps {
 
 export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHomeProps) {
   const dispatch = useDispatch();
-  const videos = useSelector((state: RootState) => state.videos.videos);
+  const allVideos = useSelector((state: RootState) => state.videos.videos);
+  // Filter out processing/failed videos for the home feed
+  const videos = allVideos.filter(v => v.processing_status === 'ready' || !v.processing_status);
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
-  const { pagination, loading, currentVideoComments, focusedVideoId } = useSelector((state: RootState) => state.videos);
+  const { pagination, loading, currentVideoComments, focusedVideoId, searchResults } = useSelector((state: RootState) => state.videos);
 
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -264,6 +266,23 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
       }
     }
   }, [currentVideoIndex, isMuted, videos.length, activeTab, pagination.hasMore, pagination.page, loading, dispatch]);
+
+  // Polling for processing videos - auto-refresh every 30s
+  useEffect(() => {
+    const hasProcessingVideos = videos.some(
+      v => v.processing_status === 'processing'
+    );
+
+    if (!hasProcessingVideos) return;
+
+    console.log('🔄 Polling: Found processing videos, refreshing every 30s...');
+    const interval = setInterval(() => {
+      console.log('🔄 Polling: Fetching updated video statuses...');
+      dispatch(fetchVideosThunk({ page: 1, limit: pagination.total || 20 }) as any);
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [videos, dispatch, pagination.total]);
 
   const handleLike = () => {
     if (!currentUser || !currentVideo) return;
@@ -475,6 +494,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
       setActiveSearchQuery(searchQuery.trim());
+      dispatch(searchVideosThunk({ query: searchQuery.trim() }) as any);
     }
   };
 
@@ -568,9 +588,16 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
             const videoIndex = videos.findIndex(v => v.id === videoId);
             if (videoIndex !== -1) {
               setCurrentVideoIndex(videoIndex);
-              setSearchQuery('');
-              setActiveSearchQuery('');
+            } else {
+              // Video from search not in current feed. Add it!
+              const searchVideo = searchResults.find(v => v.id === videoId);
+              if (searchVideo) {
+                dispatch(addVideo(searchVideo));
+                setCurrentVideoIndex(0); // Since addVideo unshifts to start
+              }
             }
+            setSearchQuery('');
+            setActiveSearchQuery('');
           }}
           onUserClick={(username) => {
             onViewUserProfile?.(username);
@@ -711,10 +738,32 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                     poster={video.thumbnailUrl || `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=1400&fit=crop`}
                     muted={isMuted}
                     playsInline
-                    autoPlay={index === currentVideoIndex}
-                    controls={index === currentVideoIndex}
-                    className="w-full h-full object-cover"
+                    autoPlay={index === currentVideoIndex && video.processing_status !== 'processing'}
+                    controls={index === currentVideoIndex && video.processing_status !== 'processing'}
+                    className={`w-full h-full object-cover ${video.processing_status === 'processing' ? 'blur-sm opacity-60' : ''}`}
                   />
+
+                  {/* Processing Overlay */}
+                  {video.processing_status === 'processing' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
+                      <div className="text-center">
+                        <Loader2 className="w-16 h-16 animate-spin text-white mx-auto mb-4" />
+                        <p className="text-white text-lg font-semibold">Đang xử lý...</p>
+                        <p className="text-gray-300 text-sm mt-2">Video sẽ sẵn sàng trong vài phút</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Failed Overlay */}
+                  {video.processing_status === 'failed' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-red-900/60 z-10">
+                      <div className="text-center">
+                        <X className="w-16 h-16 text-red-200 mx-auto mb-4" />
+                        <p className="text-white text-lg font-semibold">Xử lý thất bại</p>
+                        <p className="text-gray-200 text-sm mt-2">Video không thể phát</p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Video Info Overlay (Bottom) */}
                   <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/60 to-transparent">
@@ -730,7 +779,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                       >
                         @{uploader?.username || video.uploaderUsername}
                       </button>
-                      <span className="text-zinc-400 text-xs">· {new Date(video.uploadDate).toLocaleDateString()}</span>
+                      <span className="text-zinc-400 text-xs">· {new Date(video.uploadedAt || video.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
 

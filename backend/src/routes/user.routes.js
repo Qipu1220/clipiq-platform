@@ -3,11 +3,15 @@ import {
   getUserProfileByUsername, 
   getCurrentUserProfile,
   updateUserProfile,
-  getStaffStats
+  getStaffStats,
+  searchUsers
 } from '../controllers/user.controller.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
+
+// Search users (public)
+router.get('/search', searchUsers);
 
 // Get current user profile (requires auth)
 router.get('/me', authenticateToken, getCurrentUserProfile);

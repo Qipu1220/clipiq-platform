@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '../../store/store';
-import { 
-  Heart, User, Play, Search
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState, AppDispatch } from '../../store/store';
+import {
+  Heart, User, Play, Search, Loader2
 } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { searchUsersThunk } from '../../store/usersSlice';
+import { useEffect } from 'react';
 
 interface SearchResultsProps {
   searchQuery: string;
@@ -13,22 +15,27 @@ interface SearchResultsProps {
 }
 
 export function SearchResults({ searchQuery, onVideoClick, onUserClick }: SearchResultsProps) {
+  const dispatch = useDispatch<AppDispatch>();
   const [activeTab, setActiveTab] = useState<'top' | 'users'>('top');
-  const videos = useSelector((state: RootState) => state.videos.videos);
+  const searchResults = useSelector((state: RootState) => state.videos.searchResults);
+  const searchLoading = useSelector((state: RootState) => state.videos.searchLoading);
   const users = useSelector((state: RootState) => state.users.allUsers);
+  const searchUserResults = useSelector((state: RootState) => state.users.searchUserResults);
+  const userStatus = useSelector((state: RootState) => state.users.status);
+  const videos = useSelector((state: RootState) => state.videos.videos);
 
-  // Filter videos based on search query
-  const filteredVideos = videos.filter(video => 
-    video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    video.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    video.uploaderUsername.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Trigger user search when tab changes or query changes
+  useEffect(() => {
+    if (activeTab === 'users' && searchQuery) {
+      dispatch(searchUsersThunk({ query: searchQuery }));
+    }
+  }, [activeTab, searchQuery, dispatch]);
 
-  // Filter users based on search query
-  const filteredUsers = users.filter(user => 
-    user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
-  ).filter(user => user.role === 'user'); // Only show regular users
+  // Use backend results directly for videos
+  const filteredVideos = searchResults;
+
+  // Use backend results for users
+  const filteredUsers = activeTab === 'users' ? searchUserResults : [];
 
   return (
     <div className="flex-1 flex flex-col bg-black">
@@ -37,9 +44,8 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
         <div className="flex items-center gap-8 px-6">
           <button
             onClick={() => setActiveTab('top')}
-            className={`py-4 relative transition-colors ${
-              activeTab === 'top' ? 'text-white' : 'text-zinc-500 hover:text-zinc-400'
-            }`}
+            className={`py-4 relative transition-colors ${activeTab === 'top' ? 'text-white' : 'text-zinc-500 hover:text-zinc-400'
+              }`}
           >
             <span className="font-medium">Top</span>
             {activeTab === 'top' && (
@@ -48,9 +54,8 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`py-4 relative transition-colors ${
-              activeTab === 'users' ? 'text-white' : 'text-zinc-500 hover:text-zinc-400'
-            }`}
+            className={`py-4 relative transition-colors ${activeTab === 'users' ? 'text-white' : 'text-zinc-500 hover:text-zinc-400'
+              }`}
           >
             <span className="font-medium">Người dùng</span>
             {activeTab === 'users' && (
@@ -65,7 +70,12 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
         {/* Top Videos Tab */}
         {activeTab === 'top' && (
           <div className="p-6">
-            {filteredVideos.length > 0 ? (
+            {searchLoading ? (
+              <div className="flex flex-col items-center justify-center py-24">
+                <Loader2 className="w-10 h-10 text-[#ff3b5c] animate-spin mb-4" />
+                <p className="text-zinc-500 text-sm">Đang tìm kiếm...</p>
+              </div>
+            ) : filteredVideos.length > 0 ? (
               <>
                 <div className="text-zinc-400 text-sm mb-4">
                   {filteredVideos.length} kết quả
@@ -74,7 +84,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                   {filteredVideos.map(video => {
                     const uploader = users.find(u => u.username === video.uploaderUsername);
                     return (
-                      <div 
+                      <div
                         key={video.id}
                         onClick={() => onVideoClick(video.id)}
                         className="group cursor-pointer"
@@ -92,7 +102,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                               <Play className="w-12 h-12 text-zinc-700" />
                             </div>
                           )}
-                          
+
                           {/* Play icon overlay */}
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                             <div className="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -122,10 +132,10 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                             {video.title}
                           </p>
                           <div className="flex items-center gap-2">
-                            {uploader?.avatarUrl ? (
-                              <img 
-                                src={uploader.avatarUrl} 
-                                alt={uploader.username}
+                            {uploader?.avatarUrl || video.uploaderAvatarUrl ? (
+                              <img
+                                src={uploader?.avatarUrl || video.uploaderAvatarUrl}
+                                alt={uploader?.username || video.uploaderUsername}
                                 className="w-5 h-5 rounded-full object-cover"
                               />
                             ) : (
@@ -134,11 +144,11 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                               </div>
                             )}
                             <span className="text-zinc-400 text-xs truncate">
-                              {uploader?.displayName || video.uploaderUsername}
+                              {uploader?.displayName || video.uploaderDisplayName || video.uploaderUsername}
                             </span>
                           </div>
                           <div className="text-zinc-500 text-xs">
-                            {new Date(video.uploadedAt).toLocaleDateString('vi-VN', { 
+                            {new Date(video.uploadedAt).toLocaleDateString('vi-VN', {
                               day: 'numeric',
                               month: 'numeric'
                             })}
@@ -173,17 +183,17 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                   {filteredUsers.map(user => {
                     const userVideos = videos.filter(v => v.uploaderUsername === user.username);
                     const totalLikes = userVideos.reduce((sum, v) => sum + v.likes, 0);
-                    
+
                     return (
-                      <div 
+                      <div
                         key={user.username}
                         onClick={() => onUserClick(user.username)}
                         className="flex items-center gap-4 p-4 bg-zinc-950/50 rounded-xl hover:bg-zinc-900/50 transition-colors cursor-pointer border border-zinc-900/50"
                       >
                         {/* Avatar */}
                         {user.avatarUrl ? (
-                          <img 
-                            src={user.avatarUrl} 
+                          <img
+                            src={user.avatarUrl}
                             alt={user.username}
                             className="w-14 h-14 rounded-full object-cover ring-2 ring-zinc-800"
                           />
@@ -209,7 +219,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                           </div>
                           <p className="text-zinc-500 text-sm mb-2">@{user.username}</p>
                           <div className="flex items-center gap-4 text-xs text-zinc-400">
-                            <span>{user.followers?.toLocaleString() || 0} Followers</span>
+                            <span>{user.followersCount?.toLocaleString() || 0} Followers</span>
                             <span className="flex items-center gap-1">
                               <Heart className="w-3 h-3" />
                               {totalLikes >= 1000 ? `${(totalLikes / 1000).toFixed(1)}K` : totalLikes}

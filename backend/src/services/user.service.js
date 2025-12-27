@@ -316,6 +316,31 @@ export async function getStaffStatsService(userId) {
   };
 }
 
+/**
+ * Search users by query
+ */
+export async function searchUsersService(query, limit = 10, offset = 0) {
+  const users = await UserModel.searchUsers(query, limit, offset);
+  
+  return users.map(user => ({
+    id: user.id,
+    username: user.username,
+    displayName: user.display_name,
+    bio: user.bio,
+    avatarUrl: user.avatar_url,
+    role: user.role,
+    followersCount: parseInt(user.followers_count) || 0,
+    createdAt: user.created_at
+  }));
+}
+
+/**
+ * Count search users results
+ */
+export async function countSearchUsersService(query) {
+  return await UserModel.countSearchUsers(query);
+}
+
 export default {
   getAllUsersService,
   getUserByUsernameService,
@@ -325,5 +350,7 @@ export default {
   banUserService,
   unbanUserService,
   warnUserService,
-  clearWarningsService
+  clearWarningsService,
+  searchUsersService,
+  countSearchUsersService
 };

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS videos (
     duration INTEGER CHECK (duration >= 0), -- Duration in seconds
     views INTEGER DEFAULT 0 CHECK (views >= 0),
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'deleted', 'flagged')),
+    processing_status VARCHAR(20) DEFAULT 'processing' CHECK (processing_status IN ('processing', 'ready', 'failed')),
     upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -27,6 +28,7 @@ CREATE INDEX idx_videos_uploader_id ON videos(uploader_id);
 CREATE INDEX idx_videos_upload_date ON videos(upload_date DESC);
 CREATE INDEX idx_videos_views ON videos(views DESC);
 CREATE INDEX idx_videos_status ON videos(status);
+CREATE INDEX idx_videos_processing_status ON videos(processing_status);
 CREATE INDEX idx_videos_title ON videos USING gin(to_tsvector('english', title)); -- Full-text search
 
 -- Auto-update updated_at trigger

@@ -5,6 +5,7 @@ import { restoreSessionThunk, getCurrentUserThunk } from './store/authSlice';
 import { setMaintenanceMode, setServiceMaintenanceMode } from './store/systemSlice';
 import { fetchVideosThunk } from './store/videosSlice';
 import { getSystemStatusApi } from './api/auth';
+import { Toaster } from 'sonner';
 import { LoginPage } from './components/LoginPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
 import { BannedModal } from './components/BannedModal';
@@ -445,6 +446,15 @@ function AppContent() {
 
 export default function App() {
   return (
-    <Provider store={store} children={<AppContent />} />
+    <Provider store={store}>
+      <AppContent />
+      <Toaster
+        position="top-right"
+        theme="dark"
+        richColors
+        expand={false}
+        closeButton
+      />
+    </Provider>
   );
 }

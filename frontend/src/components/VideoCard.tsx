@@ -10,7 +10,7 @@ interface VideoCardProps {
 
 export function VideoCard({ video, onClick }: VideoCardProps) {
   return (
-    <div 
+    <div
       className="cursor-pointer group"
       onClick={onClick}
     >
@@ -30,13 +30,18 @@ export function VideoCard({ video, onClick }: VideoCardProps) {
             Flagged
           </div>
         )}
-        {video.status === 'deleted' && (
-          <div className="absolute top-2 left-2 bg-clipiq text-white text-xs px-2 py-1 rounded">
-            Deleted
+        <div className="absolute top-2 left-2 bg-clipiq text-white text-xs px-2 py-1 rounded">
+          Deleted
+        </div>
+        )}
+        {video.processingStatus === 'processing' && (
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10">
+            <div className="w-10 h-10 border-4 border-zinc-600 border-t-red-500 rounded-full animate-spin mb-3"></div>
+            <span className="text-white font-medium text-sm">Đang xử lý...</span>
           </div>
         )}
       </div>
-      
+
       <div className="space-y-1">
         <h3 className="text-white line-clamp-2 group-hover:text-red-500 transition-colors">
           {video.title}

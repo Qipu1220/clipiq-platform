@@ -447,6 +447,14 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: 
                                         key={video.id}
                                         className="relative aspect-[9/16] bg-zinc-900 rounded-lg overflow-hidden cursor-pointer group"
                                         onClick={() => {
+                                            if (video.processing_status === 'processing' || video.processing_status === 'pending') {
+                                                toast.info('Video đang được xử lý, vui lòng chờ trong giây lát');
+                                                return;
+                                            }
+                                            if (video.processing_status === 'failed') {
+                                                toast.error('Video xử lý thất bại');
+                                                return;
+                                            }
                                             if (displayVideos.length > 0) {
                                                 dispatch(setVideos(displayVideos));
                                                 dispatch(setFocusedVideoId(video.id));
@@ -454,6 +462,22 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: 
                                             onVideoClick?.(video.id);
                                         }}
                                     >
+                                        {/* Processing Overlay */}
+                                        {(video.processing_status === 'processing' || video.processing_status === 'pending') && (
+                                            <div className="absolute inset-0 bg-black/70 z-20 flex flex-col items-center justify-center pointer-events-none">
+                                                <div className="w-8 h-8 border-2 border-white/20 border-t-[#ff3b5c] rounded-full animate-spin mb-2" />
+                                                <span className="text-white text-xs font-medium">Đang xử lý...</span>
+                                            </div>
+                                        )}
+
+                                        {/* Failed Overlay */}
+                                        {video.processing_status === 'failed' && (
+                                            <div className="absolute inset-0 bg-black/70 z-20 flex flex-col items-center justify-center pointer-events-none">
+                                                <X className="w-8 h-8 text-red-500 mb-2" />
+                                                <span className="text-red-500 text-xs font-medium">Xử lý lỗi</span>
+                                            </div>
+                                        )}
+
                                         <ImageWithFallback
                                             src={video.thumbnailUrl && video.thumbnailUrl.startsWith('http') ? video.thumbnailUrl : `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=300&h=500&fit=crop`}
                                             alt={video.title}

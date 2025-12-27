@@ -359,6 +359,48 @@ export async function getStaffMembers(filters = {}) {
   return getAllUsers({ ...filters, role: 'staff' });
 }
 
+/**
+ * Search users by username or display name
+ */
+export async function searchUsers(query, limit = 10, offset = 0) {
+  const searchPattern = `%${query}%`;
+  
+  const sql = `
+    SELECT 
+      u.id, 
+      u.username, 
+      u.display_name, 
+      u.avatar_url, 
+      u.bio, 
+      u.role, 
+      u.created_at,
+      (SELECT COUNT(*) FROM subscriptions WHERE following_id = u.id) as followers_count
+    FROM users u
+    WHERE u.username ILIKE $1 OR u.display_name ILIKE $1
+    ORDER BY followers_count DESC, u.created_at DESC
+    LIMIT $2 OFFSET $3
+  `;
+  
+  const result = await pool.query(sql, [searchPattern, limit, offset]);
+  return result.rows;
+}
+
+/**
+ * Count search users results
+ */
+export async function countSearchUsers(query) {
+  const searchPattern = `%${query}%`;
+  
+  const sql = `
+    SELECT COUNT(*) 
+    FROM users 
+    WHERE username ILIKE $1 OR display_name ILIKE $1
+  `;
+  
+  const result = await pool.query(sql, [searchPattern]);
+  return parseInt(result.rows[0].count);
+}
+
 export default {
   getAllUsers,
   getUserByUsername,
@@ -371,5 +413,7 @@ export default {
   getStaffStats,
   promoteToStaff,
   demoteStaff,
-  getStaffMembers
+  getStaffMembers,
+  searchUsers,
+  countSearchUsers
 };

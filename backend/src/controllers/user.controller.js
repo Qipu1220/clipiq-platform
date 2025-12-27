@@ -47,6 +47,7 @@ export const getUserProfileByUsername = asyncHandler(async (req, res) => {
   const profile = await UserService.getUserByUsernameService(username);
   
   return res.status(200).json({
+  return res.status(200).json({
     success: true,
     data: profile
   });
@@ -79,5 +80,40 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
     success: true,
     message: 'Profile updated successfully',
     data: updatedProfile
+  });
+});
+
+/**
+ * GET /api/v1/users/search
+ * Search users by query
+ */
+export const searchUsers = asyncHandler(async (req, res) => {
+  const { q, page = 1, limit = 10 } = req.query;
+  const offset = (page - 1) * limit;
+
+  if (!q) {
+    return res.status(200).json({
+      success: true,
+      data: {
+        users: [],
+        pagination: { total: 0, page: parseInt(page), pages: 0 }
+      }
+    });
+  }
+
+  const users = await UserService.searchUsersService(q, parseInt(limit), parseInt(offset));
+  const total = await UserService.countSearchUsersService(q);
+  const pages = Math.ceil(total / limit);
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      users,
+      pagination: {
+        total,
+        page: parseInt(page),
+        pages
+      }
+    }
   });
 });

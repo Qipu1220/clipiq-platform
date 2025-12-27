@@ -13,11 +13,14 @@ export interface Video {
   uploaderUsername: string;
   uploaderDisplayName?: string;
   uploaderAvatarUrl?: string;
-  uploadDate: number;
+  processingStatus?: 'processing' | 'ready' | 'failed';
+  uploadDate?: string; // Legacy
+  uploadedAt?: string; // Standardized
   createdAt?: string;
   updatedAt?: string;
   isLiked?: boolean; // whether current user liked this video
   isSaved?: boolean;
+  processing_status?: 'processing' | 'ready' | 'failed'; // video processing state
 }
 
 export interface VideoResponse {

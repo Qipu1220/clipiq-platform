@@ -23,9 +23,14 @@ export async function getVideos(req, res, next) {
     let paramIndex = 2;
 
     if (username) {
+      // Profile view: show processing and ready videos
+      conditions.push(`v.processing_status IN ('processing', 'ready', 'failed')`);
       conditions.push(`u.username = $${paramIndex}`);
       params.push(username);
       paramIndex++;
+    } else {
+      // Feed/Home view: show only ready videos
+      conditions.push(`v.processing_status = 'ready'`);
     }
 
     // Get total count
@@ -62,9 +67,9 @@ export async function getVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
-        : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
+      thumbnailUrl: row.thumbnail_url
+        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
+        : `https://picsum.photos/seed/${row.id}/400/600`,
       duration: row.duration,
       views: row.views,
       likes: row.likes_count || 0,
@@ -74,7 +79,9 @@ export async function getVideos(req, res, next) {
       uploaderUsername: row.username,
       uploaderDisplayName: row.display_name,
       uploaderAvatarUrl: row.avatar_url,
+      processingStatus: row.processing_status,
       createdAt: row.created_at,
+      uploadedAt: row.created_at,
     }));
 
     const pages = Math.ceil(total / limitNum);
@@ -151,8 +158,8 @@ export async function getVideoById(req, res, next) {
         title: video.title,
         description: video.description,
         videoUrl: `http://localhost:9000/clipiq-videos/${video.video_url}`,
-        thumbnailUrl: (video.thumbnail_url && video.thumbnail_url.startsWith('http'))
-          ? video.thumbnail_url
+        thumbnailUrl: video.thumbnail_url
+          ? (video.thumbnail_url.startsWith('http') ? video.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${video.thumbnail_url}`)
           : `https://images.unsplash.com/photo-${Math.abs(video.id.charCodeAt(0) * 1000 + video.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
         duration: video.duration,
         views: video.views + 1,
@@ -177,31 +184,38 @@ export async function getVideoById(req, res, next) {
 export async function uploadVideo(req, res, next) {
   try {
     const { title, description, notifyFollowers } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
     // Validate required fields
     if (!title) {
       throw new ApiError(400, 'Title is required');
     }
 
-    // TODO: Upload to MinIO and get URLs
-    const videoUrl = 'video.mp4';
-    const thumbnailUrl = 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=600&fit=crop';
-    const duration = 0;
+    // Check if video file is uploaded
+    if (!req.files || !req.files.video || req.files.video.length === 0) {
+      throw new ApiError(400, 'Video file is required');
+    }
 
-    // Create video record
-    const videoId = crypto.randomUUID();
-    const result = await pool.query(
-      `INSERT INTO videos (id, title, description, uploader_id, video_url, thumbnail_url, duration, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-       RETURNING id, title, video_url, thumbnail_url, status`,
-      [videoId, title, description || '', userId, videoUrl, thumbnailUrl, duration, 'processing']
-    );
+    const videoFile = req.files.video[0];
+    const thumbnailFile = req.files.thumbnail ? req.files.thumbnail[0] : null;
+
+    // Import upload service dynamically
+    const uploadService = await import('../services/upload.service.js');
+
+    // Process video upload (includes MinIO upload, keyframe extraction, indexing)
+    const result = await uploadService.processVideoUpload(videoFile.buffer, {
+      title,
+      description,
+      uploaderId: userId,
+      thumbnailBuffer: thumbnailFile ? thumbnailFile.buffer : null
+    });
 
     return res.status(201).json({
       success: true,
-      message: 'Video uploaded successfully',
-      data: result.rows[0]
+      message: result.message || 'Video uploaded successfully',
+      data: {
+        video: result.video  // Return full video object for frontend
+      }
     });
   } catch (error) {
     next(error);
@@ -285,6 +299,9 @@ export async function deleteVideo(req, res, next) {
 /**
  * GET /api/v1/videos/search - Search videos
  */
+/**
+ * GET /api/v1/videos/search - Search videos
+ */
 export async function searchVideos(req, res, next) {
   try {
     const { q, page = 1, limit = 20 } = req.query;
@@ -296,66 +313,130 @@ export async function searchVideos(req, res, next) {
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
-    const searchTerm = `%${q}%`;
 
-    // Get total count
-    const countResult = await pool.query(
-      `SELECT COUNT(*) as count FROM videos WHERE status = $1 AND (title ILIKE $2 OR description ILIKE $2)`,
-      ['active', searchTerm]
-    );
-    const total = parseInt(countResult.rows[0].count);
+    // 1. Get ranked video IDs from Multimodal Search Engine
+    const searchResult = await import('../services/search.service.js')
+      .then(m => m.performMultimodalSearch(q));
 
-    // Get videos
-    const result = await pool.query(
-      `SELECT v.*, u.username, u.display_name, u.avatar_url,
+    const rankedResults = searchResult.results || [];
+    const totalHits = rankedResults.length;
+
+    // Apply pagination to the IDs list
+    const paginatedResults = rankedResults.slice(offset, offset + limitNum);
+
+    if (paginatedResults.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          videos: [],
+          total: totalHits,
+          query: q,
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: totalHits,
+            pages: Math.ceil(totalHits / limitNum),
+            hasMore: false,
+          },
+          classification: searchResult.classification
+        }
+      });
+    }
+
+    // Filter out invalid UUIDs to prevent SQL errors
+    const videoIds = paginatedResults
+      .map(r => r.id)
+      .filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+
+    if (videoIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          videos: [],
+          total: totalHits,
+          query: q,
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: totalHits,
+            pages: Math.ceil(totalHits / limitNum),
+            hasMore: false,
+          },
+          classification: searchResult.classification
+        }
+      });
+    }
+
+    // 2. Fetch full video details from PostgreSQL
+    const query = `
+      SELECT v.*, u.username, u.display_name, u.avatar_url,
        EXISTS(
          SELECT 1 FROM playlist_videos pv 
          JOIN playlists p ON pv.playlist_id = p.id 
-         WHERE pv.video_id = v.id AND p.user_id = $5 AND p.name = 'Đã lưu'
+         WHERE pv.video_id = v.id AND p.user_id = $2 AND p.name = 'Đã lưu'
        ) as is_saved
        FROM videos v
        LEFT JOIN users u ON v.uploader_id = u.id
-       WHERE v.status = $1 AND (v.title ILIKE $2 OR v.description ILIKE $2)
-       ORDER BY v.created_at DESC
-       LIMIT $3 OFFSET $4`,
-      ['active', searchTerm, limitNum, offset, req.user?.userId || -1]
-    );
+       WHERE v.id = ANY($1::uuid[]) AND v.status = 'active' AND v.processing_status = 'ready'
+    `;
+    // Removed AND v.status = 'active' temporarily for debugging to see if they exist at all
+    // Or keep it and check. Let's keep strictness but maybe the IDs are just not there.
+    // Actually, I'll remove status check in the log or check it separately? 
+    // No, let's keep the query simple but log what we find.
 
-    const videos = result.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
-        : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
-      duration: row.duration,
-      views: row.views,
-      likes: row.likes_count || 0,
-      comments: row.comments_count || 0,
-      uploaderUsername: row.username,
-      uploaderDisplayName: row.display_name,
-      uploaderAvatarUrl: row.avatar_url,
-      uploaderAvatarUrl: row.avatar_url,
-      isSaved: row.is_saved,
-      createdAt: row.created_at,
-    }));
+    // I will use a simpler query to debug existence first? No, modify the main flow.
+    // I'll keep the status check but maybe the videos are 'deleted' or something?
+    // Let's modify the query to return status so I can see WHY they are filtered if they exist.
 
-    const pages = Math.ceil(total / limitNum);
+    const dbResult = await pool.query(query, [videoIds, req.user?.userId || null]);
+    const dbVideos = dbResult.rows;
+
+    // 3. Re-order DB results to match the ranking from search engine
+    const videos = videoIds.map(id => {
+      const video = dbVideos.find(v => v.id === id);
+      if (!video) return null; // Should not happen ideally, unless status != active
+
+      return {
+        id: video.id,
+        title: video.title,
+        description: video.description,
+        videoUrl: `http://localhost:9000/clipiq-videos/${video.video_url}`,
+        thumbnailUrl: video.thumbnail_url
+          ? (video.thumbnail_url.startsWith('http') ? video.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${video.thumbnail_url}`)
+          : `https://picsum.photos/seed/${video.id}/400/600`,
+        duration: video.duration,
+        views: video.views,
+        likes: video.likes_count || 0,
+        comments: video.comments_count || 0,
+        uploaderUsername: video.username,
+        uploaderDisplayName: video.display_name,
+        uploaderAvatarUrl: video.avatar_url,
+        uploaderAvatarUrl: video.avatar_url,
+        isSaved: video.is_saved,
+        processingStatus: video.processing_status,
+        createdAt: video.created_at,
+        uploadedAt: video.created_at,
+        // Add search score/metadata if needed
+        searchScore: paginatedResults.find(r => r.id === video.id)?.score
+      };
+    }).filter(v => v !== null); // Filter out any that weren't found or active
+
+    const pages = Math.ceil(totalHits / limitNum);
 
     return res.status(200).json({
       success: true,
       data: {
         videos,
-        total,
+        total: totalHits,
         query: q,
         pagination: {
           page: pageNum,
           limit: limitNum,
-          total,
+          total: totalHits,
           pages,
           hasMore: pageNum < pages,
-        }
+        },
+        classification: searchResult.classification
       }
     });
   } catch (error) {
@@ -378,7 +459,8 @@ export async function getTrendingVideos(req, res, next) {
        ) as is_saved
        FROM videos v
        LEFT JOIN users u ON v.uploader_id = u.id
-       WHERE v.status = $1 AND v.created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+       LEFT JOIN users u ON v.uploader_id = u.id
+       WHERE v.status = $1 AND v.processing_status = 'ready' AND v.created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
        ORDER BY v.views DESC
        LIMIT 20`,
       ['active', req.user?.userId || -1]
@@ -389,8 +471,8 @@ export async function getTrendingVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
+      thumbnailUrl: row.thumbnail_url
+        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
         : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
       duration: row.duration,
       views: row.views,
@@ -510,7 +592,7 @@ export async function getLikedVideos(req, res, next) {
       FROM videos v
       JOIN likes l ON v.id = l.video_id
       LEFT JOIN users u ON v.uploader_id = u.id
-      WHERE l.user_id = $1 AND v.status = 'active'
+       WHERE l.user_id = $1 AND v.status = 'active' AND v.processing_status = 'ready'
       ORDER BY l.created_at DESC
       LIMIT $2 OFFSET $3
     `;
@@ -519,7 +601,7 @@ export async function getLikedVideos(req, res, next) {
       SELECT COUNT(*) as count
       FROM videos v
       JOIN likes l ON v.id = l.video_id
-      WHERE l.user_id = $1 AND v.status = 'active'
+       WHERE l.user_id = $1 AND v.status = 'active' AND v.processing_status = 'ready'
     `;
 
     const [result, countResult] = await Promise.all([
@@ -535,8 +617,8 @@ export async function getLikedVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
+      thumbnailUrl: row.thumbnail_url
+        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
         : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
       duration: row.duration,
       views: row.views,
@@ -604,7 +686,7 @@ export async function getSavedVideos(req, res, next) {
       FROM videos v
       JOIN playlist_videos pv ON v.id = pv.video_id
       LEFT JOIN users u ON v.uploader_id = u.id
-      WHERE pv.playlist_id = $2 AND v.status = 'active'
+       WHERE pv.playlist_id = $2 AND v.status = 'active' AND v.processing_status = 'ready'
       ORDER BY pv.added_at DESC
       LIMIT $3 OFFSET $4
     `;
@@ -613,7 +695,7 @@ export async function getSavedVideos(req, res, next) {
       SELECT COUNT(*) as count
       FROM playlist_videos pv
       JOIN videos v ON pv.video_id = v.id
-      WHERE pv.playlist_id = $1 AND v.status = 'active'
+       WHERE pv.playlist_id = $1 AND v.status = 'active' AND v.processing_status = 'ready'
     `;
 
     const [result, countResult] = await Promise.all([
@@ -629,8 +711,8 @@ export async function getSavedVideos(req, res, next) {
       title: row.title,
       description: row.description,
       videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: (row.thumbnail_url && row.thumbnail_url.startsWith('http'))
-        ? row.thumbnail_url
+      thumbnailUrl: row.thumbnail_url
+        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
         : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
       duration: row.duration,
       views: row.views,

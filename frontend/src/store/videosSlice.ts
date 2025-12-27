@@ -304,7 +304,9 @@ const videosSlice = createSlice({
     setFocusedVideoId: (state, action: PayloadAction<string | null>) => {
       state.focusedVideoId = action.payload;
     },
-    addVideo: (state, action: PayloadAction<any>) => {
+    addVideo: (state, action: PayloadAction<Video>) => {
+      // Remove existing instance if any to prevent duplicates
+      state.videos = state.videos.filter(v => v.id !== action.payload.id);
       state.videos.unshift(action.payload);
     },
   },
