@@ -70,7 +70,7 @@ export async function getExplorerFeed(req, res, next) {
             COALESCE(likes_agg.likes_count, 0) as likes_count,
             COALESCE(comments_agg.comments_count, 0) as comments_count,
             COALESCE(impressions_agg.impressions_count, 0) as impressions_count,
-            0 as shares_count,
+            COALESCE(v.shares_count, 0) as shares_count,
             -- Seeded random for consistent pagination within a session
             -- Use video id + seed to ensure different videos get different random values
             -- But same video gets same random value for same seed
@@ -148,10 +148,8 @@ export async function getExplorerFeed(req, res, next) {
             COALESCE(comments_recent.comments_recent_count, 0) as comments_recent_count,
             COALESCE(impressions_agg.impressions_count, 0) as impressions_count,
             COALESCE(impressions_recent.impressions_recent_count, 0) as impressions_recent_count,
-            
-            -- Note: shares functionality not implemented yet, using 0 for now
-            0 as shares_count,
-            0 as shares_recent_count
+            COALESCE(v.shares_count, 0) as shares_count,
+            COALESCE(shares_recent.shares_recent_count, 0) as shares_recent_count
             
           FROM videos v
           LEFT JOIN users u ON v.uploader_id = u.id
@@ -200,6 +198,14 @@ export async function getExplorerFeed(req, res, next) {
             WHERE created_at >= NOW() - INTERVAL '24 hours'
             GROUP BY video_id
           ) impressions_recent ON v.id = impressions_recent.video_id
+          
+          -- Recent shares (24h)
+          LEFT JOIN (
+            SELECT video_id, COUNT(*) as shares_recent_count
+            FROM shares
+            WHERE created_at >= NOW() - INTERVAL '24 hours'
+            GROUP BY video_id
+          ) shares_recent ON v.id = shares_recent.video_id
           
           WHERE ${baseCondition}
         ),

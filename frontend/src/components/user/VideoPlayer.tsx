@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount } from '../../store/videosSlice';
+import { RootState, AppDispatch } from '../../store/store';
+import { likeVideo, addComment, incrementViewCount, fetchVideoByIdThunk } from '../../store/videosSlice';
 import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User, Bell, BellOff, MoreVertical, Copy, X } from 'lucide-react';
@@ -80,12 +80,18 @@ interface VideoPlayerProps {
 }
 
 export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerProps) {
-  const dispatch = useDispatch();
-  const video = useSelector((state: RootState) =>
+  const dispatch = useDispatch<AppDispatch>();
+  
+  // Try to find video in videos array first, fallback to selectedVideo
+  const videoFromList = useSelector((state: RootState) =>
     state.videos.videos.find(v => v.id === videoId)
   );
+  const selectedVideo = useSelector((state: RootState) => state.videos.selectedVideo);
+  const video = videoFromList || (selectedVideo?.id === videoId ? selectedVideo : null);
+  
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
+  const loading = useSelector((state: RootState) => state.videos.loading);
 
   const [commentText, setCommentText] = useState('');
   const [reportReason, setReportReason] = useState('');
@@ -103,16 +109,44 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
   const isSubscribed = currentUser ? subscriptions[currentUser.username]?.includes(video.uploader) : false;
 
+  // Fetch video if not in store (e.g., from shared link)
+  useEffect(() => {
+    if (!video && !loading) {
+      console.log('📥 Video not in store, fetching:', videoId);
+      dispatch(fetchVideoByIdThunk(videoId));
+    }
+  }, [video, videoId, loading, dispatch]);
+
   useEffect(() => {
     // Increment views only once when component mounts with this videoId
-    dispatch(incrementViewCount(videoId));
+    if (video) {
+      dispatch(incrementViewCount(videoId));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId, dispatch]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white text-xl">Đang tải video...</div>
+      </div>
+    );
+  }
 
   if (!video || !currentUser) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <p className="text-white">Video not found</p>
+        <div className="text-center">
+          <p className="text-white text-xl mb-4">Video không tìm thấy</p>
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="px-4 py-2 bg-[#ff3b5c] text-white rounded-lg hover:bg-[#ff1744] transition-colors"
+            >
+              Quay lại
+            </button>
+          )}
+        </div>
       </div>
     );
   }

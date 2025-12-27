@@ -36,6 +36,7 @@ import { toast } from 'sonner';
 import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
 import { SearchResults } from './SearchResults';
 import { ExplorerTab } from './ExplorerTab';
+import { copyVideoLink, shareVideoApi, generateShareUrl } from '../../api/share';
 
 // Helper function to copy text with fallback
 const copyToClipboard = (text: string) => {
@@ -114,6 +115,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
   const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
   const [showExplorer, setShowExplorer] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
@@ -178,22 +180,29 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     }
   }, [focusedVideoId, videos, dispatch]);
 
-  // Click outside to close user menu
+  // Click outside to close user menu and share menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
       }
+      // Close share menu when clicking outside
+      if (showShareMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.share-menu-container')) {
+          setShowShareMenu(false);
+        }
+      }
     };
 
-    if (showUserMenu) {
+    if (showUserMenu || showShareMenu) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showUserMenu]);
+  }, [showUserMenu, showShareMenu]);
 
   // Refs for state accessed inside IntersectionObserver
   const isSidebarOpenRef = useRef(isSidebarOpen);
@@ -1065,12 +1074,107 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           </button>
 
           {/* Share */}
-          <button className="flex flex-col items-center gap-1 group">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
-              <Share2 className="w-7 h-7 text-white" />
-            </div>
-            <span className="text-white text-xs font-medium">Chia sẻ</span>
-          </button>
+          <div className="relative share-menu-container">
+            <button 
+              onClick={() => setShowShareMenu(!showShareMenu)}
+              className="flex flex-col items-center gap-1 group"
+            >
+              <div className="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
+                <Share2 className="w-7 h-7 text-white" />
+              </div>
+              <span className="text-white text-xs font-medium">Chia sẻ</span>
+            </button>
+
+            {/* Share Menu */}
+            {showShareMenu && currentVideo && (
+              <div className="absolute bottom-full right-0 mb-2 w-48 bg-zinc-800 rounded-lg shadow-xl border border-zinc-700 overflow-hidden z-50">
+                <button
+                  onClick={async () => {
+                    try {
+                      const token = localStorage.getItem('accessToken');
+                      await copyVideoLink(currentVideo.id, token || undefined);
+                      toast.success('Đã copy link video');
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      toast.error('Không thể copy link');
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy Link
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = generateShareUrl(currentVideo.id, 'facebook');
+                      window.open(url, '_blank', 'width=600,height=400');
+                      const token = localStorage.getItem('accessToken');
+                      await shareVideoApi(currentVideo.id, 'facebook', token || undefined);
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      console.error('Share failed:', error);
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <span className="text-lg">📘</span>
+                  Facebook
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = generateShareUrl(currentVideo.id, 'twitter');
+                      window.open(url, '_blank', 'width=600,height=400');
+                      const token = localStorage.getItem('accessToken');
+                      await shareVideoApi(currentVideo.id, 'twitter', token || undefined);
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      console.error('Share failed:', error);
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <span className="text-lg">🐦</span>
+                  Twitter
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = generateShareUrl(currentVideo.id, 'whatsapp');
+                      window.open(url, '_blank', 'width=600,height=400');
+                      const token = localStorage.getItem('accessToken');
+                      await shareVideoApi(currentVideo.id, 'whatsapp', token || undefined);
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      console.error('Share failed:', error);
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <span className="text-lg">💬</span>
+                  WhatsApp
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = generateShareUrl(currentVideo.id, 'telegram');
+                      window.open(url, '_blank', 'width=600,height=400');
+                      const token = localStorage.getItem('accessToken');
+                      await shareVideoApi(currentVideo.id, 'telegram', token || undefined);
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      console.error('Share failed:', error);
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <span className="text-lg">✈️</span>
+                  Telegram
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Report Video */}
           <button

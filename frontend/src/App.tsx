@@ -27,6 +27,31 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
+  const [intendedVideoId, setIntendedVideoId] = useState<string | null>(null);
+
+  // Check URL for video ID on app load (for shared links)
+  useEffect(() => {
+    const path = window.location.pathname;
+    const videoMatch = path.match(/\/video\/([a-zA-Z0-9-]+)/);
+    
+    if (videoMatch && videoMatch[1]) {
+      const videoId = videoMatch[1];
+      console.log('🔗 Detected video ID from URL:', videoId);
+      
+      // If not authenticated, save for after login
+      if (!isAuthenticated) {
+        setIntendedVideoId(videoId);
+        console.log('💾 Saved intended video ID for after login');
+      } else {
+        // If already authenticated, navigate to video immediately
+        setSelectedVideoId(videoId);
+        setCurrentPage('video-player');
+      }
+      
+      // Clean URL without reload
+      window.history.replaceState({}, '', '/');
+    }
+  }, [isAuthenticated]);
 
   // Restore session and fetch videos on app load
   useEffect(() => {
@@ -46,8 +71,16 @@ function AppContent() {
     if (isAuthenticated) {
       console.log('🔄 User authenticated, refetching videos to update like status');
       dispatch(fetchVideosThunk());
+      
+      // If there was an intended video from shared link, navigate to it
+      if (intendedVideoId) {
+        console.log('🎯 Navigating to intended video:', intendedVideoId);
+        setSelectedVideoId(intendedVideoId);
+        setCurrentPage('video-player');
+        setIntendedVideoId(null); // Clear after use
+      }
     }
-  }, [isAuthenticated, dispatch]);
+  }, [isAuthenticated, dispatch, intendedVideoId]);
 
   // Show loading screen while checking session
   if (loading && !isAuthenticated) {

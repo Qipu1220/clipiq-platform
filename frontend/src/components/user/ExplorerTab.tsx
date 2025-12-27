@@ -18,6 +18,7 @@ import {
 } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { fetchExplorerVideosApi } from '../../api/explorer';
+import { copyVideoLink, shareVideoApi, generateShareUrl } from '../../api/share';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -42,6 +43,7 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
   const [loading, setLoading] = useState(true);
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
   const [showVideoModal, setShowVideoModal] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [likeAnimation, setLikeAnimation] = useState(false);
   const [bookmarkAnimation, setBookmarkAnimation] = useState(false);
@@ -88,6 +90,26 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
     fetchExplorerVideos();
   }, []);
 
+  // Close share menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showShareMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.share-menu-container')) {
+          setShowShareMenu(false);
+        }
+      }
+    };
+
+    if (showShareMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showShareMenu]);
+
   const fetchExplorerVideos = async () => {
     try {
       setLoading(true);
@@ -116,6 +138,7 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
   const handleCloseModal = () => {
     setShowVideoModal(false);
     setSelectedVideo(null);
+    setShowShareMenu(false); // Close share menu when modal closes
     setCommentText('');
   };
 
@@ -204,16 +227,28 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
     }
   };
 
-  const handleShare = () => {
+  const handleCopyLink = async () => {
     if (!selectedVideo) return;
-    
-    const shareUrl = `${window.location.origin}/video/${selectedVideo.id}`;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(shareUrl)
-        .then(() => toast.success('Đã copy link video'))
-        .catch(() => toast.error('Không thể copy link'));
-    } else {
+    try {
+      const token = localStorage.getItem('accessToken');
+      await copyVideoLink(selectedVideo.id, token || undefined);
+      toast.success('Đã copy link video');
+      setShowShareMenu(false);
+    } catch (error) {
       toast.error('Không thể copy link');
+    }
+  };
+
+  const handleShareToPlatform = async (platform: 'facebook' | 'twitter' | 'whatsapp' | 'telegram') => {
+    if (!selectedVideo) return;
+    try {
+      const url = generateShareUrl(selectedVideo.id, platform);
+      window.open(url, '_blank', 'width=600,height=400');
+      const token = localStorage.getItem('accessToken');
+      await shareVideoApi(selectedVideo.id, platform, token || undefined);
+      setShowShareMenu(false);
+    } catch (error) {
+      console.error('Share failed:', error);
     }
   };
 
@@ -438,12 +473,57 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
                       <Bookmark className={`w-5 h-5 ${selectedVideo.isSaved ? 'fill-current' : ''}`} />
                     </button>
 
-                    <button
-                      onClick={handleShare}
-                      className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors"
-                    >
-                      <Share2 className="w-5 h-5" />
-                    </button>
+                    {/* Share Button with Menu */}
+                    <div className="relative share-menu-container">
+                      <button
+                        onClick={() => setShowShareMenu(!showShareMenu)}
+                        className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors"
+                      >
+                        <Share2 className="w-5 h-5" />
+                        <span className="text-sm font-medium">{formatCount(selectedVideo.shares || 0)}</span>
+                      </button>
+
+                      {/* Share Menu Dropdown */}
+                      {showShareMenu && (
+                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-zinc-800 rounded-lg shadow-xl border border-zinc-700 overflow-hidden z-50">
+                          <button
+                            onClick={handleCopyLink}
+                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                          >
+                            <Copy className="w-4 h-4" />
+                            Copy Link
+                          </button>
+                          <button
+                            onClick={() => handleShareToPlatform('facebook')}
+                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                          >
+                            <span className="text-lg">📘</span>
+                            Facebook
+                          </button>
+                          <button
+                            onClick={() => handleShareToPlatform('twitter')}
+                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                          >
+                            <span className="text-lg">🐦</span>
+                            Twitter
+                          </button>
+                          <button
+                            onClick={() => handleShareToPlatform('whatsapp')}
+                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                          >
+                            <span className="text-lg">💬</span>
+                            WhatsApp
+                          </button>
+                          <button
+                            onClick={() => handleShareToPlatform('telegram')}
+                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                          >
+                            <span className="text-lg">✈️</span>
+                            Telegram
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Comments Section */}
