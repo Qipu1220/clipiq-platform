@@ -47,7 +47,6 @@ export const getUserProfileByUsername = asyncHandler(async (req, res) => {
   const profile = await UserService.getUserByUsernameService(username);
   
   return res.status(200).json({
-  return res.status(200).json({
     success: true,
     data: profile
   });
