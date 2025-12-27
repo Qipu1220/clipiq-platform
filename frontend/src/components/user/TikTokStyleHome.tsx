@@ -35,6 +35,7 @@ import {
 import { toast } from 'sonner';
 import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
 import { SearchResults } from './SearchResults';
+import { ExplorerTab } from './ExplorerTab';
 
 // Helper function to copy text with fallback
 const copyToClipboard = (text: string) => {
@@ -112,6 +113,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const [commentReportReason, setCommentReportReason] = useState('');
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
   const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
+  const [showExplorer, setShowExplorer] = useState(false);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
@@ -142,7 +144,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   // Reset video index when tab changes
   useEffect(() => {
     setCurrentVideoIndex(0);
-    
+
     // Fetch appropriate content based on tab
     if (activeTab === 'for-you') {
       console.log('[Feed] Switching to For You tab, fetching personal feed...');
@@ -241,7 +243,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     if (!currentVideo) return;
 
     console.log(`[Impression] Video ${currentVideo.id} became visible at index ${currentVideoIndex}`);
-    
+
     // Track impression with 600ms delay (handled by hook)
     // Source: 'personal' for For You tab, 'trending' for Following tab
     const source = activeTab === 'for-you' ? 'personal' : 'trending';
@@ -450,7 +452,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && searchQuery.trim()) {
-                  handleSearch();
+                  handleSearchSubmit();
                 }
               }}
               className="bg-zinc-900/50 border-zinc-800 text-white text-sm pl-9 pr-3 py-1.5 h-9"
@@ -463,9 +465,13 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
         <ScrollArea className="flex-1">
           <div className="px-2 space-y-1">
             <button
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${activeTab === 'for-you' ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${activeTab === 'for-you' && !showExplorer ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
                 }`}
-              onClick={() => setActiveTab('for-you')}
+              onClick={() => {
+                setActiveTab('for-you');
+                setShowExplorer(false);
+                setShowFollowingList(false);
+              }}
             >
               <Home className="w-5 h-5" />
               <span>Dành cho bạn</span>
@@ -477,10 +483,24 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               onClick={() => {
                 setShowFollowingList(!showFollowingList);
                 setActiveTab('for-you');
+                setShowExplorer(false);
               }}
             >
               <Users className="w-5 h-5" />
               <span>Đã follow</span>
+            </button>
+
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showExplorer ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
+              onClick={() => {
+                setShowExplorer(true);
+                setShowFollowingList(false);
+                setActiveSearchQuery('');
+              }}
+            >
+              <Compass className="w-5 h-5" />
+              <span>Khám phá</span>
             </button>
 
             <button
@@ -619,9 +639,17 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
       setActiveSearchQuery(searchQuery.trim());
+      setShowExplorer(false);
       dispatch(searchVideosThunk({ query: searchQuery.trim() }) as any);
     }
   };
+
+  // Show Explorer tab
+  if (showExplorer) {
+    return renderMainLayout(
+      <ExplorerTab onUserClick={onViewUserProfile} />
+    );
+  }
 
   // Show search results if active query exists
   if (activeSearchQuery) {
@@ -770,9 +798,13 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
         <ScrollArea className="flex-1">
           <div className="px-2 space-y-1">
             <button
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${activeTab === 'for-you' ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${activeTab === 'for-you' && !showExplorer ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
                 }`}
-              onClick={() => setActiveTab('for-you')}
+              onClick={() => {
+                setActiveTab('for-you');
+                setShowExplorer(false);
+                setShowFollowingList(false);
+              }}
             >
               <Home className="w-5 h-5" />
               <span>Dành cho bạn</span>
@@ -784,10 +816,24 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               onClick={() => {
                 setShowFollowingList(!showFollowingList);
                 setActiveTab('for-you');
+                setShowExplorer(false);
               }}
             >
               <Users className="w-5 h-5" />
               <span>Đã follow</span>
+            </button>
+
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showExplorer ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
+              onClick={() => {
+                setShowExplorer(true);
+                setShowFollowingList(false);
+                setActiveSearchQuery('');
+              }}
+            >
+              <Compass className="w-5 h-5" />
+              <span>Khám phá</span>
             </button>
 
             <button
@@ -1633,7 +1679,11 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               <div className="px-2 space-y-1">
                 <button
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm text-zinc-400 hover:bg-zinc-900/40"
-                  onClick={() => setShowFollowingList(false)}
+                  onClick={() => {
+                    setShowFollowingList(false);
+                    setActiveTab('for-you');
+                    setShowExplorer(false);
+                  }}
                 >
                   <Home className="w-5 h-5" />
                   <span>Dành cho bạn</span>
@@ -1644,6 +1694,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                 >
                   <Users className="w-5 h-5" />
                   <span>Đã follow</span>
+                </button>
+
+                <button
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
+                  onClick={() => {
+                    setShowFollowingList(false);
+                    setShowExplorer(true);
+                    setActiveSearchQuery('');
+                  }}
+                >
+                  <Compass className="w-5 h-5" />
+                  <span>Khám phá</span>
                 </button>
 
                 <button

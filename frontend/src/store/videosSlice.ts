@@ -83,7 +83,7 @@ export const fetchPersonalFeedThunk = createAsyncThunk(
       console.log('[Feed] Fetching personal feed, limit:', limit);
       const response = await getPersonalFeed(limit);
       console.log('[Feed] Personal feed response:', response);
-      
+
       // Transform FeedVideo to Video format
       const videos = response.data.items.map((item: FeedVideo) => ({
         id: item.id,
@@ -107,7 +107,7 @@ export const fetchPersonalFeedThunk = createAsyncThunk(
         isSaved: false,
         processing_status: item.status === 'active' ? 'ready' : 'processing'
       }));
-      
+
       return { videos, pagination: { page: 1, hasMore: false, total: response.data.total } };
     } catch (error: any) {
       console.error('[Feed] Error fetching personal feed:', error);
@@ -394,7 +394,7 @@ const videosSlice = createSlice({
       .addCase(fetchPersonalFeedThunk.fulfilled, (state, action) => {
         state.loading = false;
         console.log('[Feed] fetchPersonalFeedThunk fulfilled:', action.payload);
-        
+
         state.videos = action.payload.videos || [];
         state.pagination = action.payload.pagination || {
           page: 1,

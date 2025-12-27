@@ -16,6 +16,7 @@ import userRoutes from './routes/user.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import impressionRoutes from './routes/impression.routes.js';
 import feedRoutes from './routes/feed.routes.js';
+import explorerRoutes from './routes/explorer.routes.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
@@ -67,6 +68,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/events', impressionRoutes); // Changed from /impressions to avoid ad blockers
 app.use('/api/v1/feed', feedRoutes);
+app.use('/api/v1/explorer', explorerRoutes);
 
 // ===========================================
 // Error Handling
