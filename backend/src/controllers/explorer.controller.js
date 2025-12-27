@@ -20,14 +20,23 @@ import ApiError from '../utils/apiError.js';
  * @query {number} [page=1] - Page number
  * @query {number} [limit=20] - Items per page (max 50)
  * @query {string} [sort=weighted] - Sort type: 'weighted', 'fresh', 'random'
+ * @query {boolean} [excludeWatched=false] - Exclude videos user has watched (requires auth)
+ * @query {number} [seed] - Random seed for consistent pagination (optional)
  */
 export async function getExplorerFeed(req, res, next) {
   try {
-    const { page = 1, limit = 20, sort = 'weighted' } = req.query;
+    const { 
+      page = 1, 
+      limit = 20, 
+      sort = 'weighted',
+      excludeWatched = 'false',
+      seed
+    } = req.query;
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 50);
     const offset = (pageNum - 1) * limitNum;
     const userId = (req.user && req.user.userId) || null;
+    const shouldExcludeWatched = excludeWatched === 'true' && userId;
 
     let query;
     let countQuery;
@@ -35,7 +44,19 @@ export async function getExplorerFeed(req, res, next) {
     let countParams;
 
     // Base condition - only active and ready videos
-    const baseCondition = `v.status = 'active' AND v.processing_status = 'ready'`;
+    let baseCondition = `v.status = 'active' AND v.processing_status = 'ready'`;
+    
+    // Exclude watched videos if requested (requires authentication)
+    if (shouldExcludeWatched) {
+      baseCondition += ` AND v.id NOT IN (
+        SELECT DISTINCT video_id 
+        FROM view_history 
+        WHERE user_id = '${userId}'
+      )`;
+    }
+    
+    // Determine random seed: use provided seed, or generate based on timestamp for variety
+    const randomSeed = seed ? parseFloat(seed) : Math.random();
 
     if (sort === 'fresh' || sort === 'random') {
       // Fresh/Random: Recent uploads (last 7 days) with randomization
@@ -49,8 +70,11 @@ export async function getExplorerFeed(req, res, next) {
             COALESCE(likes_agg.likes_count, 0) as likes_count,
             COALESCE(comments_agg.comments_count, 0) as comments_count,
             COALESCE(impressions_agg.impressions_count, 0) as impressions_count,
-            -- Random seed per request for variety
-            RANDOM() as random_seed
+            0 as shares_count,
+            -- Seeded random for consistent pagination within a session
+            -- Use video id + seed to ensure different videos get different random values
+            -- But same video gets same random value for same seed
+            (hashtext(v.id::text) % 1000000 + ${randomSeed} * 1000000) as random_seed
           FROM videos v
           LEFT JOIN users u ON v.uploader_id = u.id
           LEFT JOIN (
@@ -196,9 +220,10 @@ export async function getExplorerFeed(req, res, next) {
               impressions_recent_count * 13
             ) as weighted_score,
             
-            -- Add some randomness to prevent stale rankings
+            -- Add seeded randomness (10% of max possible score) to prevent stale rankings
             -- Videos with similar scores will shuffle on each refresh
-            RANDOM() * 0.1 as randomness_factor
+            -- Using hash of video id + seed for consistent pagination
+            (hashtext(id::text) % 1000 + ${randomSeed} * 1000) * 0.01 as randomness_factor
             
           FROM video_stats
         )
