@@ -1,7 +1,8 @@
 import { ReactNode, useState } from 'react';
-import { Home, Flag, MessageSquare, Users } from 'lucide-react';
+import { Home, Flag, MessageSquare, Users, RefreshCw } from 'lucide-react';
 import { Sidebar, SidebarItem, SidebarDivider } from '../common/Sidebar';
 import { UserMenu } from '../common/UserMenu';
+import { Button } from '../ui/button';
 
 interface StaffLayoutProps {
   children: ReactNode;
@@ -10,6 +11,9 @@ interface StaffLayoutProps {
   pendingVideoReports: number;
   pendingUserReports: number;
   pendingCommentReports: number;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+  lastRefreshTime?: Date;
 }
 
 export function StaffLayout({ 
@@ -18,7 +22,10 @@ export function StaffLayout({
   onTabChange,
   pendingVideoReports,
   pendingUserReports,
-  pendingCommentReports
+  pendingCommentReports,
+  onRefresh,
+  isRefreshing,
+  lastRefreshTime
 }: StaffLayoutProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -75,7 +82,7 @@ export function StaffLayout({
       <div className="flex-1 flex flex-col bg-black relative overflow-hidden">
         {/* Top Bar with UserMenu */}
         <div className="p-4 border-b border-zinc-900/50 flex justify-between items-center bg-black relative z-40 flex-shrink-0">
-          <div>
+          <div className="flex items-center gap-4">
             <h2 className="text-white text-xl font-medium">
               {activeTab === 'dashboard' && 'Dashboard'}
               {activeTab === 'video-reports' && 'Báo cáo Video'}
@@ -84,6 +91,26 @@ export function StaffLayout({
               {activeTab === 'user-management' && 'Quản lý User'}
               {activeTab === 'profile' && 'Hồ sơ'}
             </h2>
+            
+            {/* Refresh Button */}
+            {onRefresh && (
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={onRefresh}
+                  disabled={isRefreshing}
+                  size="sm"
+                  className="bg-zinc-900/50 hover:bg-zinc-800 text-zinc-400 hover:text-white border-zinc-800/50 h-8 px-3 rounded-lg transition-colors"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  {isRefreshing ? 'Đang tải...' : 'Làm mới'}
+                </Button>
+                {lastRefreshTime && (
+                  <span className="text-xs text-zinc-600">
+                    Cập nhật: {lastRefreshTime.toLocaleTimeString('vi-VN')}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <UserMenu 

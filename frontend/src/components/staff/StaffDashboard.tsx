@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
 import { resolveVideoReport, resolveUserReport, setVideoReports } from '../../store/reportsSlice';
@@ -14,11 +14,12 @@ import { UserReports } from './UserReports';
 import { CommentReports } from './CommentReports';
 import { UserManagement } from './UserManagement';
 import { StaffProfile } from './StaffProfile';
+import { VideoReportReview } from './VideoReportReview';
 import { BanUserModal } from '../shared/BanUserModal';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
-import { X, AlertTriangle, UserX } from 'lucide-react';
+import { X, AlertTriangle, UserX, RefreshCw } from 'lucide-react';
 
 interface StaffDashboardProps {
   onVideoClick: (videoId: string) => void;
@@ -31,24 +32,25 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
   const appeals = useSelector((state: RootState) => state.reports.appeals);
   const videos = useSelector((state: RootState) => state.videos.videos);
   const allUsers = useSelector((state: RootState) => state.users.allUsers);
-  
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'video-reports' | 'user-reports' | 'comment-reports' | 'user-management' | 'profile'>('dashboard');
+
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'video-reports' | 'user-reports' | 'comment-reports' | 'user-management' | 'profile' | 'video-report-review'>('dashboard');
+  const [reviewVideoId, setReviewVideoId] = useState<string | null>(null);
   const [apiUsers, setApiUsers] = useState<StaffUser[]>([]);
   const [apiVideoReports, setApiVideoReports] = useState<VideoReport[]>([]);
   const [apiUserReports, setApiUserReports] = useState<UserReport[]>([]);
   const [apiCommentReports, setApiCommentReports] = useState<CommentReport[]>([]);
   const [loading, setLoading] = useState(false);
-  
+
   // Modal states
   const [showBanModal, setShowBanModal] = useState(false);
   const [banUsername, setBanUsername] = useState('');
   const [banDuration, setBanDuration] = useState('');
   const [banReason, setBanReason] = useState('');
-  
+
   const [showWarnModal, setShowWarnModal] = useState(false);
   const [warnUsername, setWarnUsername] = useState('');
   const [warnReason, setWarnReason] = useState('');
-  
+
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     type: string;
@@ -58,6 +60,13 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
     confirmColor: string;
     onConfirm: () => void;
   } | null>(null);
+
+  // Manual refresh state
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date());
+
+  // Action processing state
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   // Use API users if available, otherwise fall back to Redux store
   const displayUsers = apiUsers.length > 0 ? apiUsers.map(u => ({
@@ -90,90 +99,102 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
   // Check if any modal is open to prevent background refetch interference
   const isModalOpen = showBanModal || showWarnModal || showConfirmModal;
 
-  // Fetch data
+  // Fetch functions - memoized for manual refresh
+  const fetchReports = useCallback(async () => {
+    try {
+      const [pendingResponse, resolvedResponse] = await Promise.all([
+        getVideoReportsApi('pending', 1, 100),
+        getVideoReportsApi('resolved', 1, 100)
+      ]);
+      const allReports = [...pendingResponse.data.reports, ...resolvedResponse.data.reports];
+      setApiVideoReports(allReports);
+      dispatch(setVideoReports(allReports.map((r: VideoReport) => ({
+        id: r.id,
+        videoId: r.video_id,
+        videoTitle: r.video_title || 'Unknown',
+        reportedBy: r.reporter_username || 'Unknown',
+        reportedByUsername: r.reporter_username || 'Unknown',
+        reason: r.reason,
+        timestamp: new Date(r.created_at).getTime(),
+        status: r.status as 'pending' | 'resolved'
+      }))));
+    } catch (error: any) {
+      console.error('❌ Error fetching reports:', error);
+      if (error.response?.status !== 403) {
+        throw error;
+      }
+    }
+  }, [dispatch]);
+
+  const fetchUserReports = useCallback(async () => {
+    const [pendingResponse, resolvedResponse] = await Promise.all([
+      getUserReportsApi('pending', 1, 100),
+      getUserReportsApi('resolved', 1, 100)
+    ]);
+    setApiUserReports([...pendingResponse.data.reports, ...resolvedResponse.data.reports]);
+  }, []);
+
+  const fetchCommentReports = useCallback(async () => {
+    const [pendingResponse, resolvedResponse] = await Promise.all([
+      getCommentReportsApi('pending', 1, 100),
+      getCommentReportsApi('resolved', 1, 100)
+    ]);
+    setApiCommentReports([...pendingResponse.data.reports, ...resolvedResponse.data.reports]);
+  }, []);
+
+  const fetchUsers = useCallback(async () => {
+    const response = await getAllUsersApi({ page: 1, limit: 100 });
+    setApiUsers(response.users);
+  }, []);
+
+  const handleReviewVideoReport = (videoId: string) => {
+    setReviewVideoId(videoId);
+    setActiveTab('video-report-review');
+  };
+
+  // Manual refresh function
+  const handleManualRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        fetchReports(),
+        fetchUserReports(),
+        fetchCommentReports(),
+        fetchUsers()
+      ]);
+      setLastRefreshTime(new Date());
+      toast.success('Đã cập nhật dữ liệu');
+    } catch (error: any) {
+      console.error('❌ Error refreshing data:', error);
+      toast.error('Không thể cập nhật dữ liệu');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, fetchReports, fetchUserReports, fetchCommentReports, fetchUsers]);
+
+  // Initial fetch only - NO auto refresh
   useEffect(() => {
-    const fetchReports = async () => {
+    const initialFetch = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-        const [pendingResponse, resolvedResponse] = await Promise.all([
-          getVideoReportsApi('pending', 1, 100),
-          getVideoReportsApi('resolved', 1, 100)
+        await Promise.all([
+          fetchReports(),
+          fetchUserReports(),
+          fetchCommentReports(),
+          fetchUsers()
         ]);
-        const allReports = [...pendingResponse.data.reports, ...resolvedResponse.data.reports];
-        setApiVideoReports(allReports);
-        dispatch(setVideoReports(allReports.map((r: VideoReport) => ({
-          id: r.id,
-          videoId: r.video_id,
-          videoTitle: r.video_title || 'Unknown',
-          reportedBy: r.reporter_username || 'Unknown',
-          reportedByUsername: r.reporter_username || 'Unknown',
-          reason: r.reason,
-          timestamp: new Date(r.created_at).getTime(),
-          status: r.status as 'pending' | 'resolved'
-        }))));
+        setLastRefreshTime(new Date());
       } catch (error: any) {
-        console.error('❌ Error fetching reports:', error);
-        if (error.response?.status !== 403) {
-          toast.error('Không thể tải danh sách báo cáo');
-        }
+        console.error('❌ Error initial fetch:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    const fetchUserReports = async () => {
-      try {
-        const [pendingResponse, resolvedResponse] = await Promise.all([
-          getUserReportsApi('pending', 1, 100),
-          getUserReportsApi('resolved', 1, 100)
-        ]);
-        setApiUserReports([...pendingResponse.data.reports, ...resolvedResponse.data.reports]);
-      } catch (error: any) {
-        console.error('❌ Error fetching user reports:', error);
-      }
-    };
-
-    const fetchCommentReports = async () => {
-      try {
-        const [pendingResponse, resolvedResponse] = await Promise.all([
-          getCommentReportsApi('pending', 1, 100),
-          getCommentReportsApi('resolved', 1, 100)
-        ]);
-        setApiCommentReports([...pendingResponse.data.reports, ...resolvedResponse.data.reports]);
-      } catch (error: any) {
-        console.error('❌ Error fetching comment reports:', error);
-      }
-    };
-
-    const fetchUsers = async () => {
-      try {
-        const response = await getAllUsersApi({ page: 1, limit: 100 });
-        setApiUsers(response.users);
-      } catch (error: any) {
-        console.error('❌ Error fetching users:', error);
-      }
-    };
-
-    // Initial fetch
-    fetchReports();
-    fetchUserReports();
-    fetchCommentReports();
-    fetchUsers();
-
-    // Background refresh - but skip when modal is open
-    const interval = setInterval(() => {
-      // Check modal state at interval time, not at useEffect creation time
-      // We use a ref-like approach by checking the current state
-      if (!document.querySelector('[data-modal-open="true"]')) {
-        fetchReports();
-        fetchUserReports();
-        fetchCommentReports();
-        fetchUsers();
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [dispatch]);
+    initialFetch();
+  }, [fetchReports, fetchUserReports, fetchCommentReports, fetchUsers]);
 
   // Calculate stats
   const pendingVideoReports = apiVideoReports.filter(r => r.status === 'pending').length;
@@ -360,23 +381,25 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
       toast.error('Vui lòng nhập lý do cấm!');
       return;
     }
-    
+
     const durationValue = banDuration ? parseInt(banDuration, 10) : undefined;
     if (durationValue !== undefined && (Number.isNaN(durationValue) || durationValue <= 0)) {
       toast.error('Thời hạn cấm phải là số ngày hợp lệ!');
       return;
     }
     const isPermanent = !durationValue;
-    
+
     setConfirmAction({
       type: isPermanent ? 'ban-permanent' : 'ban-temp',
       title: isPermanent ? 'Cấm vĩnh viễn người dùng' : 'Cấm tạm thời người dùng',
-      message: isPermanent 
+      message: isPermanent
         ? `Bạn có chắc muốn cấm vĩnh viễn người dùng ${banUsername}?`
         : `Bạn có chắc muốn cấm người dùng ${banUsername} trong ${durationValue} ngày?`,
       confirmText: isPermanent ? 'Cấm vĩnh viễn' : 'Cấm tạm thời',
       confirmColor: '#ff3b5c',
       onConfirm: async () => {
+        if (isProcessingAction) return;
+        setIsProcessingAction(true);
         try {
           await staffBanUserApi(banUsername, banReason, durationValue);
           toast.success(isPermanent ? `Đã cấm vĩnh viễn người dùng ${banUsername}` : `Đã cấm người dùng ${banUsername} trong ${durationValue} ngày`);
@@ -393,6 +416,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
           } else {
             toast.error('Không thể cấm người dùng. Vui lòng thử lại.');
           }
+        } finally {
+          setIsProcessingAction(false);
         }
       }
     });
@@ -400,6 +425,8 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
   };
 
   const handleWarnUser = async () => {
+    console.log('🔔 handleWarnUser called', { warnUsername, warnReason });
+
     if (!warnUsername) {
       toast.error('Vui lòng nhập tên người dùng!');
       return;
@@ -408,21 +435,30 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
       toast.error('Vui lòng nhập lý do cảnh báo!');
       return;
     }
-    
+
     const user = displayUsers.find(u => u.username === warnUsername);
     const currentWarnings = user?.warnings || 0;
     const durationValue = currentWarnings === 0 ? 30 : currentWarnings === 1 ? 60 : 90;
-    const warningLevel = currentWarnings + 1;
-    
+
+    // Show confirm modal instead of direct API call
     setConfirmAction({
       type: 'warn-user',
-      title: 'Cảnh báo người dùng',
-      message: `Bạn có chắc muốn cảnh báo người dùng ${warnUsername}?\n\nĐây sẽ là cảnh báo lần ${warningLevel}.\nThời hạn: ${durationValue} ngày (tự động xóa sau ${durationValue} ngày không vi phạm).`,
-      confirmText: 'Cảnh báo',
-      confirmColor: '#eab308',
+      title: 'Xác nhận cảnh báo',
+      message: `Bạn có chắc muốn cảnh báo người dùng ${warnUsername}?
+      
+Lý do: ${warnReason}
+Thời hạn: ${durationValue} ngày`,
+      confirmText: 'Xác nhận cảnh báo',
+      confirmColor: '#eab308', // yellow-500
       onConfirm: async () => {
+        if (isProcessingAction) return;
+        setIsProcessingAction(true);
+
+        console.log('📤 Calling staffWarnUserApi', { warnUsername, warnReason, durationValue });
+
         try {
           await staffWarnUserApi(warnUsername, warnReason, durationValue);
+          console.log('✅ Warning successful');
           toast.success(`Đã cảnh báo người dùng ${warnUsername}`);
           const response = await getAllUsersApi({ page: 1, limit: 100 });
           setApiUsers(response.users);
@@ -431,11 +467,14 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
           setShowConfirmModal(false);
           setShowWarnModal(false);
         } catch (error: any) {
+          console.error('❌ Error warning user:', error);
           if (error.response?.status === 404) {
             toast.error('Không tìm thấy người dùng');
           } else {
             toast.error('Không thể cảnh báo người dùng. Vui lòng thử lại.');
           }
+        } finally {
+          setIsProcessingAction(false);
         }
       }
     });
@@ -450,76 +489,92 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         pendingVideoReports={pendingVideoReports}
         pendingUserReports={pendingUserReports}
         pendingCommentReports={pendingCommentReports}
+        onRefresh={handleManualRefresh}
+        isRefreshing={isRefreshing}
+        lastRefreshTime={lastRefreshTime}
       >
-        {activeTab === 'dashboard' && (
-          <Dashboard
-            pendingVideoReports={pendingVideoReports}
-            pendingUserReports={pendingUserReports}
-            pendingCommentReports={pendingCommentReports}
-            pendingAppeals={pendingAppeals}
-            resolvedToday={resolvedToday}
-            apiVideoReports={apiVideoReports}
-            apiUserReports={apiUserReports}
-            allUsers={displayUsers.map(u => ({
-              username: u.username,
-              warnings: u.warnings,
-              banned: u.banned
-            }))}
-            onViewUserProfile={onViewUserProfile}
-          />
-        )}
-        
-        {activeTab === 'video-reports' && (
-          <VideoReports
-            apiVideoReports={apiVideoReports}
-            videos={videos}
-            onVideoClick={onVideoClick}
-            onResolveReport={handleResolveVideoReport}
-            getReportTypeName={getReportTypeName}
-          />
-        )}
-        
-        {activeTab === 'user-reports' && (
-          <UserReports
-            apiUserReports={apiUserReports}
-            onViewUserProfile={onViewUserProfile}
-            onResolveReport={handleResolveUserReport}
-            getReportTypeName={getReportTypeName}
-          />
-        )}
-        
-        {activeTab === 'comment-reports' && (
-          <CommentReports
-            apiCommentReports={apiCommentReports}
-            onResolveReport={handleResolveCommentReport}
-            getReportTypeName={getReportTypeName}
-          />
-        )}
-        
-        {activeTab === 'user-management' && (
-          <UserManagement
-            displayUsers={displayUsers}
-            videos={videos}
-            onViewUserProfile={onViewUserProfile}
-            onBanUser={(username) => {
-              setBanUsername(username);
-              setBanReason('');
-              setBanDuration('');
-              setShowBanModal(true);
+        {activeTab === 'video-report-review' && reviewVideoId ? (
+          <VideoReportReview
+            videoId={reviewVideoId}
+            onBack={() => {
+              setActiveTab('video-reports');
+              setReviewVideoId(null);
             }}
-            onWarnUser={(username) => {
-              setWarnUsername(username);
-              setWarnReason('');
-              setShowWarnModal(true);
-            }}
-            setShowConfirmModal={setShowConfirmModal}
-            setConfirmAction={setConfirmAction}
-            setApiUsers={setApiUsers}
           />
-        )}
-        
-        {activeTab === 'profile' && (
-          <StaffProfile />
+        ) : (
+          <>
+            {activeTab === 'dashboard' && (
+              <Dashboard
+                pendingVideoReports={pendingVideoReports}
+                pendingUserReports={pendingUserReports}
+                pendingCommentReports={pendingCommentReports}
+                pendingAppeals={pendingAppeals}
+                resolvedToday={resolvedToday}
+                apiVideoReports={apiVideoReports}
+                apiUserReports={apiUserReports}
+                allUsers={displayUsers.map(u => ({
+                  username: u.username,
+                  warnings: u.warnings,
+                  banned: u.banned
+                }))}
+                onViewUserProfile={onViewUserProfile}
+              />
+            )}
+
+            {activeTab === 'video-reports' && (
+              <VideoReports
+                apiVideoReports={apiVideoReports}
+                videos={videos}
+                onVideoClick={onVideoClick}
+                onResolveReport={handleResolveVideoReport}
+                getReportTypeName={getReportTypeName}
+                onReviewVideoReport={handleReviewVideoReport}
+              />
+            )}
+
+            {activeTab === 'user-reports' && (
+              <UserReports
+                apiUserReports={apiUserReports}
+                onViewUserProfile={onViewUserProfile}
+                onResolveReport={handleResolveUserReport}
+                getReportTypeName={getReportTypeName}
+              />
+            )}
+
+            {activeTab === 'comment-reports' && (
+              <CommentReports
+                apiCommentReports={apiCommentReports}
+                onResolveReport={handleResolveCommentReport}
+                getReportTypeName={getReportTypeName}
+              />
+            )}
+
+            {activeTab === 'user-management' && (
+              <UserManagement
+                displayUsers={displayUsers}
+                videos={videos}
+                onViewUserProfile={onViewUserProfile}
+                onBanUser={(username) => {
+                  setBanUsername(username);
+                  setBanReason('');
+                  setBanDuration('');
+                  setShowBanModal(true);
+                }}
+                onWarnUser={(username) => {
+                  setWarnUsername(username);
+                  setWarnReason('');
+                  setShowWarnModal(true);
+                }}
+                setShowConfirmModal={setShowConfirmModal}
+                setConfirmAction={setConfirmAction}
+                setApiUsers={setApiUsers}
+              />
+            )}
+
+            {activeTab === 'profile' && (
+              <StaffProfile />
+            )}
+          </>
         )}
       </StaffLayout>
 
@@ -537,8 +592,20 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
 
       {/* Warn User Modal */}
       {showWarnModal && warnUsername && (
-        <div data-modal-open="true" className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-yellow-500/30 rounded-xl w-full max-w-lg shadow-2xl">
+        <div
+          data-modal-open="true"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          onClick={(e) => {
+            // Close modal when clicking backdrop
+            if (e.target === e.currentTarget) {
+              setShowWarnModal(false);
+            }
+          }}
+        >
+          <div
+            className="bg-zinc-950 border border-yellow-500/30 rounded-xl w-full max-w-lg shadow-2xl pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-6 py-3 border-b border-zinc-900/50 bg-yellow-500/5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -550,7 +617,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                     <p className="text-zinc-500 text-xs">@{warnUsername}</p>
                   </div>
                 </div>
-                <button onClick={() => setShowWarnModal(false)} className="text-zinc-500 hover:text-white">
+                <button onClick={() => setShowWarnModal(false)} className="text-zinc-500 hover:text-white" title="Đóng">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -569,7 +636,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
                   <p className="text-red-400 text-xs mt-1">Nội dung cảnh báo không được quá 500 ký tự</p>
                 )}
               </div>
-              
+
               <div>
                 <Label className="text-zinc-400 mb-2 block text-sm">Thông tin cảnh báo</Label>
                 <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-3">
@@ -597,10 +664,10 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             </div>
 
             <div className="px-5 py-3 border-t border-zinc-900/50 flex gap-3 justify-end">
-              <Button onClick={() => setShowWarnModal(false)} className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg">
+              <Button type="button" onClick={() => setShowWarnModal(false)} className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg">
                 Hủy
               </Button>
-              <Button onClick={handleWarnUser} className="bg-yellow-500 hover:bg-yellow-500/90 text-white h-10 rounded-lg">
+              <Button type="button" onClick={handleWarnUser} className="bg-yellow-500 hover:bg-yellow-500/90 text-white h-10 rounded-lg">
                 Xác nhận cảnh báo
               </Button>
             </div>
@@ -621,14 +688,20 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
             </div>
 
             <div className="px-5 py-3 border-t border-zinc-900/50 flex gap-3 justify-end">
-              <Button onClick={() => setShowConfirmModal(false)} className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg">
+              <Button
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isProcessingAction}
+                className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-10 rounded-lg disabled:opacity-50"
+              >
                 Hủy
               </Button>
               <Button
                 onClick={confirmAction.onConfirm}
+                disabled={isProcessingAction}
                 style={{ backgroundColor: confirmAction.confirmColor }}
-                className="hover:opacity-90 text-white h-10 rounded-lg"
+                className="hover:opacity-90 text-white h-10 rounded-lg disabled:opacity-50 flex items-center gap-2"
               >
+                {isProcessingAction && <RefreshCw className="w-4 h-4 animate-spin" />}
                 {confirmAction.confirmText}
               </Button>
             </div>

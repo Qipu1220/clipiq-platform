@@ -10,16 +10,16 @@ import pool from '../config/database.js';
  */
 export async function createVideoReport(data) {
   const { videoId, reportedById, reason, description } = data;
-  
+
   const query = `
     INSERT INTO video_reports (video_id, reported_by_id, reason, evidence_url, status)
     VALUES ($1, $2, $3, $4, 'pending')
     RETURNING *
   `;
-  
+
   const values = [videoId, reportedById, reason, description || null];
   const result = await pool.query(query, values);
-  
+
   return result.rows[0];
 }
 
@@ -42,7 +42,7 @@ export async function getVideoReportById(reportId) {
     LEFT JOIN users u_uploader ON v.uploader_id = u_uploader.id
     WHERE vr.id = $1
   `;
-  
+
   const result = await pool.query(query, [reportId]);
   return result.rows[0] || null;
 }
@@ -53,7 +53,7 @@ export async function getVideoReportById(reportId) {
 export async function getAllVideoReports(filters = {}) {
   const { status, page = 1, limit = 20 } = filters;
   const offset = (page - 1) * limit;
-  
+
   let query = `
     SELECT 
       vr.*,
@@ -68,38 +68,38 @@ export async function getAllVideoReports(filters = {}) {
     LEFT JOIN users u_reporter ON vr.reported_by_id = u_reporter.id
     LEFT JOIN users u_uploader ON v.uploader_id = u_uploader.id
   `;
-  
+
   const conditions = [];
   const params = [];
   let paramIndex = 1;
-  
+
   if (status) {
     conditions.push(`vr.status = $${paramIndex}`);
     params.push(status);
     paramIndex++;
   }
-  
+
   if (conditions.length > 0) {
     query += ` WHERE ${conditions.join(' AND ')}`;
   }
-  
+
   query += ` ORDER BY vr.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
   params.push(limit, offset);
-  
+
   const result = await pool.query(query, params);
-  
+
   // Get total count
   let countQuery = 'SELECT COUNT(*) FROM video_reports vr';
   const countParams = [];
-  
+
   if (status) {
     countQuery += ' WHERE vr.status = $1';
     countParams.push(status);
   }
-  
+
   const countResult = await pool.query(countQuery, countParams);
   const total = parseInt(countResult.rows[0].count);
-  
+
   return {
     reports: result.rows,
     total,
@@ -117,7 +117,7 @@ export async function hasUserReportedVideo(videoId, userId) {
     WHERE video_id = $1 AND reported_by_id = $2 AND status = 'pending'
     LIMIT 1
   `;
-  
+
   const result = await pool.query(query, [videoId, userId]);
   return result.rows.length > 0;
 }
@@ -132,10 +132,10 @@ export async function updateVideoReportStatus(reportId, status, reviewedById, re
     WHERE id = $4
     RETURNING *
   `;
-  
+
   const values = [status, reviewedById, resolutionNote, reportId];
   const result = await pool.query(query, values);
-  
+
   return result.rows[0];
 }
 
@@ -164,15 +164,55 @@ export async function getVideoReportDetails(videoId) {
     WHERE v.id = $1
     GROUP BY v.id, u.id
   `;
-  
+
+  console.log(`🔍 [DEBUG] getVideoReportDetails for videoId: ${videoId}`);
   const videoResult = await pool.query(videoQuery, [videoId]);
-  
+  console.log(`🔍 [DEBUG] videoResult.rows.length: ${videoResult.rows.length}`);
+
+  let video;
+
   if (videoResult.rows.length === 0) {
-    return null;
+    // Check if any reports exist for this video_id
+    // If reports exist, it means the video was hard-deleted (or missing) but reports remain.
+    // We should return a placeholder so staff can resolve the reports.
+    const checkReportsQuery = 'SELECT COUNT(*) FROM video_reports WHERE video_id = $1';
+    const checkResult = await pool.query(checkReportsQuery, [videoId]);
+    console.log(`🔍 [DEBUG] Orphan check count: ${checkResult.rows[0].count}`);
+
+    if (parseInt(checkResult.rows[0].count) === 0) {
+      console.log('🔍 [DEBUG] No reports found, returning null');
+      return null;
+    }
+
+    console.log('🔍 [DEBUG] Reports exist, creating placeholder');
+
+    // Create placeholder video data
+    video = {
+      id: videoId,
+      title: 'Video đã bị xóa',
+      description: 'Video này đã bị xóa khỏi hệ thống nhưng vẫn còn báo cáo cần xử lý.',
+      video_url: null,
+      thumbnail_url: null,
+      views: 0,
+      like_count: 0,
+      comment_count: 0,
+      created_at: new Date().toISOString(),
+      status: 'deleted',
+      // Placeholder uploader
+      uploader_id: 'unknown',
+      uploader_username: 'unknown',
+      uploader_display_name: 'Unknown User',
+      uploader_avatar_url: null,
+      uploader_email: '',
+      uploader_role: 'user',
+      uploader_banned: false,
+      uploader_warnings: 0,
+      uploader_joined_date: new Date().toISOString()
+    };
+  } else {
+    video = videoResult.rows[0];
   }
-  
-  const video = videoResult.rows[0];
-  
+
   // Get all reports for this video
   const reportsQuery = `
     SELECT 
@@ -185,9 +225,9 @@ export async function getVideoReportDetails(videoId) {
     WHERE vr.video_id = $1
     ORDER BY vr.created_at DESC
   `;
-  
+
   const reportsResult = await pool.query(reportsQuery, [videoId]);
-  
+
   // Get comments for this video
   const commentsQuery = `
     SELECT 
@@ -200,17 +240,17 @@ export async function getVideoReportDetails(videoId) {
     WHERE c.video_id = $1
     ORDER BY c.created_at DESC
   `;
-  
+
   const commentsResult = await pool.query(commentsQuery, [videoId]);
-  
+
   // Build MinIO URLs - match the format used in video.controller.js
   const videoUrl = video.video_url ? `http://localhost:9000/clipiq-videos/${video.video_url}` : null;
-  const thumbnailUrl = video.thumbnail_url 
-    ? (video.thumbnail_url.startsWith('http') 
-        ? video.thumbnail_url 
-        : `https://images.unsplash.com/photo-${Math.abs(video.id.charCodeAt(0) * 1000)}?w=400&h=600&fit=crop`)
+  const thumbnailUrl = video.thumbnail_url
+    ? (video.thumbnail_url.startsWith('http')
+      ? video.thumbnail_url
+      : `https://images.unsplash.com/photo-${Math.abs(video.id.charCodeAt(0) * 1000)}?w=400&h=600&fit=crop`)
     : null;
-  
+
   return {
     video: {
       id: video.id,

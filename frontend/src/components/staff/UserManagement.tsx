@@ -107,33 +107,30 @@ export function UserManagement({
       <div className="flex gap-2">
         <Button
           onClick={() => setFilterTab('')}
-          className={`h-10 px-6 rounded-lg transition-colors ${
-            filterTab === ''
+          className={`h-10 px-6 rounded-lg transition-colors ${filterTab === ''
               ? 'bg-[#ff3b5c] text-white'
               : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-          }`}
+            }`}
         >
           <Users className="w-4 h-4 mr-2" />
           Tất cả ({displayUsers.filter(u => u.role === 'user').length})
         </Button>
         <Button
           onClick={() => setFilterTab('banned')}
-          className={`h-10 px-6 rounded-lg transition-colors ${
-            filterTab === 'banned'
+          className={`h-10 px-6 rounded-lg transition-colors ${filterTab === 'banned'
               ? 'bg-[#ff3b5c] text-white'
               : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-          }`}
+            }`}
         >
           <UserX className="w-4 h-4 mr-2" />
           Bị cấm ({displayUsers.filter(u => u.banned).length})
         </Button>
         <Button
           onClick={() => setFilterTab('warned')}
-          className={`h-10 px-6 rounded-lg transition-colors ${
-            filterTab === 'warned'
+          className={`h-10 px-6 rounded-lg transition-colors ${filterTab === 'warned'
               ? 'bg-[#ff3b5c] text-white'
               : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-          }`}
+            }`}
         >
           <AlertTriangle className="w-4 h-4 mr-2" />
           Cảnh báo ({displayUsers.filter(u => u.warnings > 0 && !u.banned).length})
@@ -152,8 +149,8 @@ export function UserManagement({
           .filter(u => {
             if (!userSearchQuery) return true;
             const search = userSearchQuery.toLowerCase();
-            return u.username.toLowerCase().includes(search) || 
-                   u.displayName?.toLowerCase().includes(search);
+            return u.username.toLowerCase().includes(search) ||
+              u.displayName?.toLowerCase().includes(search);
           })
           .map(user => (
             <Card key={user.username} className="bg-zinc-950/50 border-zinc-900/50 rounded-xl overflow-hidden hover:border-zinc-800/80 transition-colors">
@@ -183,7 +180,7 @@ export function UserManagement({
                         )}
                       </div>
                       <p className="text-zinc-400 text-sm mb-3">@{user.username}</p>
-                      
+
                       {/* Stats */}
                       <div className="flex gap-4 text-xs">
                         <div className="flex items-center gap-1 text-zinc-500">
@@ -218,7 +215,7 @@ export function UserManagement({
                       <Eye className="w-4 h-4 mr-2" />
                       Xem profile
                     </Button>
-                    
+
                     {user.banned ? (
                       <Button
                         size="sm"
@@ -233,11 +230,11 @@ export function UserManagement({
                               try {
                                 await staffUnbanUserApi(user.username);
                                 toast.success(`Đã gỡ cấm người dùng ${user.username}`);
-                                
+
                                 // Refresh users list
                                 const response = await getAllUsersApi({ page: 1, limit: 100 });
                                 setApiUsers(response.users);
-                                
+
                                 setShowConfirmModal(false);
                               } catch (error: any) {
                                 console.error('❌ Error unbanning user:', error);
@@ -278,15 +275,15 @@ export function UserManagement({
                         </Button>
                       </>
                     )}
-                    
-                    {user.warnings > 0 && (
+
+                    {user.warnings > 0 && filterTab === 'warned' && (
                       <Button
                         size="sm"
                         onClick={async () => {
                           try {
                             await staffClearWarningsApi(user.username);
                             toast.success(`Đã xóa cảnh báo của ${user.username}`);
-                            
+
                             // Refresh users list
                             const response = await getAllUsersApi({ page: 1, limit: 100 });
                             setApiUsers(response.users);
@@ -311,19 +308,19 @@ export function UserManagement({
               </CardContent>
             </Card>
           ))}
-        
+
         {displayUsers.filter(u => u.role === 'user').filter(u => {
           if (filterTab === 'banned') return u.banned;
           if (filterTab === 'warned') return u.warnings > 0 && !u.banned;
           return true;
         }).length === 0 && (
-          <div className="text-center py-24">
-            <div className="w-16 h-16 rounded-full bg-zinc-900/50 flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-zinc-600" />
+            <div className="text-center py-24">
+              <div className="w-16 h-16 rounded-full bg-zinc-900/50 flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-zinc-600" />
+              </div>
+              <p className="text-zinc-500 text-sm">Không có người dùng nào</p>
             </div>
-            <p className="text-zinc-500 text-sm">Không có người dùng nào</p>
-          </div>
-        )}
+          )}
       </div>
     </div>
   );

@@ -27,7 +27,7 @@ export function BanUserModal({
   if (!isOpen || !username) return null;
 
   return (
-    <div data-modal-open="true" className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+    <div data-modal-open="true" className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-zinc-950 border border-[#ff3b5c]/30 rounded-xl w-full max-w-lg shadow-2xl">
         <div className="px-6 py-3 border-b border-zinc-900/50 bg-[#ff3b5c]/5">
           <div className="flex items-center justify-between">
@@ -58,7 +58,7 @@ export function BanUserModal({
             />
             <p className="text-zinc-600 text-xs mt-1">Để trống để cấm vĩnh viễn</p>
           </div>
-          
+
           <div>
             <Label className="text-zinc-400 mb-2 block text-sm">Lý do cấm</Label>
             <Input

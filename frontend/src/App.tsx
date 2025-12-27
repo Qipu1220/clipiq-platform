@@ -147,16 +147,17 @@ function AppContent() {
   }, [isAuthenticated, dispatch]);
 
   // Periodically refresh user data to get updated warnings, ban status, etc.
+  // This runs every 5 minutes to check for account status changes
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Refresh user data every 30 seconds, but skip when modal is open to prevent interference
+    // Refresh user data every 5 minutes, but skip when modal is open to prevent interference
     const intervalId = setInterval(() => {
       // Check if any modal is open before refreshing
       if (!document.querySelector('[data-modal-open="true"]')) {
         dispatch(getCurrentUserThunk());
       }
-    }, 30000); // 30 seconds
+    }, 300000); // 5 minutes
 
     return () => clearInterval(intervalId);
   }, [isAuthenticated, dispatch]);

@@ -37,13 +37,13 @@ async function calculateStorageUsage() {
   try {
     const minioClient = getMinioClient();
     const buckets = ['clipiq-videos', 'clipiq-thumbnails', 'clipiq-avatars'];
-    
+
     let totalSizeBytes = 0;
-    
+
     for (const bucketName of buckets) {
       try {
         const objectsStream = minioClient.listObjects(bucketName, '', true);
-        
+
         for await (const obj of objectsStream) {
           if (obj.size) {
             totalSizeBytes += obj.size;
@@ -54,12 +54,12 @@ async function calculateStorageUsage() {
         console.warn(`Failed to calculate size for bucket ${bucketName}:`, error.message);
       }
     }
-    
+
     // Convert to GB
     const usedGB = (totalSizeBytes / (1024 * 1024 * 1024)).toFixed(1);
     // Max storage from system_settings or default 100GB
     const maxGB = 100; // TODO: Get from system_settings table if needed
-    
+
     return {
       used: parseFloat(usedGB),
       max: maxGB,
@@ -110,7 +110,7 @@ export async function getDashboardStats() {
         COUNT(*) FILTER (WHERE role = 'user' AND banned = true) as banned
       FROM users
     `;
-    
+
     const videoStatsQuery = `
       SELECT 
         COUNT(*) as total,
@@ -118,17 +118,17 @@ export async function getDashboardStats() {
         COALESCE(SUM(views), 0) as total_views
       FROM videos WHERE status = 'active'
     `;
-    
+
     const views24hQuery = `
       SELECT COUNT(*) as count
       FROM view_history 
       WHERE created_at >= NOW() - INTERVAL '1 day'
     `;
-    
+
     const userReportsQuery = `SELECT COUNT(*) as count FROM user_reports WHERE status = 'pending'`;
     const videoReportsQuery = `SELECT COUNT(*) as count FROM video_reports WHERE status = 'pending'`;
     const appealsQuery = `SELECT COUNT(*) as count FROM appeals WHERE status = 'pending'`;
-    
+
     const [
       userStatsResult,
       videoStatsResult,
@@ -144,25 +144,25 @@ export async function getDashboardStats() {
       pool.query(videoReportsQuery),
       pool.query(appealsQuery)
     ]);
-    
+
     const userStats = {
       total: parseInt(userStatsResult.rows[0].total) || 0,
       staff: parseInt(userStatsResult.rows[0].staff) || 0,
       admins: parseInt(userStatsResult.rows[0].admins) || 0,
       banned: parseInt(userStatsResult.rows[0].banned) || 0
     };
-    
+
     const videoStats = {
       total: parseInt(videoStatsResult.rows[0].total) || 0,
       uploadedToday: parseInt(videoStatsResult.rows[0].uploaded_today) || 0,
       totalViews: parseInt(videoStatsResult.rows[0].total_views) || 0
     };
-    
+
     const views24h = parseInt(views24hResult.rows[0].count) || 0;
     const userReportsCount = parseInt(userReportsResult.rows[0].count) || 0;
     const videoReportsCount = parseInt(videoReportsResult.rows[0].count) || 0;
     const appealsCount = parseInt(appealsResult.rows[0].count) || 0;
-    
+
     // Get maintenance modes from system_settings or default to false
     let maintenanceMode = false;
     let serviceMaintenanceMode = false;
@@ -179,7 +179,7 @@ export async function getDashboardStats() {
     } catch (error) {
       console.warn('Failed to fetch maintenance modes, using defaults:', error.message);
     }
-    
+
     // Calculate storage usage (async, don't block if it fails)
     let storageUsage;
     try {
@@ -194,7 +194,7 @@ export async function getDashboardStats() {
         percentage: '0'
       };
     }
-    
+
     return {
       users: userStats,
       videos: {
@@ -243,7 +243,7 @@ export async function getPendingReports(limit = 5) {
       UserReportModel.getPending(limit),
       VideoReportModel.getPending(limit)
     ]);
-    
+
     return {
       userReports,
       videoReports
@@ -335,12 +335,12 @@ export async function getAllUsers(options = {}) {
     console.log('📋 getAllUsers service called with options:', { page, limit, role, banned, search });
 
     // UserModel.getAllUsers already returns { users, total }
-    const result = await UserModel.getAllUsers({ 
-      page, 
-      limit, 
-      role, 
-      banned, 
-      search 
+    const result = await UserModel.getAllUsers({
+      page,
+      limit,
+      role,
+      banned,
+      search
     });
 
     console.log('📋 UserModel.getAllUsers returned:', {
@@ -365,7 +365,7 @@ export async function getAllUsers(options = {}) {
 export async function getStaffMembers(options = {}) {
   try {
     // Use getAllUsers with role filter
-    const result = await UserModel.getAllUsers({ 
+    const result = await UserModel.getAllUsers({
       role: 'staff',
       page: 1,
       limit: 100,
@@ -386,7 +386,7 @@ export async function getStaffMembers(options = {}) {
 export async function promoteToStaff(username, performedById) {
   try {
     const user = await UserModel.promoteToStaff(username);
-    
+
     // Log the action
     try {
       await SystemLog.createLog({
@@ -403,7 +403,7 @@ export async function promoteToStaff(username, performedById) {
     } catch (logError) {
       console.error('Failed to log staff promotion:', logError);
     }
-    
+
     return user;
   } catch (error) {
     if (error instanceof ApiError) {
@@ -425,7 +425,7 @@ export async function promoteToStaff(username, performedById) {
 export async function demoteStaff(username, performedById) {
   try {
     const user = await UserModel.demoteStaff(username);
-    
+
     // Log the action
     try {
       await SystemLog.createLog({
@@ -442,7 +442,7 @@ export async function demoteStaff(username, performedById) {
     } catch (logError) {
       console.error('Failed to log staff demotion:', logError);
     }
-    
+
     return user;
   } catch (error) {
     if (error instanceof ApiError) {
@@ -463,15 +463,15 @@ export async function demoteStaff(username, performedById) {
  */
 export async function deleteStaffAccount(username, performedById) {
   try {
-    // Get user info before deletion for logging - use getAllUsers with role filter
-    const staffList = await UserModel.getStaffMembers({ isDemoted: true });
+    // Get user info before deletion for logging
+    const staffList = await getStaffMembers({ isDemoted: true });
     const user = staffList.find(s => s.username === username);
-    if (!user || UserModel.role !== 'staff' || !UserModel.isDemoted) {
+    if (!user) {
       throw new ApiError(400, 'Can only delete demoted staff accounts', 'CANNOT_DELETE');
     }
-    
+
     await UserModel.deleteStaffAccount(username);
-    
+
     // Log the action
     try {
       await SystemLog.createLog({
@@ -488,7 +488,7 @@ export async function deleteStaffAccount(username, performedById) {
     } catch (logError) {
       console.error('Failed to log staff deletion:', logError);
     }
-    
+
     return true;
   } catch (error) {
     if (error instanceof ApiError) {
@@ -512,7 +512,7 @@ export async function deleteStaffAccount(username, performedById) {
 export async function banUser(username, reason, durationDays, performedById) {
   try {
     const user = await UserModel.banUser(username, reason, durationDays);
-    
+
     // Log the action
     try {
       await SystemLog.createLog({
@@ -531,7 +531,7 @@ export async function banUser(username, reason, durationDays, performedById) {
     } catch (logError) {
       console.error('Failed to log user ban:', logError);
     }
-    
+
     return user;
   } catch (error) {
     if (error instanceof ApiError) {
@@ -553,14 +553,14 @@ export async function banUser(username, reason, durationDays, performedById) {
 export async function unbanUser(username, performedById) {
   try {
     // Get user info before unbanning for logging
-    const allUsers = await UserModel.getAllUsers({ limit: 1000 });
-    const user = allUsers.find(u => u.username === username);
+    const result = await UserModel.getAllUsers({ limit: 1000 });
+    const user = result.users.find(u => u.username === username);
     if (!user) {
       throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
     }
-    
+
     const updatedUser = await UserModel.unbanUser(username);
-    
+
     // Log the action
     try {
       await SystemLog.createLog({
@@ -576,7 +576,7 @@ export async function unbanUser(username, performedById) {
     } catch (logError) {
       console.error('Failed to log user unban:', logError);
     }
-    
+
     return updatedUser;
   } catch (error) {
     if (error instanceof ApiError) {
@@ -598,14 +598,14 @@ export async function unbanUser(username, performedById) {
 export async function deleteUser(username, performedById) {
   try {
     // Get user info before deletion for logging
-    const allUsers = await UserModel.getAllUsers({ limit: 1000 });
-    const user = allUsers.find(u => u.username === username);
-    if (!user || UserModel.role === 'admin') {
+    const result = await UserModel.getAllUsers({ limit: 1000 });
+    const user = result.users.find(u => u.username === username);
+    if (!user || user.role === 'admin') {
       throw new ApiError(404, 'User not found or cannot delete admin', 'USER_NOT_FOUND');
     }
-    
+
     await UserModel.deleteUser(username);
-    
+
     // Log the action
     try {
       await SystemLog.createLog({
@@ -622,7 +622,7 @@ export async function deleteUser(username, performedById) {
     } catch (logError) {
       console.error('Failed to log user deletion:', logError);
     }
-    
+
     return true;
   } catch (error) {
     if (error instanceof ApiError) {
@@ -644,7 +644,7 @@ export async function deleteUser(username, performedById) {
 export async function toggleMaintenanceMode(enabled, performedById) {
   try {
     const newStatus = await SystemSettings.updateMaintenanceMode(enabled);
-    
+
     // Log the action
     try {
       if (!performedById) {
@@ -653,7 +653,7 @@ export async function toggleMaintenanceMode(enabled, performedById) {
         await SystemLog.createLog({
           actionType: enabled ? 'maintenance_mode_enabled' : 'maintenance_mode_disabled',
           performedById,
-          details: enabled 
+          details: enabled
             ? 'Enabled system maintenance mode - only admins can access the system'
             : 'Disabled system maintenance mode - all users can access the system',
           metadata: {
@@ -673,7 +673,7 @@ export async function toggleMaintenanceMode(enabled, performedById) {
         enabled
       });
     }
-    
+
     return newStatus;
   } catch (error) {
     throw new ApiError(500, 'Failed to toggle maintenance mode', error.message);
@@ -689,7 +689,7 @@ export async function toggleMaintenanceMode(enabled, performedById) {
 export async function toggleServiceMaintenanceMode(enabled, performedById) {
   try {
     const newStatus = await SystemSettings.updateServiceMaintenanceMode(enabled);
-    
+
     // Log the action
     try {
       if (!performedById) {
@@ -698,7 +698,7 @@ export async function toggleServiceMaintenanceMode(enabled, performedById) {
         await SystemLog.createLog({
           actionType: enabled ? 'service_maintenance_mode_enabled' : 'service_maintenance_mode_disabled',
           performedById,
-          details: enabled 
+          details: enabled
             ? 'Enabled service maintenance mode - admin and staff can access, regular users cannot'
             : 'Disabled service maintenance mode - all users can access the system',
           metadata: {
@@ -718,7 +718,7 @@ export async function toggleServiceMaintenanceMode(enabled, performedById) {
         enabled
       });
     }
-    
+
     return newStatus;
   } catch (error) {
     throw new ApiError(500, 'Failed to toggle service maintenance mode', error.message);
@@ -733,7 +733,7 @@ export async function getGeneralSettings() {
   try {
     const keys = ['site_name', 'max_upload_size_mb', 'max_video_duration_seconds'];
     const settings = await SystemSettings.getSettings(keys);
-    
+
     return {
       siteName: settings.site_name || 'ClipIQ Platform',
       maxUploadSizeMB: parseInt(settings.max_upload_size_mb || '500'),
