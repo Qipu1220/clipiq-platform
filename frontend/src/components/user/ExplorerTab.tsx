@@ -49,6 +49,8 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
   const [bookmarkAnimation, setBookmarkAnimation] = useState(false);
   const [followAnimation, setFollowAnimation] = useState(false);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [isLiking, setIsLiking] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Handle wheel event to change videos
   const handleWheel = (e: WheelEvent) => {
@@ -115,6 +117,7 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
       setLoading(true);
       // Fetch from explorer API (currently using trending endpoint as placeholder)
       const response = await fetchExplorerVideosApi(1, 20);
+      console.log('[Explorer] Fetched videos:', response.data.videos.map(v => ({ id: v.id, title: v.title, isLiked: v.isLiked })));
       setExplorerVideos(response.data.videos);
       setLoading(false);
     } catch (error) {
@@ -126,6 +129,7 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
   };
 
   const handleVideoClick = (video: any) => {
+    console.log('[Explorer] Video clicked:', { id: video.id, isLiked: video.isLiked, likes: video.likes });
     setSelectedVideo(video);
     setShowVideoModal(true);
     // Save the index of clicked video
@@ -143,40 +147,91 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
   };
 
   const handleLike = async () => {
-    if (!selectedVideo || !currentUser) return;
+    if (!selectedVideo || !currentUser || isLiking) return;
     
+    setIsLiking(true);
     setLikeAnimation(true);
     setTimeout(() => setLikeAnimation(false), 500);
     
+    // Capture current state before async operation
+    const currentIsLiked = !!selectedVideo.isLiked;
+    const currentLikes = selectedVideo.likes || 0;
+    const newIsLiked = !currentIsLiked;
+    const newLikes = currentIsLiked ? currentLikes - 1 : currentLikes + 1;
+    
+    // Optimistic update
+    setSelectedVideo((prev: any) => ({
+      ...prev,
+      isLiked: newIsLiked,
+      likes: newLikes
+    }));
+    
+    setExplorerVideos((prev: any[]) => prev.map((v: any) => 
+      v.id === selectedVideo.id 
+        ? { ...v, isLiked: newIsLiked, likes: newLikes }
+        : v
+    ));
+    
     try {
-      await dispatch(toggleLikeVideoThunk(selectedVideo.id)).unwrap();
-      // Update local state
+      await dispatch(toggleLikeVideoThunk({ videoId: selectedVideo.id, isLiked: currentIsLiked })).unwrap();
+    } catch (error) {
+      // Revert on error
       setSelectedVideo((prev: any) => ({
         ...prev,
-        isLiked: !prev.isLiked,
-        likes: prev.isLiked ? prev.likes - 1 : prev.likes + 1
+        isLiked: currentIsLiked,
+        likes: currentLikes
       }));
-    } catch (error) {
+      setExplorerVideos((prev: any[]) => prev.map((v: any) => 
+        v.id === selectedVideo.id 
+          ? { ...v, isLiked: currentIsLiked, likes: currentLikes }
+          : v
+      ));
       toast.error('Không thể thích video');
+    } finally {
+      setIsLiking(false);
     }
   };
 
   const handleSave = async () => {
-    if (!selectedVideo || !currentUser) return;
+    if (!selectedVideo || !currentUser || isSaving) return;
     
+    setIsSaving(true);
     setBookmarkAnimation(true);
     setTimeout(() => setBookmarkAnimation(false), 500);
     
+    // Capture current state
+    const currentIsSaved = !!selectedVideo.isSaved;
+    const newIsSaved = !currentIsSaved;
+    
+    // Optimistic update
+    setSelectedVideo((prev: any) => ({
+      ...prev,
+      isSaved: newIsSaved
+    }));
+    
+    setExplorerVideos((prev: any[]) => prev.map((v: any) => 
+      v.id === selectedVideo.id 
+        ? { ...v, isSaved: newIsSaved }
+        : v
+    ));
+    
     try {
       await dispatch(toggleSaveVideoThunk(selectedVideo.id)).unwrap();
-      // Update local state
+      toast.success(currentIsSaved ? 'Đã bỏ lưu video' : 'Đã lưu video');
+    } catch (error) {
+      // Revert on error
       setSelectedVideo((prev: any) => ({
         ...prev,
-        isSaved: !prev.isSaved
+        isSaved: currentIsSaved
       }));
-      toast.success(selectedVideo.isSaved ? 'Đã bỏ lưu video' : 'Đã lưu video');
-    } catch (error) {
+      setExplorerVideos((prev: any[]) => prev.map((v: any) => 
+        v.id === selectedVideo.id 
+          ? { ...v, isSaved: currentIsSaved }
+          : v
+      ));
       toast.error('Không thể lưu video');
+    } finally {
+      setIsSaving(false);
     }
   };
 

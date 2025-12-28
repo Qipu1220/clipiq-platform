@@ -383,7 +383,7 @@ async function generatePersonalFeed(userId, sessionId, limit = 20) {
   
   // Step 3: Generate candidates from multiple sources
   console.log(`[Feed] Generating candidates from multiple sources...`);
-  const [personalCandidates, trendingCandidates, freshCandidates] = await Promise.all([
+  let [personalCandidates, trendingCandidates, freshCandidates] = await Promise.all([
     generatePersonalCandidates(userId, profileVector, seenVideoIds, 30),
     generateTrendingCandidates(seenVideoIds, 30),
     generateFreshCandidates(seenVideoIds, 20)
@@ -394,6 +394,19 @@ async function generatePersonalFeed(userId, sessionId, limit = 20) {
   // Step 4: Merge and deduplicate
   let candidates = mergeCandidates(personalCandidates, trendingCandidates, freshCandidates);
   console.log(`[Feed] Merged to ${candidates.length} unique candidates`);
+  
+  // Step 4.5: Fallback if no candidates (user has seen all videos)
+  if (candidates.length === 0) {
+    console.log(`[Feed] No unseen videos available, using fallback (showing previously seen videos)`);
+    const emptySeen = new Set(); // Allow all videos
+    [personalCandidates, trendingCandidates, freshCandidates] = await Promise.all([
+      generatePersonalCandidates(userId, profileVector, emptySeen, 30),
+      generateTrendingCandidates(emptySeen, 30),
+      generateFreshCandidates(emptySeen, 20)
+    ]);
+    candidates = mergeCandidates(personalCandidates, trendingCandidates, freshCandidates);
+    console.log(`[Feed] Fallback candidates: ${candidates.length} videos`);
+  }
   
   // Step 5: Apply uploader cap
   candidates = await applyUploaderCap(candidates, 2);

@@ -195,7 +195,7 @@ export async function getExplorerFeed(req, res, next) {
           LEFT JOIN (
             SELECT video_id, COUNT(*) as impressions_recent_count
             FROM impressions
-            WHERE created_at >= NOW() - INTERVAL '24 hours'
+            WHERE shown_at >= NOW() - INTERVAL '24 hours'
             GROUP BY video_id
           ) impressions_recent ON v.id = impressions_recent.video_id
           
@@ -246,7 +246,7 @@ export async function getExplorerFeed(req, res, next) {
             WHERE pv.video_id = sv.id AND p.user_id = $3 AND p.name = 'Đã lưu'
           ) as is_saved
         FROM scored_videos sv
-        ORDER BY final_score DESC, sv.created_at DESC
+        ORDER BY final_score DESC, sv.views DESC
         LIMIT $1 OFFSET $2
       `;
 
@@ -277,11 +277,11 @@ export async function getExplorerFeed(req, res, next) {
         ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
         : `https://picsum.photos/seed/${row.id}/400/600`,
       duration: row.duration,
-      views: row.views,
-      likes: row.likes_count || 0,
-      comments: row.comments_count || 0,
-      shares: row.shares_count || 0,
-      impressions: row.impressions_count || 0,
+      views: parseInt(row.views) || 0,
+      likes: parseInt(row.likes_count) || 0,
+      comments: parseInt(row.comments_count) || 0,
+      shares: parseInt(row.shares_count) || 0,
+      impressions: parseInt(row.impressions_count) || 0,
       isLiked: row.is_liked || false,
       isSaved: row.is_saved || false,
       uploaderUsername: row.username,
@@ -290,7 +290,7 @@ export async function getExplorerFeed(req, res, next) {
       createdAt: row.created_at,
       uploadedAt: row.created_at,
       // Include score for debugging (can be removed in production)
-      ...(sort === 'weighted' && { score: parseFloat(row.final_score?.toFixed(2) || 0) })
+      ...(sort === 'weighted' && { score: row.final_score ? parseFloat(Number(row.final_score).toFixed(2)) : 0 })
     }));
 
     const pages = Math.ceil(total / limitNum);

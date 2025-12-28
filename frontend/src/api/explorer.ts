@@ -1,17 +1,5 @@
 // API functions for explorer feature
-import axios, { AxiosInstance, AxiosError } from 'axios';
-
-// Get API URL from environment variable
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
-
-// Create axios instance
-const apiClient: AxiosInstance = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+import apiClient from './client';
 
 import { Video } from './videos';
 
