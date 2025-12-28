@@ -37,6 +37,7 @@ out/
 .project
 .classpath
 .settings/
+*.jpg
 
 # OS generated files
 .DS_Store

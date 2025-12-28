@@ -332,12 +332,12 @@ async function processVideoInBackground(videoBuffer, videoId, sanitizedTitle, ti
             const thumbFileName = `thumb_${sanitizedTitle}_${timestamp}.jpg`;
             const thumbResult = await minioService.uploadThumbnail(firstFrame, thumbFileName);
 
-            // Update database with thumbnail
+            // Update database with thumbnail filename (not full URL)
             await pool.query(
                 'UPDATE videos SET thumbnail_url = $1 WHERE id = $2',
-                [thumbResult.url, videoId]
+                [thumbFileName, videoId]
             );
-            console.log(`✅ Background: Generated and uploaded thumbnail`);
+            console.log(`✅ Background: Generated and uploaded thumbnail: ${thumbFileName}`);
         }
 
         // Step 3: Process all keyframes
@@ -512,8 +512,8 @@ export async function processVideoUpload(videoBuffer, options) {
             // User provided thumbnail
             const thumbFileName = `thumb_${sanitizedTitle}_${timestamp}.jpg`;
             const thumbResult = await minioService.uploadThumbnail(thumbnailBuffer, thumbFileName);
-            thumbnailUrl = thumbResult.url;
-            console.log(`✅ Custom thumbnail uploaded: ${thumbnailUrl}`);
+            thumbnailUrl = thumbFileName; // Store just filename, not full URL
+            console.log(`✅ Custom thumbnail uploaded: ${thumbResult.url}`);
         }
         // If no thumbnail, it will be generated from the first keyframe later in background processing.
 

@@ -1,7 +1,7 @@
 /**
  * Seeder: Videos
  * 
- * Uploads 100 sample videos to MinIO and creates video records in database.
+ * Uploads 100 sample videos and thumbnails to MinIO and creates video records in database.
  * Distributes videos evenly: each of 50 regular users gets 2 videos.
  */
 
@@ -152,26 +152,49 @@ function getMinioClient() {
 }
 
 /**
- * Generate thumbnail path (will be processed later)
+ * Get thumbnail filename from video filename
+ * @param {string} videoFilename - Video filename (e.g., 'pixabay-135658-medium.mp4')
+ * @returns {string} - Thumbnail filename (e.g., 'pixabay-135658-medium-thumb.jpg')
  */
-function getThumbnailPath(videoFilename) {
+function getThumbnailFilename(videoFilename) {
   return videoFilename.replace('.mp4', '-thumb.jpg');
+}
+
+/**
+ * Get MinIO thumbnail URL
+ * @param {string} thumbnailFilename - Thumbnail filename
+ * @returns {string} - Full MinIO URL
+ */
+function getThumbnailUrl(thumbnailFilename) {
+  const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
+  const endpoint = process.env.MINIO_ENDPOINT || 'localhost';
+  const port = process.env.MINIO_PORT || 9000;
+  return `${protocol}://${endpoint}:${port}/clipiq-thumbnails/${thumbnailFilename}`;
 }
 
 /**
  * Seed videos
  */
 export async function seed(client) {
-  console.log('   Seeding 100 videos (2 per user)...');
+  console.log('   Seeding 100 videos with thumbnails (2 per user)...');
 
   const minioClient = getMinioClient();
-  const bucketName = 'clipiq-videos'; // Must match docker-compose bucket name
+  const videoBucketName = 'clipiq-videos';
+  const thumbnailBucketName = 'clipiq-thumbnails';
   const videosDir = path.join(__dirname, 'data', 'sample-videos');
+  const thumbnailsDir = path.join(__dirname, 'data', 'sample-thumbnails');
 
   // Check if sample videos directory exists
   if (!fs.existsSync(videosDir)) {
     console.error('   ❌ Sample videos directory not found!');
     console.error('   Run: node download-pixabay-videos.js first');
+    return;
+  }
+
+  // Check if sample thumbnails directory exists
+  if (!fs.existsSync(thumbnailsDir)) {
+    console.error('   ❌ Sample thumbnails directory not found!');
+    console.error('   Run: python data/extract-thumbnails.py first');
     return;
   }
 
@@ -252,12 +275,28 @@ export async function seed(client) {
         const stats = fs.statSync(videoPath);
         const fileSizeBytes = stats.size;
 
-        // Upload to MinIO
-        await minioClient.fPutObject(bucketName, videoFile, videoPath, {
+        // Get thumbnail info
+        const thumbnailFilename = getThumbnailFilename(videoFile);
+        const thumbnailPath = path.join(thumbnailsDir, thumbnailFilename);
+        const hasThumbnail = fs.existsSync(thumbnailPath);
+
+        // Upload video to MinIO
+        await minioClient.fPutObject(videoBucketName, videoFile, videoPath, {
           'Content-Type': 'video/mp4',
           'uploaded-by': user.username,
           'upload-date': new Date().toISOString()
         });
+
+        // Upload thumbnail to MinIO if exists
+        let thumbnailUrl = null;
+        if (hasThumbnail) {
+          await minioClient.fPutObject(thumbnailBucketName, thumbnailFilename, thumbnailPath, {
+            'Content-Type': 'image/jpeg',
+            'uploaded-by': user.username,
+            'upload-date': new Date().toISOString()
+          });
+          thumbnailUrl = thumbnailFilename; // Store just filename, will construct full URL in frontend/API
+        }
 
         // Determine ID: use static ID if available, otherwise let DB generate (or generate one)
         // Note: If we use explicit ID, we need to include it in INSERT.
@@ -289,7 +328,7 @@ export async function seed(client) {
               metadata.title,
               metadata.description,
               videoFile,
-              getThumbnailPath(videoFile),
+              thumbnailUrl || thumbnailFilename,
               Math.floor(Math.random() * 600) + 30,
               'active',
               'ready'
@@ -315,7 +354,7 @@ export async function seed(client) {
               metadata.title,
               metadata.description,
               videoFile,
-              getThumbnailPath(videoFile),
+              thumbnailUrl || thumbnailFilename,
               Math.floor(Math.random() * 600) + 30,
               'active',
               'ready'

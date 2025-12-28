@@ -4,13 +4,14 @@ import { User, Video, ArrowLeft, Plus, Check, Flag, X, Eye, Heart, Share2, Alert
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
-import { fetchUserVideosThunk, setVideos, setFocusedVideoId } from '../../store/videosSlice';
+import { fetchUserVideosThunk } from '../../store/videosSlice';
 import { fetchUserByUsernameThunk } from '../../store/usersSlice';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { addUserReport } from '../../store/reportsSlice';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { reportUserApi } from '../../api/reports';
+import { VideoModal } from './VideoModal';
 
 interface PublicUserProfileProps {
   username: string;
@@ -35,6 +36,10 @@ export function PublicUserProfile({ username, onVideoClick, onBack, isStaffView 
   const [showWarnModal, setShowWarnModal] = useState(false);
   const [banReason, setBanReason] = useState('');
   const [warnReason, setWarnReason] = useState('');
+  
+  // Video modal state
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
 
   const user = allUsers.find(u => u.username === username);
 
@@ -300,16 +305,14 @@ export function PublicUserProfile({ username, onVideoClick, onBack, isStaffView 
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {userVideos.map(video => (
+              {userVideos.map((video, index) => (
                 <div
                   key={video.id}
                   className="relative aspect-[9/16] bg-zinc-900 rounded-lg overflow-hidden cursor-pointer group"
                   onClick={() => {
-                    if (userVideos.length > 0) {
-                      dispatch(setVideos(userVideos));
-                      dispatch(setFocusedVideoId(video.id));
-                    }
-                    onVideoClick(video.id);
+                    // Open video modal instead of navigating
+                    setSelectedVideoIndex(index);
+                    setShowVideoModal(true);
                   }}
                 >
                   <ImageWithFallback
@@ -557,6 +560,20 @@ export function PublicUserProfile({ username, onVideoClick, onBack, isStaffView 
               </div>
             </div>
           )}
+
+          {/* Video Modal */}
+          <VideoModal
+            videos={userVideos}
+            initialIndex={selectedVideoIndex}
+            isOpen={showVideoModal}
+            onClose={() => setShowVideoModal(false)}
+            onUserClick={(clickedUsername) => {
+              setShowVideoModal(false);
+              if (clickedUsername !== username) {
+                onVideoClick(clickedUsername); // Navigate to different user
+              }
+            }}
+          />
         </div>
       </div>
     </div>

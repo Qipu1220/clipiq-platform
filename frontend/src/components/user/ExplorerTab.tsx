@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
 import {
   Heart, Share2, Bookmark, MessageCircle, Play, Eye, X, User,
-  Loader2, Copy, MoreVertical, Flag, Trash2, AtSign, Smile
+  Loader2, Copy, MoreVertical, Flag, Trash2, AtSign, Smile, AlertTriangle
 } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { Button } from '../ui/button';
@@ -25,7 +25,19 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '../ui/dropdown-menu';
+import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
 
 interface ExplorerTabProps {
   onUserClick?: (username: string) => void;
@@ -51,6 +63,18 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [isLiking, setIsLiking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Report states
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportType, setReportType] = useState('spam');
+  const [reportReason, setReportReason] = useState('');
+  const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
+  
+  // Comment report states
+  const [showCommentReportModal, setShowCommentReportModal] = useState(false);
+  const [selectedComment, setSelectedComment] = useState<any>(null);
+  const [commentReportReason, setCommentReportReason] = useState('');
+  const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
 
   // Handle wheel event to change videos
   const handleWheel = (e: WheelEvent) => {
@@ -307,6 +331,50 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
     }
   };
 
+  // Copy comment text helper
+  const handleCopyComment = (text: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast.success('Đã copy bình luận'))
+        .catch(() => {
+          // Fallback
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.select();
+          try {
+            document.execCommand('copy');
+            toast.success('Đã copy bình luận');
+          } catch (err) {
+            toast.error('Không thể copy bình luận');
+          }
+          document.body.removeChild(textArea);
+        });
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        toast.success('Đã copy bình luận');
+      } catch (err) {
+        toast.error('Không thể copy bình luận');
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
+  // Handle user click - close modal and navigate
+  const handleUserClick = (username: string) => {
+    handleCloseModal();
+    onUserClick?.(username);
+  };
+
   const formatCount = (count: number) => {
     if (!count || typeof count !== 'number') return '0';
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
@@ -357,17 +425,12 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
                   >
                     {/* Video Thumbnail */}
                     <div className="relative aspect-[9/16] bg-zinc-900 rounded-xl overflow-hidden mb-2">
-                      {video.thumbnailUrl ? (
-                        <ImageWithFallback
-                          src={video.thumbnailUrl}
-                          alt={video.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-zinc-800">
-                          <Play className="w-12 h-12 text-zinc-600" />
-                        </div>
-                      )}
+                      <ImageWithFallback
+                        src={video.thumbnailUrl && video.thumbnailUrl.startsWith('http') ? video.thumbnailUrl : `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=300&h=500&fit=crop`}
+                        alt={video.title}
+                        videoSrc={video.videoUrl}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
                       
                       {/* Hover Overlay */}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -456,8 +519,8 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
                   {/* User Info */}
                   <div className="flex items-center justify-between">
                     <div 
-                      className="flex items-center gap-3 cursor-pointer"
-                      onClick={() => onUserClick?.(selectedVideo.uploaderUsername)}
+                      className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => handleUserClick(selectedVideo.uploaderUsername)}
                     >
                       {uploaderInfo?.avatarUrl ? (
                         <img
@@ -500,10 +563,10 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex items-center gap-4 py-2 border-y border-zinc-800">
+                  <div className="flex items-center gap-3 py-2 border-y border-zinc-800">
                     <button
                       onClick={handleLike}
-                      className={`flex items-center gap-2 transition-all ${
+                      className={`flex items-center gap-1.5 transition-all ${
                         selectedVideo.isLiked ? 'text-[#ff3b5c]' : 'text-zinc-400 hover:text-white'
                       } ${likeAnimation ? 'scale-125' : 'scale-100'}`}
                     >
@@ -513,7 +576,7 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
 
                     <button
                       onClick={() => {}}
-                      className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors"
+                      className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors"
                     >
                       <MessageCircle className="w-5 h-5" />
                       <span className="text-sm font-medium">{currentVideoComments.length || 0}</span>
@@ -521,64 +584,52 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
 
                     <button
                       onClick={handleSave}
-                      className={`flex items-center gap-2 transition-all ${
+                      className={`flex items-center gap-1.5 transition-all ${
                         selectedVideo.isSaved ? 'text-yellow-500' : 'text-zinc-400 hover:text-white'
                       } ${bookmarkAnimation ? 'scale-125' : 'scale-100'}`}
                     >
                       <Bookmark className={`w-5 h-5 ${selectedVideo.isSaved ? 'fill-current' : ''}`} />
                     </button>
 
-                    {/* Share Button with Menu */}
-                    <div className="relative share-menu-container">
-                      <button
-                        onClick={() => setShowShareMenu(!showShareMenu)}
-                        className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors"
-                      >
-                        <Share2 className="w-5 h-5" />
-                        <span className="text-sm font-medium">{formatCount(selectedVideo.shares || 0)}</span>
-                      </button>
+                    {/* Share Button with Dropdown Menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors">
+                          <Share2 className="w-5 h-5" />
+                          <span className="text-sm font-medium">{formatCount(selectedVideo.shares || 0)}</span>
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-zinc-800 border-zinc-700">
+                        <DropdownMenuItem onClick={handleCopyLink} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copy Link
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-zinc-700" />
+                        <DropdownMenuItem onClick={() => handleShareToPlatform('facebook')} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <span className="mr-2">📘</span> Facebook
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleShareToPlatform('twitter')} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <span className="mr-2">🐦</span> Twitter
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleShareToPlatform('whatsapp')} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <span className="mr-2">💬</span> WhatsApp
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleShareToPlatform('telegram')} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <span className="mr-2">✈️</span> Telegram
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
 
-                      {/* Share Menu Dropdown */}
-                      {showShareMenu && (
-                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-zinc-800 rounded-lg shadow-xl border border-zinc-700 overflow-hidden z-50">
-                          <button
-                            onClick={handleCopyLink}
-                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
-                          >
-                            <Copy className="w-4 h-4" />
-                            Copy Link
-                          </button>
-                          <button
-                            onClick={() => handleShareToPlatform('facebook')}
-                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
-                          >
-                            <span className="text-lg">📘</span>
-                            Facebook
-                          </button>
-                          <button
-                            onClick={() => handleShareToPlatform('twitter')}
-                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
-                          >
-                            <span className="text-lg">🐦</span>
-                            Twitter
-                          </button>
-                          <button
-                            onClick={() => handleShareToPlatform('whatsapp')}
-                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
-                          >
-                            <span className="text-lg">💬</span>
-                            WhatsApp
-                          </button>
-                          <button
-                            onClick={() => handleShareToPlatform('telegram')}
-                            className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
-                          >
-                            <span className="text-lg">✈️</span>
-                            Telegram
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    {/* Report Video Button */}
+                    {currentUser?.username !== selectedVideo.uploaderUsername && (
+                      <button
+                        onClick={() => setShowReportModal(true)}
+                        className="flex items-center gap-1.5 text-zinc-400 hover:text-red-400 transition-colors ml-auto"
+                        title="Báo cáo video"
+                      >
+                        <Flag className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Comments Section */}
@@ -612,33 +663,64 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
                         currentVideoComments.map((comment: any) => {
                           const commentUser = users.find(u => u.username === comment.username);
                           return (
-                            <div key={comment.id} className="flex gap-2">
+                            <div key={comment.id} className="flex gap-2 group">
                               {commentUser?.avatarUrl ? (
                                 <img
                                   src={commentUser.avatarUrl}
                                   alt={comment.username}
-                                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                                  className="w-8 h-8 rounded-full object-cover flex-shrink-0 cursor-pointer"
+                                  onClick={() => handleUserClick(comment.username)}
                                 />
                               ) : (
-                                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                                <div 
+                                  className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                  onClick={() => handleUserClick(comment.username)}
+                                >
                                   <User className="w-4 h-4 text-zinc-500" />
                                 </div>
                               )}
                               <div className="flex-1">
                                 <div className="bg-zinc-800 rounded-lg p-2">
-                                  <p className="text-white text-sm font-medium">
+                                  <p 
+                                    className="text-white text-sm font-medium cursor-pointer hover:text-[#ff3b5c]"
+                                    onClick={() => handleUserClick(comment.username)}
+                                  >
                                     {commentUser?.displayName || comment.username}
                                   </p>
                                   <p className="text-zinc-300 text-sm">{comment.text}</p>
                                 </div>
-                                {currentUser?.username === comment.username && (
-                                  <button
-                                    onClick={() => handleDeleteComment(comment.id)}
-                                    className="text-zinc-500 hover:text-red-500 text-xs mt-1"
-                                  >
-                                    Xóa
-                                  </button>
-                                )}
+                                {/* Comment actions */}
+                                <div className="flex items-center gap-3 mt-1">
+                                  {currentUser?.username === comment.username ? (
+                                    <button
+                                      onClick={() => handleDeleteComment(comment.id)}
+                                      className="text-zinc-500 hover:text-red-500 text-xs flex items-center gap-1"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      Xóa
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => handleCopyComment(comment.text)}
+                                        className="text-zinc-500 hover:text-white text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                        Copy
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setSelectedComment(comment);
+                                          setShowCommentReportModal(true);
+                                        }}
+                                        className="text-zinc-500 hover:text-red-400 text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        <Flag className="w-3 h-3" />
+                                        Tố cáo
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );
@@ -656,6 +738,263 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
           </div>
         </div>
       )}
+
+      {/* Report Video Modal */}
+      {showReportModal && selectedVideo && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}>
+          <div className="bg-zinc-900 rounded-xl shadow-2xl w-full max-w-md mx-4 border border-zinc-800">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#dc2626' }}>
+                  <Flag className="w-5 h-5 text-white" />
+                </div>
+                <h2 className="text-white text-xl">Báo cáo video</h2>
+              </div>
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div className="bg-zinc-800 p-3 rounded-lg">
+                <p className="text-zinc-400 text-sm mb-1">Bạn đang báo cáo:</p>
+                <p className="text-white">{selectedVideo.title}</p>
+              </div>
+
+              <div>
+                <label className="block text-white text-sm mb-2">Loại vi phạm:</label>
+                <select
+                  value={reportType}
+                  onChange={(e) => setReportType(e.target.value)}
+                  className="w-full bg-zinc-800 text-white p-3 rounded-lg border border-zinc-700 focus:border-red-500 focus:outline-none transition-colors"
+                >
+                  <option value="spam">Spam hoặc quảng cáo</option>
+                  <option value="harassment">Quấy rối hoặc bắt nạt</option>
+                  <option value="hate">Ngôn từ gây thù ghét</option>
+                  <option value="violence">Bạo lực hoặc nguy hiểm</option>
+                  <option value="nudity">Nội dung không phù hợp</option>
+                  <option value="copyright">Vi phạm bản quyền</option>
+                  <option value="misleading">Thông tin sai lệch</option>
+                  <option value="other">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-white text-sm mb-2">Chi tiết (không bắt buộc):</label>
+                <Textarea
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  placeholder="Mô tả thêm về vấn đề bạn gặp phải..."
+                  className="bg-zinc-800 border-zinc-700 text-white resize-none"
+                  rows={4}
+                />
+              </div>
+
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                <p className="text-yellow-500 text-xs">
+                  ⚠️ Báo cáo sai sự thật có thể bị xử phạt. Staff sẽ xem xét trong 24-48 giờ.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 p-6 border-t border-zinc-800">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="flex-1 bg-zinc-800 text-white py-3 rounded-lg hover:bg-zinc-700 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => setShowVideoReportConfirm(true)}
+                className="flex-1 text-white py-3 rounded-lg transition-all"
+                style={{ backgroundColor: '#dc2626' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              >
+                Gửi báo cáo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comment Report Modal */}
+      {showCommentReportModal && selectedComment && selectedVideo && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}>
+          <div className="bg-zinc-900 rounded-2xl w-full max-w-lg border border-zinc-800">
+            {/* Header */}
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#dc2626' }}>
+                  <Flag className="w-5 h-5 text-white" />
+                </div>
+                <h2 className="text-white text-xl">Báo cáo bình luận</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCommentReportModal(false);
+                  setSelectedComment(null);
+                  setCommentReportReason('');
+                }}
+                className="text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div className="bg-zinc-800 p-3 rounded-lg">
+                <p className="text-zinc-400 text-sm mb-1">Bình luận của:</p>
+                <p className="text-white mb-2">{selectedComment.username}</p>
+                <p className="text-zinc-300 text-sm italic">"{selectedComment.text}"</p>
+              </div>
+
+              <div>
+                <label className="text-white text-sm mb-2 block">Lý do báo cáo</label>
+                <Textarea
+                  value={commentReportReason}
+                  onChange={(e) => setCommentReportReason(e.target.value)}
+                  placeholder="Mô tả lý do bạn báo cáo bình luận này..."
+                  className="bg-zinc-800 border-zinc-700 text-white min-h-[120px] resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-zinc-800 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowCommentReportModal(false);
+                  setSelectedComment(null);
+                  setCommentReportReason('');
+                }}
+                className="flex-1 bg-zinc-800 text-white py-3 rounded-lg hover:bg-zinc-700 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => {
+                  if (!commentReportReason.trim()) {
+                    toast.error('Vui lòng nhập lý do báo cáo');
+                    return;
+                  }
+                  setShowCommentReportConfirm(true);
+                }}
+                className="flex-1 text-white py-3 rounded-lg transition-all"
+                style={{ backgroundColor: '#dc2626' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              >
+                Gửi báo cáo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Video Report Confirmation Dialog */}
+      <AlertDialog open={showVideoReportConfirm} onOpenChange={setShowVideoReportConfirm}>
+        <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <Flag className="w-5 h-5 text-red-500" />
+              Xác nhận báo cáo video
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              Bạn có chắc chắn muốn gửi báo cáo này không? Hành động này không thể hoàn tác.
+              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <p className="text-yellow-500 text-sm">
+                  ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai sự thật có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700">
+              Hủy bỏ
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (currentUser && selectedVideo) {
+                  dispatch(addVideoReport({
+                    videoId: selectedVideo.id,
+                    userId: currentUser.id,
+                    type: reportType,
+                    reason: reportReason,
+                  }));
+                  toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
+                  setShowReportModal(false);
+                  setShowVideoReportConfirm(false);
+                  setReportReason('');
+                  setReportType('spam');
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Xác nhận gửi báo cáo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Comment Report Confirmation Dialog */}
+      <AlertDialog open={showCommentReportConfirm} onOpenChange={setShowCommentReportConfirm}>
+        <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <Flag className="w-5 h-5 text-red-500" />
+              Xác nhận báo cáo bình luận
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              Bạn có chắc chắn muốn báo cáo bình luận của <strong className="text-white">{selectedComment?.username}</strong> không?
+              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <p className="text-yellow-500 text-sm">
+                  ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700">
+              Hủy bỏ
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (selectedComment && selectedVideo && currentUser) {
+                  dispatch(addCommentReport({
+                    id: Date.now().toString(),
+                    commentId: selectedComment.id,
+                    commentText: selectedComment.text,
+                    commentUsername: selectedComment.username,
+                    videoId: selectedVideo.id,
+                    videoTitle: selectedVideo.title,
+                    reporterId: currentUser.id,
+                    reporterUsername: currentUser.username,
+                    reason: commentReportReason,
+                    timestamp: new Date().toISOString(),
+                    status: 'pending',
+                  }));
+                  toast.success('Báo cáo bình luận đã được gửi!');
+                  setShowCommentReportModal(false);
+                  setShowCommentReportConfirm(false);
+                  setSelectedComment(null);
+                  setCommentReportReason('');
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Xác nhận gửi báo cáo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     
     </div>
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId, searchVideosThunk, addVideo, fetchPersonalFeedThunk } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId, searchVideosThunk, addVideo, fetchPersonalFeedThunk, setProfileNavigation } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { logoutThunk } from '../../store/authSlice';
 import {
@@ -79,9 +79,13 @@ const fallbackCopy = (text: string) => {
 interface TikTokStyleHomeProps {
   onViewUserProfile?: (username: string) => void;
   onNavigate?: (page: string) => void;
+  initialTab?: 'for-you' | 'following';
+  onTabChange?: (tab: 'for-you' | 'following') => void;
+  initialShowExplorer?: boolean;
+  onExplorerChange?: (show: boolean) => void;
 }
 
-export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHomeProps) {
+export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'for-you', onTabChange, initialShowExplorer = false, onExplorerChange }: TikTokStyleHomeProps) {
   const dispatch = useDispatch();
   const allVideos = useSelector((state: RootState) => state.videos.videos);
   // Filter out processing/failed videos for the home feed
@@ -89,15 +93,26 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
-  const { pagination, loading, currentVideoComments, focusedVideoId, searchResults } = useSelector((state: RootState) => state.videos);
+  const { pagination, loading, currentVideoComments, focusedVideoId, searchResults, isProfileNavigation } = useSelector((state: RootState) => state.videos);
 
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [isMuted, setIsMuted] = useState(true);
   const [commentText, setCommentText] = useState('');
-  const [activeTab, setActiveTab] = useState('for-you');
+  const [activeTab, setActiveTabState] = useState<'for-you' | 'following'>(initialTab);
   const [rightTab, setRightTab] = useState<'comments' | 'suggestions'>('comments');
+
+  // Wrapper to sync tab changes with parent
+  const setActiveTab = (tab: 'for-you' | 'following') => {
+    setActiveTabState(tab);
+    onTabChange?.(tab);
+  };
+
+  // Sync activeTab when initialTab changes (e.g., from navigation)
+  useEffect(() => {
+    setActiveTabState(initialTab);
+  }, [initialTab]);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [likeAnimation, setLikeAnimation] = useState(false);
   const [followAnimation, setFollowAnimation] = useState(false);
@@ -114,8 +129,20 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const [commentReportReason, setCommentReportReason] = useState('');
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
   const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
-  const [showExplorer, setShowExplorer] = useState(false);
+  const [showExplorerState, setShowExplorerState] = useState(initialShowExplorer);
   const [showShareMenu, setShowShareMenu] = useState(false);
+
+  // Wrapper to sync explorer state with parent
+  const setShowExplorer = (show: boolean) => {
+    setShowExplorerState(show);
+    onExplorerChange?.(show);
+  };
+  const showExplorer = showExplorerState;
+
+  // Sync showExplorer when initialShowExplorer changes
+  useEffect(() => {
+    setShowExplorerState(initialShowExplorer);
+  }, [initialShowExplorer]);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
@@ -143,8 +170,39 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     ? subscriptions[currentUser.username]?.includes(currentVideo.uploaderUsername)
     : false;
 
-  // Reset video index when tab changes
+  // Handle initial video focus from profile click
   useEffect(() => {
+    if (focusedVideoId && videos.length > 0) {
+      const index = videos.findIndex(v => v.id === focusedVideoId);
+      console.log('[Feed] Handling focusedVideoId:', focusedVideoId, 'found at index:', index);
+      
+      if (index !== -1) {
+        setCurrentVideoIndex(index);
+        // Scroll to it after a small delay
+        setTimeout(() => {
+          videoRefs.current[index]?.scrollIntoView({ behavior: 'auto' });
+        }, 100);
+      }
+      
+      // Clear focusedVideoId in Redux (but keep isProfileNavigation true)
+      dispatch(setFocusedVideoId(null));
+      
+      // Reset isProfileNavigation after navigation is complete
+      setTimeout(() => {
+        dispatch(setProfileNavigation(false));
+        console.log('[Feed] Profile navigation complete, normal mode enabled');
+      }, 2000);
+    }
+  }, [focusedVideoId, videos, dispatch]);
+
+  // Reset video index when tab changes (but not during profile navigation)
+  useEffect(() => {
+    // Skip if we're in profile navigation mode (from Redux)
+    if (isProfileNavigation) {
+      console.log('[Feed] Skipping tab switch - profile navigation in progress');
+      return;
+    }
+
     setCurrentVideoIndex(0);
 
     // Fetch appropriate content based on tab
@@ -155,7 +213,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
       console.log('[Feed] Switching to Following tab, keeping current videos');
       // Keep existing videos, filter in component
     }
-  }, [activeTab, dispatch]);
+  }, [activeTab, dispatch, isProfileNavigation]);
 
   useEffect(() => {
     if (currentVideo) {
@@ -163,22 +221,6 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
       setIsBookmarked(!!currentVideo.isSaved);
     }
   }, [currentVideo?.id, currentVideo?.isSaved, dispatch]);
-
-  // Handle initial video focus from profile click
-  useEffect(() => {
-    if (focusedVideoId && videos.length > 0) {
-      const index = videos.findIndex(v => v.id === focusedVideoId);
-      if (index !== -1) {
-        setCurrentVideoIndex(index);
-        // Scroll to it
-        setTimeout(() => {
-          videoRefs.current[index]?.scrollIntoView({ behavior: 'auto' });
-        }, 100);
-        // Clear focus
-        dispatch(setFocusedVideoId(null));
-      }
-    }
-  }, [focusedVideoId, videos, dispatch]);
 
   // Click outside to close user menu and share menu
   useEffect(() => {
@@ -214,6 +256,12 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     rightTabRef.current = rightTab;
   }, [isSidebarOpen, rightTab]);
 
+  // Ref to track isProfileNavigation for IntersectionObserver
+  const isProfileNavigationRef = useRef(isProfileNavigation);
+  useEffect(() => {
+    isProfileNavigationRef.current = isProfileNavigation;
+  }, [isProfileNavigation]);
+
   // IntersectionObserver to track which video is currently visible
   useEffect(() => {
     const options = {
@@ -224,6 +272,11 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
+          // Skip if we're navigating from profile to prevent unwanted index changes
+          if (isProfileNavigationRef.current) {
+            return;
+          }
+          
           const index = videoRefs.current.findIndex(ref => ref === entry.target);
           if (index !== -1 && index !== currentVideoIndex) {
             setCurrentVideoIndex(index);

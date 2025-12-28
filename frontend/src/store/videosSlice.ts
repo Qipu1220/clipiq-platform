@@ -27,6 +27,7 @@ export interface VideosState {
   searchResults: Video[];
   selectedVideo: Video | null;
   focusedVideoId: string | null;
+  isProfileNavigation: boolean; // Flag to prevent fetch when navigating from profile
   currentVideoComments: Comment[];
   loading: boolean;
   error: string | null;
@@ -48,6 +49,7 @@ const initialState: VideosState = {
   searchResults: [],
   selectedVideo: null,
   focusedVideoId: null,
+  isProfileNavigation: false,
   currentVideoComments: [],
   loading: false,
   error: null,
@@ -78,7 +80,14 @@ export const fetchVideosThunk = createAsyncThunk(
 
 export const fetchPersonalFeedThunk = createAsyncThunk(
   'videos/fetchPersonalFeed',
-  async (limit: number = 20, { rejectWithValue }) => {
+  async (limit: number = 20, { rejectWithValue, getState }) => {
+    // Check if we're in profile navigation mode - skip fetch if so
+    const state = getState() as { videos: VideosState };
+    if (state.videos.isProfileNavigation) {
+      console.log('[Feed] Skipping fetch - profile navigation in progress');
+      return { videos: state.videos.videos, pagination: state.videos.pagination, skipped: true };
+    }
+    
     try {
       console.log('[Feed] Fetching personal feed, limit:', limit);
       const response = await getPersonalFeed(limit);
@@ -341,9 +350,19 @@ const videosSlice = createSlice({
     },
     setVideos: (state, action: PayloadAction<Video[]>) => {
       state.videos = action.payload;
+      // When videos are set from profile, mark as profile navigation
+      state.isProfileNavigation = true;
     },
     setFocusedVideoId: (state, action: PayloadAction<string | null>) => {
       state.focusedVideoId = action.payload;
+      // When focusedVideoId is set, mark as profile navigation
+      // When cleared, keep profile navigation until explicitly reset
+      if (action.payload) {
+        state.isProfileNavigation = true;
+      }
+    },
+    setProfileNavigation: (state, action: PayloadAction<boolean>) => {
+      state.isProfileNavigation = action.payload;
     },
     addVideo: (state, action: PayloadAction<Video>) => {
       // Remove existing instance if any to prevent duplicates
@@ -388,12 +407,27 @@ const videosSlice = createSlice({
     // Fetch Personal Feed
     builder
       .addCase(fetchPersonalFeedThunk.pending, (state) => {
-        state.loading = true;
+        // Don't set loading if profile navigation (will be skipped anyway)
+        if (!state.isProfileNavigation) {
+          state.loading = true;
+        }
         state.error = null;
       })
       .addCase(fetchPersonalFeedThunk.fulfilled, (state, action) => {
         state.loading = false;
         console.log('[Feed] fetchPersonalFeedThunk fulfilled:', action.payload);
+
+        // If skipped (profile navigation), don't update videos
+        if (action.payload.skipped) {
+          console.log('[Feed] Fetch was skipped, keeping current videos');
+          return;
+        }
+
+        // Double-check: if profile navigation started after fetch began, don't overwrite
+        if (state.isProfileNavigation) {
+          console.log('[Feed] Profile navigation active, skipping video update to preserve focused video');
+          return;
+        }
 
         state.videos = action.payload.videos || [];
         state.pagination = action.payload.pagination || {
@@ -586,6 +620,7 @@ export const {
   addVideo,
   setVideos,
   setFocusedVideoId,
+  setProfileNavigation,
 } = videosSlice.actions;
 
 export default videosSlice.reducer;

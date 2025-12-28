@@ -31,6 +31,8 @@ function AppContent() {
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
   const [intendedVideoId, setIntendedVideoId] = useState<string | null>(null);
+  const [homeTab, setHomeTab] = useState<'for-you' | 'following'>('for-you');
+  const [showExplorer, setShowExplorer] = useState(false);
   const [isEmailSignInCallback, setIsEmailSignInCallback] = useState(() => {
     // Check sessionStorage for pending password setup (persists across re-renders)
     if (window.sessionStorage.getItem('emailLinkNeedPasswordSetup') === 'true') {
@@ -131,8 +133,28 @@ function AppContent() {
     return <MaintenanceScreen />;
   }
 
-  const handleNavigate = (page: string) => {
-    setCurrentPage(page);
+  const handleNavigate = (page: string, tab?: 'for-you' | 'following') => {
+    // Handle explorer navigation
+    if (page === 'explorer') {
+      setCurrentPage('home');
+      setShowExplorer(true);
+      setSelectedVideoId(null);
+      setSelectedUsername(null);
+      return;
+    }
+    // Handle home-following navigation
+    if (page === 'home-following') {
+      setCurrentPage('home');
+      setHomeTab('following');
+      setShowExplorer(false);
+    } else if (page === 'home') {
+      setCurrentPage('home');
+      setHomeTab(tab || 'for-you');
+      setShowExplorer(false);
+    } else {
+      setCurrentPage(page);
+      setShowExplorer(false);
+    }
     setSelectedVideoId(null);
     setSelectedUsername(null);
   };
@@ -200,17 +222,17 @@ function AppContent() {
         return <PublicUserProfile username={selectedUsername} onVideoClick={() => setCurrentPage('home')} onBack={() => handleNavigate('home')} />;
       }
       if (currentPage === 'profile') {
-        return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
+        return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
       }
       // Use TikTok-style layout for home page
-      return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
+      return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} initialTab={homeTab} onTabChange={setHomeTab} initialShowExplorer={showExplorer} onExplorerChange={setShowExplorer} />;
     }
 
     if (currentPage === 'profile') {
-      return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} />;
+      return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
     }
 
-    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
+    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} initialTab={homeTab} onTabChange={setHomeTab} initialShowExplorer={showExplorer} onExplorerChange={setShowExplorer} />;
   };
 
   return (

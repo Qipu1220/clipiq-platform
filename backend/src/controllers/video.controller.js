@@ -7,6 +7,36 @@ import pool from '../config/database.js';
 import ApiError from '../utils/apiError.js';
 import crypto from 'crypto';
 
+// MinIO configuration for URL construction (public endpoint for browser access)
+const MINIO_PUBLIC_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'localhost';
+const MINIO_PORT = process.env.MINIO_PORT || '9000';
+const MINIO_PROTOCOL = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
+
+/**
+ * Construct full video URL from filename
+ * @param {string} videoUrl - Video filename or full URL
+ * @returns {string} - Full MinIO URL
+ */
+function getFullVideoUrl(videoUrl) {
+  if (!videoUrl) return null;
+  if (videoUrl.startsWith('http')) return videoUrl;
+  return `${MINIO_PROTOCOL}://${MINIO_PUBLIC_ENDPOINT}:${MINIO_PORT}/clipiq-videos/${videoUrl}`;
+}
+
+/**
+ * Construct full thumbnail URL from filename
+ * @param {string} thumbnailUrl - Thumbnail filename or full URL
+ * @param {string} fallbackId - ID for fallback placeholder image
+ * @returns {string} - Full MinIO URL or placeholder
+ */
+function getFullThumbnailUrl(thumbnailUrl, fallbackId = null) {
+  if (!thumbnailUrl) {
+    return fallbackId ? `https://picsum.photos/seed/${fallbackId}/400/600` : null;
+  }
+  if (thumbnailUrl.startsWith('http')) return thumbnailUrl;
+  return `${MINIO_PROTOCOL}://${MINIO_PUBLIC_ENDPOINT}:${MINIO_PORT}/clipiq-thumbnails/${thumbnailUrl}`;
+}
+
 /**
  * GET /api/v1/videos - Get video feed (For You / Following)
  */
@@ -66,10 +96,8 @@ export async function getVideos(req, res, next) {
       id: row.id,
       title: row.title,
       description: row.description,
-      videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: row.thumbnail_url
-        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
-        : `https://picsum.photos/seed/${row.id}/400/600`,
+      videoUrl: getFullVideoUrl(row.video_url),
+      thumbnailUrl: getFullThumbnailUrl(row.thumbnail_url, row.id),
       duration: row.duration,
       views: row.views,
       likes: row.likes_count || 0,
@@ -157,10 +185,8 @@ export async function getVideoById(req, res, next) {
         id: video.id,
         title: video.title,
         description: video.description,
-        videoUrl: `http://localhost:9000/clipiq-videos/${video.video_url}`,
-        thumbnailUrl: video.thumbnail_url
-          ? (video.thumbnail_url.startsWith('http') ? video.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${video.thumbnail_url}`)
-          : `https://images.unsplash.com/photo-${Math.abs(video.id.charCodeAt(0) * 1000 + video.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
+        videoUrl: getFullVideoUrl(video.video_url),
+        thumbnailUrl: getFullThumbnailUrl(video.thumbnail_url, video.id),
         duration: video.duration,
         views: video.views + 1,
         likes: video.likes_count || 0,
@@ -400,10 +426,8 @@ export async function searchVideos(req, res, next) {
         id: video.id,
         title: video.title,
         description: video.description,
-        videoUrl: `http://localhost:9000/clipiq-videos/${video.video_url}`,
-        thumbnailUrl: video.thumbnail_url
-          ? (video.thumbnail_url.startsWith('http') ? video.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${video.thumbnail_url}`)
-          : `https://picsum.photos/seed/${video.id}/400/600`,
+        videoUrl: getFullVideoUrl(video.video_url),
+        thumbnailUrl: getFullThumbnailUrl(video.thumbnail_url, video.id),
         duration: video.duration,
         views: video.views,
         likes: video.likes_count || 0,
@@ -470,10 +494,8 @@ export async function getTrendingVideos(req, res, next) {
       id: row.id,
       title: row.title,
       description: row.description,
-      videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: row.thumbnail_url
-        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
-        : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
+      videoUrl: getFullVideoUrl(row.video_url),
+      thumbnailUrl: getFullThumbnailUrl(row.thumbnail_url, row.id),
       duration: row.duration,
       views: row.views,
       likes: row.likes_count || 0,
@@ -616,10 +638,8 @@ export async function getLikedVideos(req, res, next) {
       id: row.id,
       title: row.title,
       description: row.description,
-      videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: row.thumbnail_url
-        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
-        : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
+      videoUrl: getFullVideoUrl(row.video_url),
+      thumbnailUrl: getFullThumbnailUrl(row.thumbnail_url, row.id),
       duration: row.duration,
       views: row.views,
       likes: row.likes_count || 0,
@@ -710,10 +730,8 @@ export async function getSavedVideos(req, res, next) {
       id: row.id,
       title: row.title,
       description: row.description,
-      videoUrl: `http://localhost:9000/clipiq-videos/${row.video_url}`,
-      thumbnailUrl: row.thumbnail_url
-        ? (row.thumbnail_url.startsWith('http') ? row.thumbnail_url : `http://localhost:9000/clipiq-thumbnails/${row.thumbnail_url}`)
-        : `https://images.unsplash.com/photo-${Math.abs(row.id.charCodeAt(0) * 1000 + row.id.charCodeAt(1) * 100)}?w=400&h=600&fit=crop`,
+      videoUrl: getFullVideoUrl(row.video_url),
+      thumbnailUrl: getFullThumbnailUrl(row.thumbnail_url, row.id),
       duration: row.duration,
       views: row.views,
       likes: row.likes_count || 0,

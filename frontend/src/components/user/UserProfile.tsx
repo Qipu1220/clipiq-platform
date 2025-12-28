@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import { updateDisplayName, updateAvatar, logoutThunk, updateProfileThunk } from '../../store/authSlice';
 import { updateUserDisplayName, updateUserAvatar } from '../../store/usersSlice';
-import { fetchUserVideosThunk, fetchLikedVideosThunk, fetchSavedVideosThunk, setVideos, setFocusedVideoId } from '../../store/videosSlice';
+import { fetchUserVideosThunk, fetchLikedVideosThunk, fetchSavedVideosThunk } from '../../store/videosSlice';
 import {
     Play, Search, Home, Compass, Users, Video, User,
     Share2, Settings, Upload, Heart, Eye, LogOut, ChevronDown,
@@ -16,14 +16,17 @@ import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { toast } from 'sonner';
+import { VideoModal } from './VideoModal';
 
 interface UserProfileProps {
     onVideoClick?: (videoId: string) => void;
     onNavigateHome?: () => void;
     onNavigateUpload?: () => void;
+    onViewUserProfile?: (username: string) => void;
+    onNavigate?: (page: string) => void;
 }
 
-export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: UserProfileProps) {
+export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, onViewUserProfile, onNavigate }: UserProfileProps) {
     const dispatch = useDispatch();
     const currentUser = useSelector((state: RootState) => state.auth.currentUser);
     const { userVideos, likedVideos, savedVideos } = useSelector((state: RootState) => state.videos);
@@ -39,6 +42,10 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: 
     const [bio, setBio] = useState(currentUser?.bio || '');
     const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatarUrl || '');
     const [avatarPreview, setAvatarPreview] = useState(currentUser?.avatarUrl || '');
+    
+    // Video modal state
+    const [showVideoModal, setShowVideoModal] = useState(false);
+    const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
@@ -200,15 +207,26 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: 
                     <div className="px-2 space-y-1">
                         <button
                             className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
-                            onClick={onNavigateHome}
+                            onClick={() => onNavigate?.('home')}
                         >
                             <Home className="w-5 h-5" />
                             <span>Dành cho bạn</span>
                         </button>
 
-                        <button className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm">
+                        <button
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
+                            onClick={() => onNavigate?.('home-following')}
+                        >
                             <Users className="w-5 h-5" />
                             <span>Đã follow</span>
+                        </button>
+
+                        <button
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
+                            onClick={() => onNavigate?.('explorer')}
+                        >
+                            <Compass className="w-5 h-5" />
+                            <span>Khám phá</span>
                         </button>
 
                         <button
@@ -442,7 +460,7 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: 
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                                {displayVideos.map(video => (
+                                {displayVideos.map((video, index) => (
                                     <div
                                         key={video.id}
                                         className="relative aspect-[9/16] bg-zinc-900 rounded-lg overflow-hidden cursor-pointer group"
@@ -455,11 +473,9 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: 
                                                 toast.error('Video xử lý thất bại');
                                                 return;
                                             }
-                                            if (displayVideos.length > 0) {
-                                                dispatch(setVideos(displayVideos));
-                                                dispatch(setFocusedVideoId(video.id));
-                                            }
-                                            onVideoClick?.(video.id);
+                                            // Open video modal instead of navigating
+                                            setSelectedVideoIndex(index);
+                                            setShowVideoModal(true);
                                         }}
                                     >
                                         {/* Processing Overlay */}
@@ -608,6 +624,15 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload }: 
                     </div>
                 </div>
             )}
+
+            {/* Video Modal */}
+            <VideoModal
+                videos={displayVideos.filter(v => v.processing_status === 'ready' || !v.processing_status)}
+                initialIndex={selectedVideoIndex}
+                isOpen={showVideoModal}
+                onClose={() => setShowVideoModal(false)}
+                onUserClick={onViewUserProfile}
+            />
         </div>
     );
 }
