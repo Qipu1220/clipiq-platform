@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId, searchVideosThunk, addVideo } from '../../store/videosSlice';
+import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId, searchVideosThunk, addVideo, fetchPersonalFeedThunk } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
+import { logoutThunk } from '../../store/authSlice';
 import {
   Play, Search, Home, Compass, Users, Video, MessageCircle,
   Heart, Share2, Bookmark, Volume2, VolumeX, User, Plus, Check, LogOut, ChevronDown,
   AtSign, Smile, ChevronRight, ChevronLeft, Flag, X, MoreVertical, Copy, Trash2, Loader2
 } from 'lucide-react';
+import { useVideoImpression } from '../../hooks/useVideoImpression';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
-import { Sidebar, SidebarItem } from '../common/Sidebar';
-import { UserMenu } from '../common/UserMenu';
 import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
 import {
@@ -35,7 +35,8 @@ import {
 import { toast } from 'sonner';
 import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
 import { SearchResults } from './SearchResults';
-import { reportVideoApi, reportCommentApi } from '../../api/reports';
+import { ExplorerTab } from './ExplorerTab';
+import { copyVideoLink, shareVideoApi, generateShareUrl } from '../../api/share';
 
 // Helper function to copy text with fallback
 const copyToClipboard = (text: string) => {
@@ -111,14 +112,19 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const [showCommentReportModal, setShowCommentReportModal] = useState(false);
   const [selectedComment, setSelectedComment] = useState<{ id: string; text: string; username: string } | null>(null);
   const [commentReportReason, setCommentReportReason] = useState('');
-  const [commentReportType, setCommentReportType] = useState('spam');
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
   const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
+  const [showExplorer, setShowExplorer] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const videoStartTimeRef = useRef<number>(0); // Track video start time
+
+  // Initialize impression tracking hook
+  const { trackImpression, trackWatch } = useVideoImpression();
 
   // Filter videos based on active tab - WITH SAFE CHECKS
   const filteredVideos = activeTab === 'following'
@@ -140,7 +146,16 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   // Reset video index when tab changes
   useEffect(() => {
     setCurrentVideoIndex(0);
-  }, [activeTab]);
+
+    // Fetch appropriate content based on tab
+    if (activeTab === 'for-you') {
+      console.log('[Feed] Switching to For You tab, fetching personal feed...');
+      dispatch(fetchPersonalFeedThunk(20) as any);
+    } else if (activeTab === 'following') {
+      console.log('[Feed] Switching to Following tab, keeping current videos');
+      // Keep existing videos, filter in component
+    }
+  }, [activeTab, dispatch]);
 
   useEffect(() => {
     if (currentVideo) {
@@ -165,22 +180,29 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     }
   }, [focusedVideoId, videos, dispatch]);
 
-  // Click outside to close user menu
+  // Click outside to close user menu and share menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
       }
+      // Close share menu when clicking outside
+      if (showShareMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.share-menu-container')) {
+          setShowShareMenu(false);
+        }
+      }
     };
 
-    if (showUserMenu) {
+    if (showUserMenu || showShareMenu) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showUserMenu]);
+  }, [showUserMenu, showShareMenu]);
 
   // Refs for state accessed inside IntersectionObserver
   const isSidebarOpenRef = useRef(isSidebarOpen);
@@ -225,6 +247,33 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     };
   }, [filteredVideos]); // Only recreate if video list changes
 
+  // Track impression when video becomes visible (>600ms visibility)
+  useEffect(() => {
+    if (!currentVideo) return;
+
+    console.log(`[Impression] Video ${currentVideo.id} became visible at index ${currentVideoIndex}`);
+
+    // Track impression with 600ms delay (handled by hook)
+    // Source: 'personal' for For You tab, 'trending' for Following tab
+    const source = activeTab === 'for-you' ? 'personal' : 'trending';
+    trackImpression(currentVideo.id, currentVideoIndex, source);
+
+    // Record start time for watch duration calculation
+    videoStartTimeRef.current = Date.now();
+
+    // Cleanup: track watch event when leaving this video
+    return () => {
+      const watchDuration = Math.floor((Date.now() - videoStartTimeRef.current) / 1000);
+      if (watchDuration > 0) {
+        console.log(`[Watch] Leaving video ${currentVideo.id} after ${watchDuration}s`);
+        const videoElement = videoRefs.current[currentVideoIndex]?.querySelector('video');
+        const completed = videoElement ? videoElement.ended : false;
+        trackWatch(currentVideo.id, watchDuration, completed);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentVideoIndex, currentVideo?.id]); // Only re-run when video changes, not when tab/functions change
+
   // Scroll to video when index changes (for programmatic navigation) & Auto-play logic
   useEffect(() => {
     const videoContainer = videoRefs.current[currentVideoIndex];
@@ -261,11 +310,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     if (activeTab === 'for-you' && currentVideoIndex >= videos.length - 3) {
       const { hasMore, page } = pagination;
       if (hasMore && !loading) {
-        console.log(`📜 Infinite Scroll: Fetching page ${page + 1}`);
+        console.log(`[Feed] Infinite Scroll: Fetching page ${page + 1}`);
+        dispatch(fetchVideosThunk({ page: page + 1, limit: 10 }) as any);
+      }
+    } else if (activeTab === 'following' && currentVideoIndex >= filteredVideos.length - 3) {
+      // For following tab, fetch more if needed
+      const { hasMore, page } = pagination;
+      if (hasMore && !loading) {
+        console.log(`📜 Infinite Scroll (Following): Fetching page ${page + 1}`);
         dispatch(fetchVideosThunk({ page: page + 1, limit: 10 }) as any);
       }
     }
-  }, [currentVideoIndex, isMuted, videos.length, activeTab, pagination.hasMore, pagination.page, loading, dispatch]);
+  }, [currentVideoIndex, isMuted, videos.length, filteredVideos.length, activeTab, pagination.hasMore, pagination.page, loading, dispatch]);
 
   // Polling for processing videos - auto-refresh every 30s
   useEffect(() => {
@@ -366,7 +422,8 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     }
   };
 
-  const formatCount = (count: number) => {
+  const formatCount = (count: number | undefined) => {
+    if (!count || typeof count !== 'number') return '0';
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count.toString();
@@ -380,110 +437,207 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
     );
   }
 
-  // Empty state for following tab
-  if (activeTab === 'following' && filteredVideos.length === 0) {
-    return (
-      <div className="h-screen bg-black flex overflow-hidden">
-        {/* Left Sidebar - Same as main */}
-        <div className="w-60 bg-black flex flex-col border-r border-zinc-900">
-          {/* Logo */}
-          <div className="p-4 flex items-center gap-2">
-            <img
-              src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
-              alt="ShortV Logo"
-              className="w-6 h-6 object-contain"
-            />
-            <h1 className="text-white text-xl logo-text">shortv</h1>
-          </div>
-
-          {/* Search */}
-          <div className="px-3 mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-zinc-900/50 border-zinc-800 text-white text-sm pl-9 pr-3 py-1.5 h-9"
-                placeholder="Tìm kiếm"
-              />
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <ScrollArea className="flex-1">
-            <div className="px-2 space-y-1">
-              <button
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm text-zinc-400 hover:bg-zinc-900/40"
-                onClick={() => setActiveTab('for-you')}
-              >
-                <Home className="w-5 h-5" />
-                <span>Dành cho bạn</span>
-              </button>
-
-              <button
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showFollowingList ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
-                  }`}
-                onClick={() => {
-                  setShowFollowingList(!showFollowingList);
-                  setActiveTab('for-you');
-                }}
-              >
-                <Users className="w-5 h-5" />
-                <span>Đã follow</span>
-              </button>
-
-              <button
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
-                onClick={() => onNavigate?.('upload')}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <span>Tải lên</span>
-              </button>
-
-              <button
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
-                onClick={() => onNavigate?.('profile')}
-              >
-                <User className="w-5 h-5" />
-                <span>Hồ sơ</span>
-              </button>
-            </div>
-          </ScrollArea>
+  // Main render with sidebar always visible
+  const renderMainLayout = (content: React.ReactNode) => (
+    <div className="h-screen bg-black flex overflow-hidden">
+      {/* Left Sidebar - Always visible */}
+      <div className="w-60 bg-black flex flex-col border-r border-zinc-900">
+        {/* Logo */}
+        <div className="p-4 flex items-center gap-2">
+          <img
+            src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
+            alt="ShortV Logo"
+            className="w-6 h-6 object-contain"
+          />
+          <h1 className="text-white text-xl logo-text">shortv</h1>
         </div>
 
-        {/* Empty State Center */}
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-md px-6">
-            <div className="w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: 'rgba(255, 59, 92, 0.1)' }}>
-              <Users className="w-12 h-12" style={{ color: '#ff3b5c' }} />
-            </div>
-            <h2 className="text-white text-2xl mb-3">Chưa có video nào</h2>
-            <p className="text-zinc-400 text-sm mb-6">
-              {subscriptions[currentUser.username]?.length > 0
-                ? 'Những người bạn follow chưa đăng video nào. Hãy khám phá thêm người sáng tạo mới!'
-                : 'Bạn chưa follow ai. Hãy follow những người sáng tạo để xem video của họ!'}
-            </p>
-            <button
-              onClick={() => setActiveTab('for-you')}
-              className="px-6 py-3 rounded-lg text-white transition-all"
-              style={{ backgroundColor: '#ff3b5c' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e6344f'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff3b5c'}
-            >
-              Khám phá ngay
-            </button>
+        {/* Search */}
+        <div className="px-3 mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  handleSearchSubmit();
+                }
+              }}
+              className="bg-zinc-900/50 border-zinc-800 text-white text-sm pl-9 pr-3 py-1.5 h-9"
+              placeholder="Tìm kiếm"
+            />
           </div>
+        </div>
+
+        {/* Navigation */}
+        <ScrollArea className="flex-1">
+          <div className="px-2 space-y-1">
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${activeTab === 'for-you' && !showExplorer ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
+              onClick={() => {
+                setActiveTab('for-you');
+                setShowExplorer(false);
+                setShowFollowingList(false);
+              }}
+            >
+              <Home className="w-5 h-5" />
+              <span>Dành cho bạn</span>
+            </button>
+
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showFollowingList ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
+              onClick={() => {
+                setShowFollowingList(!showFollowingList);
+                setActiveTab('for-you');
+                setShowExplorer(false);
+              }}
+            >
+              <Users className="w-5 h-5" />
+              <span>Đã follow</span>
+            </button>
+
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showExplorer ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
+              onClick={() => {
+                setShowExplorer(true);
+                setShowFollowingList(false);
+                setActiveSearchQuery('');
+              }}
+            >
+              <Compass className="w-5 h-5" />
+              <span>Khám phá</span>
+            </button>
+
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
+              onClick={() => onNavigate?.('upload')}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span>Tải lên</span>
+            </button>
+
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
+              onClick={() => onViewUserProfile?.(currentUser.username)}
+            >
+              <User className="w-5 h-5" />
+              <span>Hồ sơ</span>
+            </button>
+
+            <div className="h-px bg-zinc-800 my-3" />
+
+            <div className="text-zinc-500 text-xs px-3 mb-2 font-medium">Tài khoản đã follow</div>
+            {subscriptions[currentUser.username]?.slice(0, 8).map((username) => {
+              const user = users.find(u => u.username === username);
+              return (
+                <button
+                  key={username}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors"
+                  onClick={() => onViewUserProfile?.(username)}
+                >
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={username} className="w-7 h-7 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
+                      <User className="w-4 h-4 text-zinc-500" />
+                    </div>
+                  )}
+                  <span className="text-xs truncate">{user?.displayName || username}</span>
+                </button>
+              );
+            })}
+          </div>
+        </ScrollArea>
+
+        {/* User Menu at Bottom */}
+        <div className="p-3 border-t border-zinc-800" ref={userMenuRef}>
+          <DropdownMenu open={showUserMenu} onOpenChange={setShowUserMenu}>
+            <DropdownMenuTrigger asChild>
+              <button className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors">
+                {currentUser.avatarUrl ? (
+                  <img src={currentUser.avatarUrl} alt={currentUser.username} className="w-8 h-8 rounded-full object-cover" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
+                    <User className="w-4 h-4 text-zinc-500" />
+                  </div>
+                )}
+                <div className="flex-1 text-left">
+                  <p className="text-white text-sm font-medium">{currentUser.displayName}</p>
+                  <p className="text-zinc-500 text-xs">@{currentUser.username}</p>
+                </div>
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 bg-zinc-900 border-zinc-800">
+              <DropdownMenuItem
+                onClick={() => onViewUserProfile?.(currentUser.username)}
+                className="text-white hover:bg-zinc-800 cursor-pointer"
+              >
+                <User className="mr-2 h-4 w-4" />
+                <span>Xem hồ sơ</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-zinc-800" />
+              <DropdownMenuItem
+                onClick={() => {
+                  dispatch(logoutThunk());
+                }}
+                className="text-red-400 hover:bg-zinc-800 hover:text-red-300 cursor-pointer"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Đăng xuất</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Center Content Area */}
+      {content}
+    </div>
+  );
+
+  // Loading state - only in center area
+  if (!currentVideo) {
+    return renderMainLayout(
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-white mx-auto mb-4" />
+          <p className="text-white text-lg">Đang tải videos...</p>
         </div>
       </div>
     );
   }
 
-  if (!currentVideo) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <p className="text-white">Loading...</p>
+  // Empty state for following tab
+  if (activeTab === 'following' && filteredVideos.length === 0) {
+    return renderMainLayout(
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center max-w-md px-6">
+          <div className="w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: 'rgba(255, 59, 92, 0.1)' }}>
+            <Users className="w-12 h-12" style={{ color: '#ff3b5c' }} />
+          </div>
+          <h2 className="text-white text-2xl mb-3">Chưa có video nào</h2>
+          <p className="text-zinc-400 text-sm mb-6">
+            {subscriptions[currentUser.username]?.length > 0
+              ? 'Những người bạn follow chưa đăng video nào. Hãy khám phá thêm người sáng tạo mới!'
+              : 'Bạn chưa follow ai. Hãy follow những người sáng tạo để xem video của họ!'}
+          </p>
+          <button
+            onClick={() => setActiveTab('for-you')}
+            className="px-6 py-3 rounded-lg text-white transition-all"
+            style={{ backgroundColor: '#ff3b5c' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e6344f'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff3b5c'}
+          >
+            Khám phá ngay
+          </button>
+        </div>
       </div>
     );
   }
@@ -494,9 +648,17 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
       setActiveSearchQuery(searchQuery.trim());
+      setShowExplorer(false);
       dispatch(searchVideosThunk({ query: searchQuery.trim() }) as any);
     }
   };
+
+  // Show Explorer tab
+  if (showExplorer) {
+    return renderMainLayout(
+      <ExplorerTab onUserClick={onViewUserProfile} />
+    );
+  }
 
   // Show search results if active query exists
   if (activeSearchQuery) {
@@ -645,9 +807,13 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
         <ScrollArea className="flex-1">
           <div className="px-2 space-y-1">
             <button
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${activeTab === 'for-you' ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${activeTab === 'for-you' && !showExplorer ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
                 }`}
-              onClick={() => setActiveTab('for-you')}
+              onClick={() => {
+                setActiveTab('for-you');
+                setShowExplorer(false);
+                setShowFollowingList(false);
+              }}
             >
               <Home className="w-5 h-5" />
               <span>Dành cho bạn</span>
@@ -659,10 +825,24 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               onClick={() => {
                 setShowFollowingList(!showFollowingList);
                 setActiveTab('for-you');
+                setShowExplorer(false);
               }}
             >
               <Users className="w-5 h-5" />
               <span>Đã follow</span>
+            </button>
+
+            <button
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${showExplorer ? 'bg-zinc-900/80 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-900/40'
+                }`}
+              onClick={() => {
+                setShowExplorer(true);
+                setShowFollowingList(false);
+                setActiveSearchQuery('');
+              }}
+            >
+              <Compass className="w-5 h-5" />
+              <span>Khám phá</span>
             </button>
 
             <button
@@ -894,25 +1074,118 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           </button>
 
           {/* Share */}
-          <button className="flex flex-col items-center gap-1 group">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
-              <Share2 className="w-7 h-7 text-white" />
-            </div>
-            <span className="text-white text-xs font-medium">Chia sẻ</span>
-          </button>
-
-          {/* Report Video - Only show if not own video */}
-          {currentUser.username !== currentVideo.uploaderUsername && (
-            <button
-              onClick={() => setShowReportModal(true)}
+          <div className="relative share-menu-container">
+            <button 
+              onClick={() => setShowShareMenu(!showShareMenu)}
               className="flex flex-col items-center gap-1 group"
             >
               <div className="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
-                <Flag className="w-7 h-7 text-white group-hover:text-red-400 transition-colors" />
+                <Share2 className="w-7 h-7 text-white" />
               </div>
-              <span className="text-white text-xs font-medium group-hover:text-red-400 transition-colors">Báo cáo</span>
+              <span className="text-white text-xs font-medium">Chia sẻ</span>
             </button>
-          )}
+
+            {/* Share Menu */}
+            {showShareMenu && currentVideo && (
+              <div className="absolute bottom-full right-0 mb-2 w-48 bg-zinc-800 rounded-lg shadow-xl border border-zinc-700 overflow-hidden z-50">
+                <button
+                  onClick={async () => {
+                    try {
+                      const token = localStorage.getItem('accessToken');
+                      await copyVideoLink(currentVideo.id, token || undefined);
+                      toast.success('Đã copy link video');
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      toast.error('Không thể copy link');
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy Link
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = generateShareUrl(currentVideo.id, 'facebook');
+                      window.open(url, '_blank', 'width=600,height=400');
+                      const token = localStorage.getItem('accessToken');
+                      await shareVideoApi(currentVideo.id, 'facebook', token || undefined);
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      console.error('Share failed:', error);
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <span className="text-lg">📘</span>
+                  Facebook
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = generateShareUrl(currentVideo.id, 'twitter');
+                      window.open(url, '_blank', 'width=600,height=400');
+                      const token = localStorage.getItem('accessToken');
+                      await shareVideoApi(currentVideo.id, 'twitter', token || undefined);
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      console.error('Share failed:', error);
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <span className="text-lg">🐦</span>
+                  Twitter
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = generateShareUrl(currentVideo.id, 'whatsapp');
+                      window.open(url, '_blank', 'width=600,height=400');
+                      const token = localStorage.getItem('accessToken');
+                      await shareVideoApi(currentVideo.id, 'whatsapp', token || undefined);
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      console.error('Share failed:', error);
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <span className="text-lg">💬</span>
+                  WhatsApp
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = generateShareUrl(currentVideo.id, 'telegram');
+                      window.open(url, '_blank', 'width=600,height=400');
+                      const token = localStorage.getItem('accessToken');
+                      await shareVideoApi(currentVideo.id, 'telegram', token || undefined);
+                      setShowShareMenu(false);
+                    } catch (error) {
+                      console.error('Share failed:', error);
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                >
+                  <span className="text-lg">✈️</span>
+                  Telegram
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Report Video */}
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="flex flex-col items-center gap-1 group"
+          >
+            <div className="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
+              <Flag className="w-7 h-7 text-white group-hover:text-red-400 transition-colors" />
+            </div>
+            <span className="text-white text-xs font-medium group-hover:text-red-400 transition-colors">Báo cáo</span>
+          </button>
         </div>
 
         {/* Toggle Sidebar Button */}
@@ -950,11 +1223,75 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
           <>
             {/* User Menu Header */}
             <div className="p-4 border-b border-zinc-800">
-              <div className="mb-3 flex justify-end">
-                <UserMenu 
-                  variant="user"
-                  onProfileClick={() => onViewUserProfile?.(currentUser.username)}
-                />
+              <div className="relative mb-3 flex justify-end" ref={userMenuRef}>
+                <div
+                  className="flex items-center gap-2 cursor-pointer hover:bg-zinc-900/50 px-3 py-1.5 rounded-full transition-all border border-zinc-800 hover:border-zinc-700"
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                >
+                  {currentUser?.avatarUrl ? (
+                    <img
+                      src={currentUser.avatarUrl}
+                      alt={currentUser.username}
+                      className="w-7 h-7 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
+                      <User className="w-3.5 h-3.5 text-zinc-400" />
+                    </div>
+                  )}
+                  <span className="text-white text-sm font-medium">{currentUser?.displayName || currentUser?.username}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+                </div>
+
+                {showUserMenu && (
+                  <div className="absolute top-full right-0 mt-2 w-56 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                    {/* User Info */}
+                    <div className="px-4 py-3 border-b border-zinc-800">
+                      <div className="flex items-center gap-2.5">
+                        {currentUser?.avatarUrl ? (
+                          <img
+                            src={currentUser.avatarUrl}
+                            alt={currentUser.username}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
+                            <User className="w-5 h-5 text-zinc-400" />
+                          </div>
+                        )}
+                        <div className="flex flex-col overflow-hidden">
+                          <span className="text-white text-sm font-medium truncate">{currentUser?.displayName || currentUser?.username}</span>
+                          <span className="text-zinc-500 text-xs truncate">@{currentUser?.username}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          onViewUserProfile?.(currentUser.username);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-white hover:bg-zinc-800 transition-colors text-left group"
+                      >
+                        <User className="w-4 h-4 text-zinc-400 group-hover:text-white transition-colors" />
+                        <span className="text-sm">Xem tài khoản</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          dispatch(logoutThunk());
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-red-400 hover:bg-zinc-800 transition-colors text-left group"
+                      >
+                        <LogOut className="w-4 h-4 group-hover:text-red-300 transition-colors" />
+                        <span className="text-sm">Đăng xuất</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Tab Switcher */}
@@ -1040,23 +1377,20 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                                     <Copy className="w-4 h-4 mr-2" />
                                     Copy bình luận
                                   </DropdownMenuItem>
-                                  {/* Report comment - Only show if not own comment */}
-                                  {currentUser.username !== comment.username && (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setSelectedComment({
-                                          id: comment.id,
-                                          text: comment.text,
-                                          username: comment.username
-                                        });
-                                        setShowCommentReportModal(true);
-                                      }}
-                                      className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
-                                    >
-                                      <Flag className="w-4 h-4 mr-2" />
-                                      Báo cáo
-                                    </DropdownMenuItem>
-                                  )}
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedComment({
+                                        id: comment.id,
+                                        text: comment.text,
+                                        username: comment.username
+                                      });
+                                      setShowCommentReportModal(true);
+                                    }}
+                                    className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
+                                  >
+                                    <Flag className="w-4 h-4 mr-2" />
+                                    Báo cáo
+                                  </DropdownMenuItem>
                                   {/* Force show delete for debugging */}
                                   <>
                                     <DropdownMenuSeparator className="bg-zinc-800" />
@@ -1227,12 +1561,6 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               </button>
               <button
                 onClick={() => {
-                  // Validate trước khi mở confirmation
-                  if (!reportType) {
-                    toast.error('Vui lòng chọn lý do báo cáo');
-                    return;
-                  }
-                  console.log('Opening report confirmation with:', { reportType, reportReason, videoId: currentVideo?.id });
                   setShowVideoReportConfirm(true);
                 }}
                 className="flex-1 text-white py-3 rounded-lg transition-all"
@@ -1264,7 +1592,6 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   setShowCommentReportModal(false);
                   setSelectedComment(null);
                   setCommentReportReason('');
-                  setCommentReportType('spam');
                 }}
                 className="text-zinc-400 hover:text-white transition-colors"
               >
@@ -1281,38 +1608,13 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               </div>
 
               <div>
-                <label className="block text-white text-sm mb-2">Loại vi phạm:</label>
-                <select
-                  value={commentReportType}
-                  onChange={(e) => setCommentReportType(e.target.value)}
-                  className="w-full bg-zinc-800 text-white p-3 rounded-lg border border-zinc-700 focus:border-red-500 focus:outline-none transition-colors"
-                >
-                  <option value="spam">Spam hoặc quảng cáo</option>
-                  <option value="harassment">Quấy rối hoặc bắt nạt</option>
-                  <option value="hate_speech">Ngôn từ gây thù ghét</option>
-                  <option value="violence_threat">Đe dọa bạo lực</option>
-                  <option value="sexual_content">Nội dung khiêu dâm</option>
-                  <option value="misinformation">Thông tin sai lệch</option>
-                  <option value="impersonation">Mạo danh</option>
-                  <option value="off_topic">Nội dung không liên quan</option>
-                  <option value="other">Khác</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-white text-sm mb-2">Chi tiết (không bắt buộc):</label>
+                <label className="text-white text-sm mb-2 block">Lý do báo cáo</label>
                 <Textarea
                   value={commentReportReason}
                   onChange={(e) => setCommentReportReason(e.target.value)}
-                  placeholder="Mô tả thêm về vấn đề bạn gặp phải..."
-                  className="bg-zinc-800 border-zinc-700 text-white min-h-[100px] resize-none"
+                  placeholder="Mô tả lý do bạn báo cáo bình luận này..."
+                  className="bg-zinc-800 border-zinc-700 text-white min-h-[120px] resize-none"
                 />
-              </div>
-
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                <p className="text-yellow-500 text-xs">
-                  ⚠️ Báo cáo sai sự thật có thể bị xử phạt. Staff sẽ xem xét trong 24-48 giờ.
-                </p>
               </div>
             </div>
 
@@ -1323,7 +1625,6 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                   setShowCommentReportModal(false);
                   setSelectedComment(null);
                   setCommentReportReason('');
-                  setCommentReportType('spam');
                 }}
                 className="flex-1 bg-zinc-800 text-white py-3 rounded-lg hover:bg-zinc-700 transition-colors"
               >
@@ -1331,7 +1632,10 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               </button>
               <button
                 onClick={() => {
-                  // Reason dropdown is always selected, optional details
+                  if (!commentReportReason.trim()) {
+                    toast.error('Vui lòng nhập lý do báo cáo');
+                    return;
+                  }
                   setShowCommentReportConfirm(true);
                 }}
                 className="flex-1 text-white py-3 rounded-lg transition-all"
@@ -1368,52 +1672,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={async () => {
-                try {
-                  console.log('🚀 Submitting report:', {
-                    videoId: currentVideo.id,
-                    reason: reportType,
-                    description: reportReason
-                  });
-                  
-                  // Gọi API để báo cáo video
-                  const response = await reportVideoApi(currentVideo.id, reportType, reportReason);
-                  console.log('✅ Report API response:', response);
-                  
-                  // Cũng dispatch vào Redux store cho local state (optional)
-                  dispatch(addVideoReport({
-                    videoId: currentVideo.id,
-                    userId: currentUser.id,
-                    type: reportType,
-                    reason: reportReason,
-                  }));
-                  
-                  toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
-                  setShowReportModal(false);
-                  setShowVideoReportConfirm(false);
-                  setReportReason('');
-                  setReportType('spam');
-                } catch (error: any) {
-                  console.error('❌ Error reporting video:', error);
-                  console.error('Error details:', {
-                    response: error.response?.data,
-                    status: error.response?.status,
-                    message: error.message
-                  });
-                  
-                  // Hiển thị thông báo lỗi cụ thể
-                  if (error.response?.data?.detail) {
-                    toast.error(error.response.data.detail);
-                  } else if (error.response?.data?.message) {
-                    toast.error(error.response.data.message);
-                  } else if (error.response?.data?.errors) {
-                    // Hiển thị validation errors
-                    const errorMsg = error.response.data.errors.map((e: any) => e.message).join(', ');
-                    toast.error(`Lỗi validation: ${errorMsg}`);
-                  } else {
-                    toast.error('Không thể gửi báo cáo. Vui lòng thử lại sau.');
-                  }
-                }
+              onClick={() => {
+                dispatch(addVideoReport({
+                  videoId: currentVideo.id,
+                  userId: currentUser.id,
+                  type: reportType,
+                  reason: reportReason,
+                }));
+                toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
+                setShowReportModal(false);
+                setShowVideoReportConfirm(false);
+                setReportReason('');
+                setReportType('spam');
               }}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
@@ -1445,45 +1715,26 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={async () => {
+              onClick={() => {
                 if (selectedComment && currentVideo) {
-                  try {
-                    const reason = `${commentReportType}${commentReportReason ? ': ' + commentReportReason : ''}`;
-                    await reportCommentApi(selectedComment.id, reason, commentReportReason || undefined);
-                    
-                    // Redux dispatch for UI consistency
-                    dispatch(addCommentReport({
-                      id: Date.now().toString(),
-                      commentId: selectedComment.id,
-                      commentText: selectedComment.text,
-                      commentUsername: selectedComment.username,
-                      videoId: currentVideo.id,
-                      videoTitle: currentVideo.title,
-                      reportedBy: currentUser!.id,
-                      reportedByUsername: currentUser!.username,
-                      reason: reason,
-                      timestamp: Date.now(),
-                      status: 'pending',
-                    }));
-                    
-                    toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
-                    setShowCommentReportModal(false);
-                    setShowCommentReportConfirm(false);
-                    setSelectedComment(null);
-                    setCommentReportReason('');
-                    setCommentReportType('spam');
-                  } catch (error: any) {
-                    console.error('Lỗi khi gửi báo cáo bình luận:', error);
-                    if (error.response?.status === 409) {
-                      toast.error('Bạn đã báo cáo bình luận này rồi!');
-                    } else if (error.response?.status === 400) {
-                      toast.error('Không thể báo cáo bình luận của chính mình!');
-                    } else if (error.response?.status === 404) {
-                      toast.error('Bình luận không tồn tại!');
-                    } else {
-                      toast.error('Không thể gửi báo cáo. Vui lòng thử lại sau!');
-                    }
-                  }
+                  dispatch(addCommentReport({
+                    id: Date.now().toString(),
+                    commentId: selectedComment.id,
+                    commentText: selectedComment.text,
+                    commentUsername: selectedComment.username,
+                    videoId: currentVideo.id,
+                    videoTitle: currentVideo.title,
+                    reportedBy: currentUser!.id,
+                    reportedByUsername: currentUser!.username,
+                    reason: commentReportReason,
+                    timestamp: Date.now(),
+                    status: 'pending',
+                  }));
+                  toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
+                  setShowCommentReportModal(false);
+                  setShowCommentReportConfirm(false);
+                  setSelectedComment(null);
+                  setCommentReportReason('');
                 }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"
@@ -1532,7 +1783,11 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
               <div className="px-2 space-y-1">
                 <button
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm text-zinc-400 hover:bg-zinc-900/40"
-                  onClick={() => setShowFollowingList(false)}
+                  onClick={() => {
+                    setShowFollowingList(false);
+                    setActiveTab('for-you');
+                    setShowExplorer(false);
+                  }}
                 >
                   <Home className="w-5 h-5" />
                   <span>Dành cho bạn</span>
@@ -1543,6 +1798,18 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate }: TikTokStyleHo
                 >
                   <Users className="w-5 h-5" />
                   <span>Đã follow</span>
+                </button>
+
+                <button
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-zinc-400 hover:bg-zinc-900/40 transition-colors text-sm"
+                  onClick={() => {
+                    setShowFollowingList(false);
+                    setShowExplorer(true);
+                    setActiveSearchQuery('');
+                  }}
+                >
+                  <Compass className="w-5 h-5" />
+                  <span>Khám phá</span>
                 </button>
 
                 <button
