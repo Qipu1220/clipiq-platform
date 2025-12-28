@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { loginApi, logoutApi, getCurrentUserApi, updateProfileApi, LoginRequest, UpdateProfileRequest } from '../api/auth';
+import { loginApi, logoutApi, getCurrentUserApi, updateProfileApi, googleLoginApi, LoginRequest, UpdateProfileRequest, GoogleLoginRequest } from '../api/auth';
 import { clearSessionId } from '../utils/sessionManager';
 import { handleApiError } from '../api/client';
 
@@ -41,6 +41,25 @@ export const loginThunk = createAsyncThunk(
   async (credentials: LoginRequest, { rejectWithValue }) => {
     try {
       const response = await loginApi(credentials);
+
+      // Store tokens in localStorage
+      localStorage.setItem('accessToken', response.data.tokens.accessToken);
+      localStorage.setItem('refreshToken', response.data.tokens.refreshToken);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+
+      return response.data.user;
+    } catch (error: any) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+// Async thunk for Google login
+export const googleLoginThunk = createAsyncThunk(
+  'auth/googleLogin',
+  async (data: GoogleLoginRequest, { rejectWithValue }) => {
+    try {
+      const response = await googleLoginApi(data);
 
       // Store tokens in localStorage
       localStorage.setItem('accessToken', response.data.tokens.accessToken);
@@ -190,6 +209,24 @@ const authSlice = createSlice({
       state.error = null;
     });
     builder.addCase(loginThunk.rejected, (state, action) => {
+      state.loading = false;
+      state.isAuthenticated = false;
+      state.currentUser = null;
+      state.error = action.payload as string;
+    });
+
+    // Google Login
+    builder.addCase(googleLoginThunk.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
+    builder.addCase(googleLoginThunk.fulfilled, (state, action) => {
+      state.loading = false;
+      state.isAuthenticated = true;
+      state.currentUser = action.payload;
+      state.error = null;
+    });
+    builder.addCase(googleLoginThunk.rejected, (state, action) => {
       state.loading = false;
       state.isAuthenticated = false;
       state.currentUser = null;

@@ -316,6 +316,226 @@ export function isRefreshTokenValid(refreshToken) {
 }
 
 /**
+ * Authenticate or create user with Google Sign-In
+ * 
+ * @param {object} googleData - Google user data
+ * @param {string} googleData.email - User email from Google
+ * @param {string} googleData.displayName - User display name from Google
+ * @param {string} googleData.photoURL - User photo URL from Google
+ * @returns {Promise<{user: object, tokens: object}>} User data and tokens
+ * @throws {ApiError} If authentication fails
+ */
+export async function authenticateWithGoogle(googleData) {
+  const { email, displayName, photoURL } = googleData;
+
+  if (!email) {
+    throw ApiError.badRequest(
+      'Email is required for Google Sign-In',
+      'MISSING_EMAIL'
+    );
+  }
+
+  // Check if user already exists with this email
+  const existingUserQuery = `
+    SELECT id, username, email, role, banned, ban_expiry, ban_reason, warnings, display_name, avatar_url
+    FROM users
+    WHERE email = $1
+    LIMIT 1
+  `;
+
+  const existingResult = await pool.query(existingUserQuery, [email]);
+
+  let user;
+
+  if (existingResult.rows.length > 0) {
+    // User exists, update if needed
+    user = existingResult.rows[0];
+
+    // Update avatar if not set and Google provides one
+    if (!user.avatar_url && photoURL) {
+      await pool.query(
+        'UPDATE users SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [photoURL, user.id]
+      );
+      user.avatar_url = photoURL;
+    }
+
+    // Update display name if not set and Google provides one
+    if (!user.display_name && displayName) {
+      await pool.query(
+        'UPDATE users SET display_name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [displayName, user.id]
+      );
+      user.display_name = displayName;
+    }
+
+    // Check if user is banned
+    if (user.banned) {
+      const now = new Date();
+      if (!user.ban_expiry || new Date(user.ban_expiry) > now) {
+        throw ApiError.forbidden(
+          'Your account has been banned',
+          'USER_BANNED',
+          { reason: user.ban_reason, expiry: user.ban_expiry }
+        );
+      }
+    }
+  } else {
+    // Create new user
+    // Generate unique username from email
+    const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    let username = baseUsername;
+    let counter = 1;
+
+    // Check if username exists and generate unique one
+    while (true) {
+      const usernameCheck = await pool.query(
+        'SELECT id FROM users WHERE username = $1',
+        [username]
+      );
+      if (usernameCheck.rows.length === 0) break;
+      username = `${baseUsername}${counter}`;
+      counter++;
+    }
+
+    // Create user with a random password (they can't use password login)
+    const randomPassword = Math.random().toString(36).slice(-16) + Math.random().toString(36).slice(-16);
+    const { hashPassword } = await import('../utils/password.util.js');
+    const hashedPassword = await hashPassword(randomPassword);
+
+    const createUserQuery = `
+      INSERT INTO users (username, email, password, display_name, avatar_url, role)
+      VALUES ($1, $2, $3, $4, $5, 'user')
+      RETURNING id, username, email, role, banned, ban_expiry, ban_reason, warnings, display_name, avatar_url
+    `;
+
+    const createResult = await pool.query(createUserQuery, [
+      username,
+      email,
+      hashedPassword,
+      displayName || null,
+      photoURL || null
+    ]);
+
+    user = createResult.rows[0];
+  }
+
+  // Generate tokens
+  const userPayload = {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role
+  };
+
+  const tokens = generateTokenPair(userPayload);
+
+  // Store refresh token
+  refreshTokenStore.add(tokens.refreshToken);
+
+  // Update last login timestamp
+  await pool.query(
+    'UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+    [user.id]
+  );
+
+  // Return user data
+  const userData = {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    banned: user.banned,
+    banReason: user.ban_reason,
+    banExpiry: user.ban_expiry,
+    warnings: user.warnings || 0,
+    displayName: user.display_name,
+    avatarUrl: user.avatar_url
+  };
+
+  return { user: userData, tokens };
+}
+
+/**
+ * Register a new user with email/password from Firebase
+ * 
+ * @param {object} userData - User registration data
+ * @param {string} userData.username - Desired username
+ * @param {string} userData.email - User email
+ * @param {string} userData.displayName - User display name
+ * @returns {Promise<object>} Created user data
+ * @throws {ApiError} If registration fails
+ */
+export async function registerUser(userData) {
+  const { username, email, displayName } = userData;
+
+  if (!email || !username) {
+    throw ApiError.badRequest(
+      'Email and username are required',
+      'MISSING_FIELDS'
+    );
+  }
+
+  // Check if email already exists
+  const emailCheck = await pool.query(
+    'SELECT id FROM users WHERE email = $1',
+    [email]
+  );
+
+  if (emailCheck.rows.length > 0) {
+    throw ApiError.conflict(
+      'Email already registered',
+      'EMAIL_EXISTS'
+    );
+  }
+
+  // Check if username already exists
+  const usernameCheck = await pool.query(
+    'SELECT id FROM users WHERE username = $1',
+    [username]
+  );
+
+  if (usernameCheck.rows.length > 0) {
+    throw ApiError.conflict(
+      'Username already taken',
+      'USERNAME_EXISTS'
+    );
+  }
+
+  // Create user with a random password (Firebase handles authentication)
+  const randomPassword = Math.random().toString(36).slice(-16) + Math.random().toString(36).slice(-16);
+  const { hashPassword } = await import('../utils/password.util.js');
+  const hashedPassword = await hashPassword(randomPassword);
+
+  const createUserQuery = `
+    INSERT INTO users (username, email, password, display_name, role)
+    VALUES ($1, $2, $3, $4, 'user')
+    RETURNING id, username, email, role, banned, warnings, display_name, avatar_url, created_at
+  `;
+
+  const createResult = await pool.query(createUserQuery, [
+    username,
+    email,
+    hashedPassword,
+    displayName || null
+  ]);
+
+  const user = createResult.rows[0];
+
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    banned: user.banned,
+    warnings: user.warnings || 0,
+    displayName: user.display_name,
+    avatarUrl: user.avatar_url,
+    createdAt: user.created_at
+  };
+}
+
+/**
  * Remove all refresh tokens for cleanup (for testing or admin operations)
  * 
  * @returns {number} Number of tokens removed
@@ -328,6 +548,8 @@ export function clearAllRefreshTokens() {
 
 export default {
   authenticateUser,
+  authenticateWithGoogle,
+  registerUser,
   logoutUser,
   refreshAccessToken,
   getUserProfile,

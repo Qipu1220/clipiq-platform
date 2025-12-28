@@ -3,6 +3,8 @@ import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState, AppDispatch } from './store/store';
 import { restoreSessionThunk } from './store/authSlice';
 import { fetchVideosThunk } from './store/videosSlice';
+import { isSignInWithEmailLink } from 'firebase/auth';
+import { auth } from './config/firebase';
 import { Toaster } from 'sonner';
 import { LoginPage } from './components/LoginPage';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
@@ -16,6 +18,7 @@ import { UploadVideo } from './components/user/UploadVideo';
 import { ReportUser } from './components/user/ReportUser';
 import { PublicUserProfile } from './components/user/PublicUserProfile';
 import { UserProfile } from './components/user/UserProfile';
+import { EmailSignInCallback } from './components/auth/EmailSignInCallback';
 
 function AppContent() {
   const dispatch = useDispatch<AppDispatch>();
@@ -28,6 +31,21 @@ function AppContent() {
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
   const [intendedVideoId, setIntendedVideoId] = useState<string | null>(null);
+  const [isEmailSignInCallback, setIsEmailSignInCallback] = useState(() => {
+    // Check sessionStorage for pending password setup (persists across re-renders)
+    if (window.sessionStorage.getItem('emailLinkNeedPasswordSetup') === 'true') {
+      return true;
+    }
+    return false;
+  });
+
+  // Check if current URL is email sign-in callback
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path === '/auth/email-signin' && isSignInWithEmailLink(auth, window.location.href)) {
+      setIsEmailSignInCallback(true);
+    }
+  }, []);
 
   // Check URL for video ID on app load (for shared links)
   useEffect(() => {
@@ -88,6 +106,18 @@ function AppContent() {
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-white text-xl">Đang tải...</div>
       </div>
+    );
+  }
+
+  // Handle email sign-in callback
+  if (isEmailSignInCallback) {
+    return (
+      <EmailSignInCallback 
+        onComplete={() => {
+          setIsEmailSignInCallback(false);
+          window.history.replaceState({}, document.title, '/');
+        }} 
+      />
     );
   }
 

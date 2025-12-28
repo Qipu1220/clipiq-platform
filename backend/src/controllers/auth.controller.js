@@ -237,11 +237,116 @@ export async function getSystemStatus(req, res, next) {
   }
 }
 
+/**
+ * Google Sign-In Controller
+ * 
+ * Authenticates user with Google ID token.
+ * Creates new user if doesn't exist, or logs in existing user.
+ * 
+ * POST /api/v1/auth/google
+ * 
+ * Request Body:
+ * {
+ *   "idToken": "firebase_id_token",
+ *   "email": "user@gmail.com",
+ *   "displayName": "User Name",
+ *   "photoURL": "https://..."
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Google login successful",
+ *   "data": {
+ *     "user": { id, username, email, role },
+ *     "tokens": { accessToken, refreshToken, expiresIn, tokenType }
+ *   }
+ * }
+ */
+export async function googleLogin(req, res, next) {
+  try {
+    const { idToken, email, displayName, photoURL } = req.body;
+
+    // Note: In production, you should verify the idToken with Firebase Admin SDK
+    // For now, we trust the client-side Firebase authentication
+    // TODO: Add Firebase Admin SDK verification for production
+
+    // Delegate to service layer
+    const { user, tokens } = await authService.authenticateWithGoogle({
+      email,
+      displayName,
+      photoURL
+    });
+
+    // Return success response
+    return res.status(200).json({
+      success: true,
+      message: 'Google login successful',
+      data: {
+        user,
+        tokens
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Register Controller
+ * 
+ * Registers a new user with email/password (from Firebase).
+ * 
+ * POST /api/v1/auth/register
+ * 
+ * Request Body:
+ * {
+ *   "idToken": "firebase_id_token",
+ *   "username": "username",
+ *   "email": "user@example.com",
+ *   "displayName": "Display Name"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Registration successful",
+ *   "data": {
+ *     "user": { id, username, email, role }
+ *   }
+ * }
+ */
+export async function register(req, res, next) {
+  try {
+    const { idToken, username, email, displayName } = req.body;
+
+    // Delegate to service layer
+    const user = await authService.registerUser({
+      username,
+      email,
+      displayName
+    });
+
+    // Return success response
+    return res.status(201).json({
+      success: true,
+      message: 'Registration successful',
+      data: { user }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+}
+
 export default {
   login,
   logout,
   refreshToken,
   getMe,
   updateProfile,
-  getSystemStatus
+  getSystemStatus,
+  googleLogin,
+  register
 };

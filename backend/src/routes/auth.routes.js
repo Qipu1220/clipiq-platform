@@ -9,7 +9,7 @@
  */
 
 import express from 'express';
-import { login, logout, refreshToken, getMe, updateProfile, getSystemStatus } from '../controllers/auth.controller.js';
+import { login, logout, refreshToken, getMe, updateProfile, getSystemStatus, googleLogin, register } from '../controllers/auth.controller.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { body, validationResult } from 'express-validator';
 
@@ -144,5 +144,80 @@ router.patch('/me',
  * Public endpoint - no authentication required
  */
 router.get('/status', getSystemStatus);
+
+/**
+ * POST /api/v1/auth/google
+ * 
+ * Login with Google (Firebase)
+ * Creates new user if doesn't exist
+ * 
+ * Request Body:
+ * {
+ *   "idToken": "firebase_id_token",
+ *   "email": "user@gmail.com",
+ *   "displayName": "User Name",
+ *   "photoURL": "https://..."
+ * }
+ */
+router.post('/google',
+  [
+    body('idToken')
+      .notEmpty().withMessage('ID token is required')
+      .isString().withMessage('ID token must be a string'),
+
+    body('email')
+      .notEmpty().withMessage('Email is required')
+      .isEmail().withMessage('Invalid email format'),
+
+    body('displayName')
+      .optional()
+      .isString().withMessage('Display name must be a string')
+      .isLength({ max: 100 }).withMessage('Display name too long'),
+
+    body('photoURL')
+      .optional()
+      .isString().withMessage('Photo URL must be a string')
+  ],
+  validate,
+  googleLogin
+);
+
+/**
+ * POST /api/v1/auth/register
+ * 
+ * Register new user with Firebase Email/Password
+ * 
+ * Request Body:
+ * {
+ *   "idToken": "firebase_id_token",
+ *   "username": "username",
+ *   "email": "user@example.com",
+ *   "displayName": "Display Name"
+ * }
+ */
+router.post('/register',
+  [
+    body('idToken')
+      .notEmpty().withMessage('ID token is required')
+      .isString().withMessage('ID token must be a string'),
+
+    body('username')
+      .notEmpty().withMessage('Username is required')
+      .isString().withMessage('Username must be a string')
+      .isLength({ min: 3, max: 50 }).withMessage('Username must be between 3 and 50 characters')
+      .matches(/^[a-zA-Z0-9_]+$/).withMessage('Username can only contain letters, numbers, and underscores'),
+
+    body('email')
+      .notEmpty().withMessage('Email is required')
+      .isEmail().withMessage('Invalid email format'),
+
+    body('displayName')
+      .optional()
+      .isString().withMessage('Display name must be a string')
+      .isLength({ max: 100 }).withMessage('Display name too long')
+  ],
+  validate,
+  register
+);
 
 export default router;

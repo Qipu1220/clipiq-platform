@@ -96,6 +96,20 @@ export const refreshTokenApi = async (refreshToken: string): Promise<RefreshToke
   return response.data;
 };
 
+// Google Sign-In Request
+export interface GoogleLoginRequest {
+  idToken: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string;
+}
+
+// Google Sign-In - Send Firebase ID token to backend
+export const googleLoginApi = async (data: GoogleLoginRequest): Promise<LoginResponse> => {
+  const response = await apiClient.post<LoginResponse>('/auth/google', data);
+  return response.data;
+};
+
 // Get current user info
 export const getCurrentUserApi = async (): Promise<UserInfoResponse> => {
   const response = await apiClient.get<UserInfoResponse>('/auth/me');

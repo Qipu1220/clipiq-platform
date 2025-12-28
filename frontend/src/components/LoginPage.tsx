@@ -1,17 +1,25 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { loginThunk, clearError } from '../store/authSlice';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../config/firebase';
+import { loginThunk, googleLoginThunk, clearError } from '../store/authSlice';
 import { RootState, AppDispatch } from '../store/store';
-import { Video } from 'lucide-react';
+import { Video, Mail } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { RegisterPage } from './RegisterPage';
+import { GoogleSignInButton } from './auth/GoogleSignInButton';
+import { EmailLinkSignIn } from './auth/EmailLinkSignIn';
+import { ForgotPassword } from './auth/ForgotPassword';
 
 export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showRegister, setShowRegister] = useState(false);
+  const [showEmailLink, setShowEmailLink] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   
   const dispatch = useDispatch<AppDispatch>();
   const { loading, error } = useSelector((state: RootState) => state.auth);
@@ -20,15 +28,117 @@ export function LoginPage() {
     return <RegisterPage onBackToLogin={() => setShowRegister(false)} />;
   }
 
+  // Show Forgot Password form
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center px-4">
+        {/* Subtle background accent */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div
+            className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-10"
+            style={{ background: '#ff3b5c' }}
+          />
+          <div
+            className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl opacity-8"
+            style={{ background: '#ff3b5c' }}
+          />
+        </div>
+
+        <div className="w-full max-w-md relative z-10">
+          <div className="backdrop-blur-md bg-zinc-950/80 rounded-3xl border border-zinc-900/50 shadow-2xl overflow-hidden">
+            <div className="p-10">
+              <ForgotPassword onBack={() => setShowForgotPassword(false)} disabled={loading} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Clear any previous errors
     dispatch(clearError());
-    
-    // Dispatch login thunk with 'login' field (username or email)
-    await dispatch(loginThunk({ login: username, password }));
+    setLocalError(null);
+
+    // Check if input looks like an email
+    const isEmail = username.includes('@');
+
+    if (isEmail) {
+      // Try Firebase Email/Password login first for email inputs
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, username, password);
+        const idToken = await userCredential.user.getIdToken();
+
+        // Use Google login thunk (same flow - send to backend)
+        await dispatch(googleLoginThunk({
+          idToken,
+          email: userCredential.user.email || '',
+          displayName: userCredential.user.displayName || undefined,
+          photoURL: userCredential.user.photoURL || undefined
+        })).unwrap();
+        
+        return; // Success, exit
+      } catch (firebaseError: any) {
+        console.log('Firebase login failed, trying backend:', firebaseError.code);
+        
+        // If Firebase fails with user-not-found or wrong-password, try backend
+        if (firebaseError.code === 'auth/user-not-found' || 
+            firebaseError.code === 'auth/wrong-password' ||
+            firebaseError.code === 'auth/invalid-credential') {
+          // Fall through to backend login
+        } else if (firebaseError.code === 'auth/invalid-email') {
+          setLocalError('Email không hợp lệ');
+          return;
+        } else if (firebaseError.code === 'auth/too-many-requests') {
+          setLocalError('Quá nhiều lần thử. Vui lòng thử lại sau.');
+          return;
+        }
+        // For other Firebase errors, try backend login
+      }
+    }
+
+    // Try backend login (for username or fallback for email)
+    try {
+      await dispatch(loginThunk({ login: username, password })).unwrap();
+    } catch (backendError: any) {
+      // If both failed, show error
+      if (isEmail) {
+        setLocalError('Email hoặc mật khẩu không đúng');
+      }
+      // Backend error will be shown from Redux state
+    }
   };
+
+  const displayError = localError || error;
+
+  // Show Email Link Sign-In form
+  if (showEmailLink) {
+    return (
+      <div className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center px-4">
+        {/* Subtle background accent */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div
+            className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-10"
+            style={{ background: '#ff3b5c' }}
+          />
+          <div
+            className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl opacity-8"
+            style={{ background: '#ff3b5c' }}
+          />
+        </div>
+
+        <div className="w-full max-w-md relative z-10">
+          <div className="backdrop-blur-md bg-zinc-950/80 rounded-3xl border border-zinc-900/50 shadow-2xl overflow-hidden">
+            <div className="p-10">
+              <EmailLinkSignIn onBack={() => setShowEmailLink(false)} disabled={loading} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center px-4">
@@ -96,11 +206,21 @@ export function LoginPage() {
                   placeholder="Nhập mật khẩu"
                   disabled={loading}
                 />
+                <div className="flex justify-end mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-xs text-[#ff3b5c] hover:text-[#ff6b87] transition-colors"
+                    disabled={loading}
+                  >
+                    Quên mật khẩu?
+                  </button>
+                </div>
               </div>
 
-              {error && (
+              {displayError && (
                 <div className="bg-[#ff3b5c]/10 border border-[#ff3b5c]/20 text-[#ff9fb3] p-3.5 rounded-xl text-sm">
-                  {error}
+                  {displayError}
                 </div>
               )}
 
@@ -112,6 +232,33 @@ export function LoginPage() {
                 <span>{loading ? 'Đang đăng nhập...' : 'Đăng nhập'}</span>
               </Button>
             </form>
+
+            {/* Divider */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-zinc-800/50"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 text-zinc-500 bg-zinc-950/80">hoặc</span>
+              </div>
+            </div>
+
+            {/* Google Sign-In */}
+            <GoogleSignInButton disabled={loading} />
+
+            {/* Email Link Sign-In Button */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowEmailLink(true)}
+              disabled={loading}
+              className="w-full h-12 mt-3 bg-zinc-900/50 border-zinc-800/50 text-white hover:bg-zinc-800/50 hover:border-zinc-700/50 rounded-xl transition-all duration-200"
+            >
+              <div className="flex items-center gap-3">
+                <Mail className="w-5 h-5 text-[#ff3b5c]" />
+                <span>Đăng nhập bằng Email Link</span>
+              </div>
+            </Button>
 
             {/* Register link */}
             <div className="mt-6 text-center">
