@@ -227,10 +227,131 @@ async function getBatchVideoStats(videoIds, minImpressions = 5) {
   return statsMap;
 }
 
+/**
+ * Get comprehensive analytics statistics for admin dashboard
+ * Returns current month stats with month-over-month comparison
+ * @returns {Promise<Object>} Analytics statistics object
+ */
+async function getAnalyticsStats() {
+  // Get date ranges for current and previous month
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+  // Query for total views (current month)
+  const viewsQuery = `
+    SELECT 
+      COALESCE(SUM(views), 0) as total_views
+    FROM videos
+    WHERE created_at >= $1
+  `;
+  
+  // Query for total views (previous month)
+  const viewsPrevQuery = `
+    SELECT 
+      COALESCE(SUM(views), 0) as total_views
+    FROM videos
+    WHERE created_at >= $1 AND created_at <= $2
+  `;
+
+  // Query for videos uploaded
+  const videosQuery = `
+    SELECT COUNT(*) as count
+    FROM videos
+    WHERE created_at >= $1
+  `;
+
+  // Query for active users (users who watched or uploaded)
+  const activeUsersQuery = `
+    SELECT COUNT(DISTINCT user_id) as count
+    FROM (
+      SELECT uploader_id as user_id FROM videos WHERE created_at >= $1
+      UNION
+      SELECT user_id FROM impressions WHERE shown_at >= $1
+    ) as active
+  `;
+
+  // Query for top videos
+  const topVideosQuery = `
+    SELECT id, title, views, likes, uploader_id
+    FROM videos
+    WHERE status = 'active'
+    ORDER BY views DESC
+    LIMIT 5
+  `;
+
+  try {
+    const [
+      viewsCurrentResult,
+      viewsPrevResult,
+      videosCurrentResult,
+      videosPrevResult,
+      activeUsersCurrentResult,
+      activeUsersPrevResult,
+      topVideosResult
+    ] = await Promise.all([
+      pool.query(viewsQuery, [currentMonthStart]),
+      pool.query(viewsPrevQuery, [previousMonthStart, previousMonthEnd]),
+      pool.query(videosQuery, [currentMonthStart]),
+      pool.query(videosQuery, [previousMonthStart]),
+      pool.query(activeUsersQuery, [currentMonthStart]),
+      pool.query(activeUsersQuery, [previousMonthStart]),
+      pool.query(topVideosQuery)
+    ]);
+
+    const totalViewsCurrent = parseInt(viewsCurrentResult.rows[0]?.total_views || 0);
+    const totalViewsPrevious = parseInt(viewsPrevResult.rows[0]?.total_views || 0);
+    const videosUploadedCurrent = parseInt(videosCurrentResult.rows[0]?.count || 0);
+    const videosUploadedPrevious = parseInt(videosPrevResult.rows[0]?.count || 0);
+    const activeUsersCurrent = parseInt(activeUsersCurrentResult.rows[0]?.count || 0);
+    const activeUsersPrevious = parseInt(activeUsersPrevResult.rows[0]?.count || 0);
+
+    // Calculate percentage changes
+    const calculateChange = (current, previous) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - previous) / previous) * 100);
+    };
+
+    return {
+      totalViews: {
+        current: totalViewsCurrent,
+        previous: totalViewsPrevious,
+        change: calculateChange(totalViewsCurrent, totalViewsPrevious)
+      },
+      videosUploaded: {
+        current: videosUploadedCurrent,
+        previous: videosUploadedPrevious,
+        change: calculateChange(videosUploadedCurrent, videosUploadedPrevious)
+      },
+      activeUsers: {
+        current: activeUsersCurrent,
+        previous: activeUsersPrevious,
+        change: calculateChange(activeUsersCurrent, activeUsersPrevious)
+      },
+      averageWatchTime: {
+        current: 0,
+        previous: 0,
+        change: 0
+      },
+      engagementRate: {
+        current: 0,
+        previous: 0,
+        change: 0
+      },
+      topVideos: topVideosResult.rows
+    };
+  } catch (error) {
+    console.error('Error getting analytics stats:', error);
+    throw error;
+  }
+}
+
 export {
   getWatch10sRate7d,
   getAvgWatch7d,
   getVideoPopularityStats,
   getTrendingVideos,
-  getBatchVideoStats
+  getBatchVideoStats,
+  getAnalyticsStats
 };
