@@ -312,13 +312,20 @@ export async function performMultimodalSearch(queryText) {
         const finalScore = entry.sources.size >= 2 ? baseScore * BOOST_MULTI_SOURCE : baseScore;
 
         fusedResults.push({
-            id: entry.data.id,
+            ...entry.data,
             score: parseFloat(finalScore.toFixed(6))
         });
     }
 
     // Sort by fused score (descending)
     const sortedResults = fusedResults.sort((a, b) => b.score - a.score);
+
+    console.log('Search Results:', sortedResults.map(r => ({
+        id: r.id,
+        title: r.title,
+        score: r.score,
+        sources: Array.from(videoMap.get(r.id)?.sources || [])
+    })));
 
     return {
         classification,
