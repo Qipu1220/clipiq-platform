@@ -272,12 +272,27 @@ async function getAnalyticsStats() {
     ) as active
   `;
 
-  // Query for top videos
+  // Query for top videos with like count from likes table and uploader info
   const topVideosQuery = `
-    SELECT id, title, views, likes, uploader_id
-    FROM videos
-    WHERE status = 'active'
-    ORDER BY views DESC
+    SELECT 
+      v.id, 
+      v.title, 
+      v.views,
+      v.thumbnail_url,
+      COALESCE(l.like_count, 0) as likes,
+      v.uploader_id,
+      u.username,
+      u.display_name,
+      u.avatar_url
+    FROM videos v
+    LEFT JOIN (
+      SELECT video_id, COUNT(*) as like_count
+      FROM likes
+      GROUP BY video_id
+    ) l ON v.id = l.video_id
+    LEFT JOIN users u ON v.uploader_id = u.id
+    WHERE v.status = 'active'
+    ORDER BY v.views DESC
     LIMIT 5
   `;
 
@@ -339,7 +354,19 @@ async function getAnalyticsStats() {
         previous: 0,
         change: 0
       },
-      topVideos: topVideosResult.rows
+      topVideos: topVideosResult.rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        views: parseInt(row.views || 0),
+        likes: parseInt(row.likes || 0),
+        thumbnailUrl: row.thumbnail_url,
+        uploader: {
+          id: row.uploader_id,
+          username: row.username || 'unknown',
+          displayName: row.display_name,
+          avatarUrl: row.avatar_url
+        }
+      }))
     };
   } catch (error) {
     console.error('Error getting analytics stats:', error);
