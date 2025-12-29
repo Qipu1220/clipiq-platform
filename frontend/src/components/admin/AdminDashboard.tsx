@@ -1080,6 +1080,62 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                     </div>
                   </div>
                 </div>
+
+                {/* Top Videos */}
+                {dashboardData?.topVideos && dashboardData.topVideos.length > 0 && (
+                  <Card className="bg-zinc-950/50 border-zinc-900/50 rounded-xl overflow-hidden">
+                    <CardHeader className="border-b border-zinc-900/50">
+                      <CardTitle className="text-white text-lg flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-[#ff3b5c]" />
+                        Top Videos
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      {dashboardLoading ? (
+                        <div className="space-y-3">
+                          {[1, 2, 3].map(i => (
+                            <Skeleton key={i} className="h-20 w-full bg-zinc-900/50 rounded-lg" />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {dashboardData.topVideos.map((video, index) => (
+                            <div key={video.id} className="flex items-center gap-4 p-3 bg-zinc-900/30 rounded-lg hover:bg-zinc-900/40 transition-colors">
+                              <div className="text-zinc-500 font-medium text-sm w-6">#{index + 1}</div>
+
+                              {/* Thumbnail */}
+                              <div className="w-24 h-16 bg-zinc-900/50 rounded-lg overflow-hidden flex-shrink-0">
+                                {video.thumbnailUrl ? (
+                                  <img
+                                    src={video.thumbnailUrl}
+                                    alt={video.title}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                                    <Play className="w-6 h-6 text-zinc-600" />
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Video Info */}
+                              <div className="flex-1 min-w-0">
+                                <h4 className="text-white text-sm font-medium truncate">{video.title}</h4>
+                                <p className="text-zinc-500 text-xs">@{video.uploader.username}</p>
+                              </div>
+
+                              {/* View Count */}
+                              <div className="text-right">
+                                <div className="text-white font-medium">{video.views.toLocaleString()}</div>
+                                <div className="text-zinc-500 text-xs">lượt xem</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
 

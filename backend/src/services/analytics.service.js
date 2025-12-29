@@ -1,5 +1,24 @@
 import pool from '../config/database.js';
 
+// MinIO configuration for URL construction
+const MINIO_PUBLIC_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'localhost';
+const MINIO_PORT = process.env.MINIO_PORT || '9000';
+const MINIO_PROTOCOL = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
+
+/**
+ * Construct full thumbnail URL from filename
+ * @param {string} thumbnailUrl - Thumbnail filename or full URL
+ * @param {string} fallbackId - ID for fallback placeholder image
+ * @returns {string} - Full MinIO URL or placeholder
+ */
+function getFullThumbnailUrl(thumbnailUrl, fallbackId = null) {
+  if (!thumbnailUrl) {
+    return fallbackId ? `https://picsum.photos/seed/${fallbackId}/400/600` : null;
+  }
+  if (thumbnailUrl.startsWith('http')) return thumbnailUrl;
+  return `${MINIO_PROTOCOL}://${MINIO_PUBLIC_ENDPOINT}:${MINIO_PORT}/clipiq-thumbnails/${thumbnailUrl}`;
+}
+
 /**
  * Analytics Service
  * Provides video popularity metrics based on watch behavior
@@ -20,16 +39,16 @@ async function getWatch10sRate7d(videoId) {
     WHERE i.video_id = $1
       AND vh.created_at >= NOW() - INTERVAL '7 days'
   `;
-  
+
   const result = await pool.query(query, [videoId]);
-  
+
   if (!result.rows[0] || result.rows[0].total_watches === '0') {
     return null; // Not enough data
   }
-  
+
   const totalWatches = parseInt(result.rows[0].total_watches);
   const watch10sCount = parseInt(result.rows[0].watch_10s_count);
-  
+
   return watch10sCount / totalWatches;
 }
 
@@ -46,13 +65,13 @@ async function getAvgWatch7d(videoId) {
     WHERE i.video_id = $1
       AND vh.created_at >= NOW() - INTERVAL '7 days'
   `;
-  
+
   const result = await pool.query(query, [videoId]);
-  
+
   if (!result.rows[0] || !result.rows[0].avg_watch) {
     return null; // Not enough data
   }
-  
+
   return parseFloat(result.rows[0].avg_watch);
 }
 
@@ -74,20 +93,20 @@ async function getVideoPopularityStats(videoId, minImpressions = 5) {
     WHERE i.video_id = $1
       AND i.shown_at >= NOW() - INTERVAL '7 days'
   `;
-  
+
   const result = await pool.query(query, [videoId]);
   const row = result.rows[0];
-  
+
   const impressionCount = parseInt(row.impression_count);
   const watchCount = parseInt(row.watch_count);
   const watch10sCount = parseInt(row.watch_10s_count);
   const avgWatchDuration = row.avg_watch_duration ? parseFloat(row.avg_watch_duration) : null;
-  
+
   const hasSufficientData = impressionCount >= minImpressions;
-  
+
   // Calculate watch10s rate (only if we have watch data)
   const watch10sRate = watchCount > 0 ? watch10sCount / watchCount : null;
-  
+
   return {
     video_id: videoId,
     impression_count: impressionCount,
@@ -152,7 +171,7 @@ async function getTrendingVideos(limit = 50, minImpressions = 10) {
     ORDER BY popularity_score DESC, watch_10s_rate DESC
     LIMIT $2
   `;
-  
+
   const result = await pool.query(query, [minImpressions, limit]);
   return result.rows;
 }
@@ -167,7 +186,7 @@ async function getBatchVideoStats(videoIds, minImpressions = 5) {
   if (!videoIds || videoIds.length === 0) {
     return new Map();
   }
-  
+
   const query = `
     SELECT 
       i.video_id,
@@ -182,20 +201,20 @@ async function getBatchVideoStats(videoIds, minImpressions = 5) {
       AND i.shown_at >= NOW() - INTERVAL '7 days'
     GROUP BY i.video_id
   `;
-  
+
   const result = await pool.query(query, [videoIds]);
-  
+
   const statsMap = new Map();
-  
+
   result.rows.forEach(row => {
     const impressionCount = parseInt(row.impression_count);
     const watchCount = parseInt(row.watch_count);
     const watch10sCount = parseInt(row.watch_10s_count);
     const avgWatchDuration = row.avg_watch_duration ? parseFloat(row.avg_watch_duration) : null;
-    
+
     const hasSufficientData = impressionCount >= minImpressions;
     const watch10sRate = watchCount > 0 ? watch10sCount / watchCount : null;
-    
+
     statsMap.set(row.video_id, {
       video_id: row.video_id,
       impression_count: impressionCount,
@@ -207,7 +226,7 @@ async function getBatchVideoStats(videoIds, minImpressions = 5) {
       last_watched_at: row.last_watched_at
     });
   });
-  
+
   // Fill in missing videos with null stats
   videoIds.forEach(videoId => {
     if (!statsMap.has(videoId)) {
@@ -223,7 +242,7 @@ async function getBatchVideoStats(videoIds, minImpressions = 5) {
       });
     }
   });
-  
+
   return statsMap;
 }
 
@@ -246,7 +265,7 @@ async function getAnalyticsStats() {
     FROM videos
     WHERE created_at >= $1
   `;
-  
+
   // Query for total views (previous month)
   const viewsPrevQuery = `
     SELECT 
@@ -359,7 +378,7 @@ async function getAnalyticsStats() {
         title: row.title,
         views: parseInt(row.views || 0),
         likes: parseInt(row.likes || 0),
-        thumbnailUrl: row.thumbnail_url,
+        thumbnailUrl: getFullThumbnailUrl(row.thumbnail_url, row.id),
         uploader: {
           id: row.uploader_id,
           username: row.username || 'unknown',

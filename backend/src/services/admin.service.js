@@ -5,7 +5,7 @@
  */
 
 import * as UserModel from '../models/User.js';
-import * as VideoModel from '../models/Video.js';
+import { Video as VideoModel } from '../models/Video.js';
 import * as ViewHistoryModel from '../models/ViewHistory.js';
 import * as UserReportModel from '../models/UserReport.js';
 import * as VideoReportModel from '../models/VideoReport.js';
@@ -426,18 +426,18 @@ export async function promoteToStaff(username, performedById) {
  */
 export async function createStaffAccount(staffData, performedById) {
   const { username, password } = staffData;
-  
+
   try {
     // Generate email from username
     const email = `${username}@staff.clipiq.local`;
-    
+
     // Check if username already exists
     const existingQuery = `
       SELECT id, username FROM users 
       WHERE username = $1
     `;
     const existingResult = await pool.query(existingQuery, [username]);
-    
+
     if (existingResult.rows.length > 0) {
       throw new ApiError(400, 'Username already exists', 'USERNAME_EXISTS');
     }
@@ -452,7 +452,7 @@ export async function createStaffAccount(staffData, performedById) {
       VALUES ($1, $2, $3, 'staff', $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING id, username, email, role, display_name, created_at
     `;
-    
+
     const result = await pool.query(insertQuery, [
       username,
       email,
