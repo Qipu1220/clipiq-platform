@@ -2,16 +2,16 @@ import * as React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
-import { 
-  banUserByUsername, 
-  unbanUserByUsername, 
-  deleteUserByUsername, 
-  updateUserRole 
+import {
+  banUserByUsername,
+  unbanUserByUsername,
+  deleteUserByUsername,
+  updateUserRole
 } from '../../store/usersSlice';
 import { logoutThunk } from '../../store/authSlice';
 import { toggleMaintenanceMode, setMaintenanceMode, setServiceMaintenanceMode } from '../../store/systemSlice';
 import { setMaintenanceMode as setAuthMaintenanceMode } from '../../store/authSlice';
-import { 
+import {
   Shield, Users, Settings, Activity, TrendingUp, Eye, UserX, Trash2,
   Search, Play, User, ChevronDown, LogOut, BarChart3, Clock, Video,
   AlertTriangle, CheckCircle, Plus, Edit2, Power, Database, FileText,
@@ -27,7 +27,7 @@ import { AdminProfile } from './AdminProfile';
 import { AdminUserManagement } from './AdminUserManagement';
 import { BanUserModal } from '../shared/BanUserModal';
 import { toast } from 'sonner';
-import { fetchDashboardSummaryApi, DashboardSummaryResponse, fetchAllUsersApi, getStaffMembersApi, promoteStaffApi, demoteStaffApi, deleteStaffAccountApi, banUserApi, unbanUserApi, deleteUserApi, fetchSystemLogsApi, fetchAnalyticsApi, AnalyticsStats, toggleMaintenanceModeApi, toggleServiceMaintenanceModeApi, fetchGeneralSettingsApi, updateGeneralSettingsApi, GeneralSettings, User as ApiUser, SystemLog } from '../../api/admin';
+import { fetchDashboardSummaryApi, DashboardSummaryResponse, fetchAllUsersApi, getStaffMembersApi, promoteStaffApi, createStaffApi, demoteStaffApi, deleteStaffAccountApi, banUserApi, unbanUserApi, deleteUserApi, fetchSystemLogsApi, fetchAnalyticsApi, AnalyticsStats, toggleMaintenanceModeApi, toggleServiceMaintenanceModeApi, fetchGeneralSettingsApi, updateGeneralSettingsApi, GeneralSettings, User as ApiUser, SystemLog } from '../../api/admin';
 import { formatCount, formatWatchTime } from '../../utils/formatters';
 import { Skeleton } from '../ui/skeleton';
 
@@ -49,7 +49,9 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
   const [activeTab, setActiveTab] = useState('dashboard' as 'dashboard' | 'users' | 'staff' | 'analytics' | 'system-logs' | 'settings' | 'profile');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [newStaffUsername, setNewStaffUsername] = useState('');
+  const [newStaffData, setNewStaffData] = useState({ username: '', password: '' });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordTouched, setPasswordTouched] = useState(false);
   const [selectedUserForAction, setSelectedUserForAction] = useState(null as string | null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null as {
@@ -59,7 +61,7 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
     confirmColor: string;
     onConfirm: () => void;
   } | null);
-  
+
   // Dashboard data state
   const [dashboardData, setDashboardData] = useState(null as DashboardSummaryResponse['data'] | null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -70,7 +72,7 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState(null as string | null);
   const [userFilter, setUserFilter] = useState('all' as 'all' | 'active' | 'banned');
-  
+
   // Ban modal state
   const [showBanModal, setShowBanModal] = useState(false);
   const [banUsername, setBanUsername] = useState('');
@@ -82,6 +84,7 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffError, setStaffError] = useState(null as string | null);
   const [staffFilter, setStaffFilter] = useState('all' as 'all' | 'demoted' | 'active');
+  const [showCreateStaffModal, setShowCreateStaffModal] = useState(false);
 
   // Analytics state for analytics tab
   const [analytics, setAnalytics] = useState(null as AnalyticsStats | null);
@@ -201,7 +204,7 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
       // Map filter to actionType
       let actionType: string | undefined = undefined;
       let limit = 50;
-      
+
       if (systemLogsFilter === 'user') {
         // Fetch all and filter client-side for user actions
         actionType = undefined;
@@ -231,16 +234,16 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
       if (systemLogsFilter === 'user') {
         filteredLogs = response.data.logs.filter(log => {
           const actionLower = log.action.toLowerCase();
-          return actionLower.includes('user banned') || 
-                 actionLower.includes('user unbanned') ||
-                 actionLower.includes('user deleted');
+          return actionLower.includes('user banned') ||
+            actionLower.includes('user unbanned') ||
+            actionLower.includes('user deleted');
         });
       } else if (systemLogsFilter === 'staff') {
         filteredLogs = response.data.logs.filter(log => {
           const actionLower = log.action.toLowerCase();
-          return actionLower.includes('staff promoted') || 
-                 actionLower.includes('staff demoted') ||
-                 actionLower.includes('staff deleted');
+          return actionLower.includes('staff promoted') ||
+            actionLower.includes('staff demoted') ||
+            actionLower.includes('staff deleted');
         });
       } else if (systemLogsFilter === 'maintenance') {
         filteredLogs = response.data.logs.filter(log => {
@@ -407,6 +410,64 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
     setShowConfirmModal(true);
   };
 
+  // Password validation function
+  const validatePassword = (password: string): string => {
+    if (!password) return 'Mật khẩu không được để trống';
+    if (password.length < 8) return 'Mật khẩu phải có ít nhất 8 ký tự';
+    if (password.length > 128) return 'Mật khẩu không được quá 128 ký tự';
+    return '';
+  };
+
+  const handleCreateStaff = async () => {
+    if (!newStaffData.username.trim() || !newStaffData.password.trim()) {
+      toast.error('Vui lòng điền đầy đủ username và mật khẩu');
+      return;
+    }
+
+    // Validate password before submit
+    const error = validatePassword(newStaffData.password);
+    if (error) {
+      setPasswordError(error);
+      setPasswordTouched(true);
+      toast.error(error);
+      return;
+    }
+
+    try {
+      await createStaffApi({
+        username: newStaffData.username.trim(),
+        password: newStaffData.password
+      });
+
+      toast.success(`Đã tạo tài khoản staff: ${newStaffData.username}`);
+      setNewStaffData({ username: '', password: '' });
+      setPasswordError('');
+      setPasswordTouched(false);
+      fetchStaff();
+
+      if (activeTab === 'system-logs') {
+        fetchSystemLogs();
+      } else {
+        fetchDashboardData();
+      }
+    } catch (error: any) {
+      // Display backend validation error if available
+      if (error.response?.data?.errors) {
+        const passwordErr = error.response.data.errors.find(
+          (e: any) => e.field === 'password'
+        );
+        if (passwordErr) {
+          setPasswordError(passwordErr.message);
+          setPasswordTouched(true);
+          toast.error(passwordErr.message);
+          return;
+        }
+      }
+      const errorMsg = error.response?.data?.error || 'Không thể tạo tài khoản staff';
+      toast.error(errorMsg);
+    }
+  };
+
   const handleDemoteStaff = (username: string) => {
     setConfirmAction({
       title: 'Xác nhận hạ cấp Staff',
@@ -518,17 +579,17 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
       toast.error('Vui lòng nhập lý do cấm!');
       return;
     }
-    
+
     const durationValue = banDuration ? parseInt(banDuration, 10) : undefined;
     if (durationValue !== undefined && (Number.isNaN(durationValue) || durationValue <= 0)) {
       toast.error('Thời hạn cấm phải là số ngày hợp lệ!');
       return;
     }
     const isPermanent = !durationValue;
-    
+
     setConfirmAction({
       title: isPermanent ? 'Cấm vĩnh viễn người dùng' : 'Cấm tạm thời người dùng',
-      message: isPermanent 
+      message: isPermanent
         ? `Bạn có chắc muốn cấm vĩnh viễn người dùng ${banUsername}?`
         : `Bạn có chắc muốn cấm người dùng ${banUsername} trong ${durationValue} ngày?`,
       confirmText: isPermanent ? 'Cấm vĩnh viễn' : 'Cấm tạm thời',
@@ -605,9 +666,9 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
       <div className="w-60 bg-zinc-950 flex flex-col border-r border-zinc-900/50 flex-shrink-0">
         {/* Logo */}
         <div className="p-4 flex items-center gap-2">
-          <img 
-            src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png" 
-            alt="ShortV Logo" 
+          <img
+            src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
+            alt="ShortV Logo"
             className="w-6 h-6 object-contain"
           />
           <h1 className="text-white text-xl tracking-tight logo-text">shortv</h1>
@@ -616,41 +677,26 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
           </div>
         </div>
 
-        {/* Search */}
-        <div className="px-3 mb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-zinc-900/30 border-zinc-800/50 text-white text-sm pl-9 pr-3 py-1.5 h-9 rounded-lg focus:border-zinc-700"
-              placeholder="Tìm kiếm"
-            />
-          </div>
-        </div>
-
         {/* Navigation */}
         <ScrollArea className="flex-1">
           <div className="px-2 space-y-0.5">
-            <button 
+            <button
               onClick={() => setActiveTab('dashboard')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                activeTab === 'dashboard'
-                  ? 'bg-zinc-900/40 text-white'
-                  : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${activeTab === 'dashboard'
+                ? 'bg-zinc-900/40 text-white'
+                : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
+                }`}
             >
               <BarChart3 className={`w-5 h-5 ${activeTab === 'dashboard' ? 'text-[#ff3b5c]' : ''}`} />
               <span>Dashboard</span>
             </button>
 
-            <button 
+            <button
               onClick={() => setActiveTab('users')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all ${
-                activeTab === 'users'
-                  ? 'bg-zinc-900/40 text-white'
-                  : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
-              }`}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all ${activeTab === 'users'
+                ? 'bg-zinc-900/40 text-white'
+                : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
+                }`}
             >
               <div className="flex items-center gap-3">
                 <Users className={`w-5 h-5 ${activeTab === 'users' ? 'text-[#ff3b5c]' : ''}`} />
@@ -661,13 +707,12 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
               </div>
             </button>
 
-            <button 
+            <button
               onClick={() => setActiveTab('staff')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all ${
-                activeTab === 'staff'
-                  ? 'bg-zinc-900/40 text-white'
-                  : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
-              }`}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all ${activeTab === 'staff'
+                ? 'bg-zinc-900/40 text-white'
+                : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
+                }`}
             >
               <div className="flex items-center gap-3">
                 <Shield className={`w-5 h-5 ${activeTab === 'staff' ? 'text-[#ff3b5c]' : ''}`} />
@@ -678,37 +723,34 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
               </div>
             </button>
 
-            <button 
+            <button
               onClick={() => setActiveTab('analytics')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                activeTab === 'analytics'
-                  ? 'bg-zinc-900/40 text-white'
-                  : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${activeTab === 'analytics'
+                ? 'bg-zinc-900/40 text-white'
+                : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
+                }`}
             >
               <TrendingUp className={`w-5 h-5 ${activeTab === 'analytics' ? 'text-[#ff3b5c]' : ''}`} />
               <span>Thống kê</span>
             </button>
 
-            <button 
+            <button
               onClick={() => setActiveTab('system-logs')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                activeTab === 'system-logs'
-                  ? 'bg-zinc-900/40 text-white'
-                  : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${activeTab === 'system-logs'
+                ? 'bg-zinc-900/40 text-white'
+                : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
+                }`}
             >
               <Activity className={`w-5 h-5 ${activeTab === 'system-logs' ? 'text-[#ff3b5c]' : ''}`} />
               <span>Lịch sử hệ thống</span>
             </button>
 
-            <button 
+            <button
               onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                activeTab === 'settings'
-                  ? 'bg-zinc-900/40 text-white'
-                  : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${activeTab === 'settings'
+                ? 'bg-zinc-900/40 text-white'
+                : 'text-zinc-400 hover:bg-zinc-900/30 hover:text-white'
+                }`}
             >
               <Settings className={`w-5 h-5 ${activeTab === 'settings' ? 'text-[#ff3b5c]' : ''}`} />
               <span>Cài đặt</span>
@@ -767,13 +809,13 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
           </div>
 
           <div className="relative z-50" ref={userMenuRef}>
-            <div 
+            <div
               className="flex items-center gap-2 text-white cursor-pointer hover:bg-zinc-800 px-3 py-2 rounded-lg transition-all border border-transparent hover:border-zinc-800"
               onClick={() => setShowUserMenu(!showUserMenu)}
             >
               {currentUser?.avatarUrl ? (
-                <img 
-                  src={currentUser.avatarUrl} 
+                <img
+                  src={currentUser.avatarUrl}
                   alt={currentUser.username}
                   className="w-7 h-7 rounded-full object-cover"
                 />
@@ -791,8 +833,8 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                 <div className="px-4 py-3.5 border-b border-zinc-900/50">
                   <div className="flex items-center gap-3">
                     {currentUser?.avatarUrl ? (
-                      <img 
-                        src={currentUser.avatarUrl} 
+                      <img
+                        src={currentUser.avatarUrl}
                         alt={currentUser.username}
                         className="w-11 h-11 rounded-full object-cover ring-2 ring-zinc-800"
                       />
@@ -822,7 +864,7 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                     <User className="w-4 h-4" />
                     <span className="text-sm">Trang cá nhân</span>
                   </button>
-                  
+
                   <button
                     onClick={() => {
                       setShowUserMenu(false);
@@ -1061,37 +1103,43 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
             {/* Staff Tab */}
             {activeTab === 'staff' && (
               <div className="space-y-6">
-                {/* Filter Buttons */}
-                <div className="flex gap-3">
-                  <Button
-                    onClick={() => setStaffFilter('all')}
-                    className={`h-10 rounded-lg px-4 ${
-                      staffFilter === 'all'
+                {/* Filter Buttons with Add Staff Button */}
+                <div className="flex justify-between items-center gap-3">
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => setStaffFilter('all')}
+                      className={`h-10 rounded-lg px-4 ${staffFilter === 'all'
                         ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
                         : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
-                    }`}
-                  >
-                    Tất cả
-                  </Button>
-                  <Button
-                    onClick={() => setStaffFilter('active')}
-                    className={`h-10 rounded-lg px-4 ${
-                      staffFilter === 'active'
+                        }`}
+                    >
+                      Tất cả
+                    </Button>
+                    <Button
+                      onClick={() => setStaffFilter('active')}
+                      className={`h-10 rounded-lg px-4 ${staffFilter === 'active'
                         ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
                         : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
-                    }`}
-                  >
-                    Đang hoạt động
-                  </Button>
-                  <Button
-                    onClick={() => setStaffFilter('demoted')}
-                    className={`h-10 rounded-lg px-4 ${
-                      staffFilter === 'demoted'
+                        }`}
+                    >
+                      Đang hoạt động
+                    </Button>
+                    <Button
+                      onClick={() => setStaffFilter('demoted')}
+                      className={`h-10 rounded-lg px-4 ${staffFilter === 'demoted'
                         ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
                         : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
-                    }`}
+                        }`}
+                    >
+                      Đang hạ cấp
+                    </Button>
+                  </div>
+                  <Button
+                    onClick={() => setShowCreateStaffModal(true)}
+                    className="h-10 rounded-lg px-6 bg-[#ff3b5c] hover:bg-[#ff3b5c]/90 text-white border-[#ff3b5c]"
                   >
-                    Đang hạ cấp
+                    <Plus className="w-4 h-4 mr-2" />
+                    Thêm Staff
                   </Button>
                 </div>
 
@@ -1354,51 +1402,46 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                 <div className="flex gap-3 flex-wrap">
                   <Button
                     onClick={() => setSystemLogsFilter('all')}
-                    className={`h-10 rounded-lg px-4 ${
-                      systemLogsFilter === 'all'
-                        ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
-                        : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
-                    }`}
+                    className={`h-10 rounded-lg px-4 ${systemLogsFilter === 'all'
+                      ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
+                      : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
+                      }`}
                   >
                     Tất cả
                   </Button>
                   <Button
                     onClick={() => setSystemLogsFilter('user')}
-                    className={`h-10 rounded-lg px-4 ${
-                      systemLogsFilter === 'user'
-                        ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
-                        : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
-                    }`}
+                    className={`h-10 rounded-lg px-4 ${systemLogsFilter === 'user'
+                      ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
+                      : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
+                      }`}
                   >
                     Quản lý Người dùng
                   </Button>
                   <Button
                     onClick={() => setSystemLogsFilter('staff')}
-                    className={`h-10 rounded-lg px-4 ${
-                      systemLogsFilter === 'staff'
-                        ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
-                        : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
-                    }`}
+                    className={`h-10 rounded-lg px-4 ${systemLogsFilter === 'staff'
+                      ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
+                      : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
+                      }`}
                   >
                     Quản lý Staff
                   </Button>
                   <Button
                     onClick={() => setSystemLogsFilter('maintenance')}
-                    className={`h-10 rounded-lg px-4 ${
-                      systemLogsFilter === 'maintenance'
-                        ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
-                        : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
-                    }`}
+                    className={`h-10 rounded-lg px-4 ${systemLogsFilter === 'maintenance'
+                      ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
+                      : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
+                      }`}
                   >
                     Bảo trì Hệ thống
                   </Button>
                   <Button
                     onClick={() => setSystemLogsFilter('settings')}
-                    className={`h-10 rounded-lg px-4 ${
-                      systemLogsFilter === 'settings'
-                        ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
-                        : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
-                    }`}
+                    className={`h-10 rounded-lg px-4 ${systemLogsFilter === 'settings'
+                      ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border-[#ff3b5c]/30'
+                      : 'bg-zinc-900/50 text-zinc-400 border-zinc-800/50 hover:bg-zinc-800/50'
+                      }`}
                   >
                     Cài đặt
                   </Button>
@@ -1418,25 +1461,25 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                 ) : (
                   <div className="space-y-2">
                     {systemLogs.map(log => (
-                    <Card key={log.id} className="bg-zinc-950/50 border-zinc-900/50 rounded-xl overflow-hidden">
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <Activity className="w-4 h-4 text-[#ff3b5c]" />
-                              <h4 className="text-white font-medium">{log.action}</h4>
-                              <span className="text-xs px-2 py-0.5 bg-zinc-800 rounded text-zinc-400">
-                                {log.user}
-                              </span>
+                      <Card key={log.id} className="bg-zinc-950/50 border-zinc-900/50 rounded-xl overflow-hidden">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <Activity className="w-4 h-4 text-[#ff3b5c]" />
+                                <h4 className="text-white font-medium">{log.action}</h4>
+                                <span className="text-xs px-2 py-0.5 bg-zinc-800 rounded text-zinc-400">
+                                  {log.user}
+                                </span>
+                              </div>
+                              <p className="text-zinc-400 text-sm mb-1">{log.details}</p>
+                              <p className="text-zinc-600 text-xs">
+                                {new Date(log.timestamp).toLocaleString('vi-VN')}
+                              </p>
                             </div>
-                            <p className="text-zinc-400 text-sm mb-1">{log.details}</p>
-                            <p className="text-zinc-600 text-xs">
-                              {new Date(log.timestamp).toLocaleString('vi-VN')}
-                            </p>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
                     ))}
                     {systemLogs.length === 0 && !systemLogsLoading && (
                       <div className="text-center py-24">
@@ -1472,11 +1515,10 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                       </div>
                       <Button
                         onClick={handleToggleMaintenance}
-                        className={`ml-4 h-11 rounded-lg px-6 ${
-                          maintenanceMode
-                            ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30'
-                            : 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30'
-                        }`}
+                        className={`ml-4 h-11 rounded-lg px-6 ${maintenanceMode
+                          ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30'
+                          : 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30'
+                          }`}
                       >
                         {maintenanceMode ? (
                           <>
@@ -1518,11 +1560,10 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                       </div>
                       <Button
                         onClick={handleToggleServiceMaintenance}
-                        className={`ml-4 h-11 rounded-lg px-6 ${
-                          serviceMaintenanceMode
-                            ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30'
-                            : 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30'
-                        }`}
+                        className={`ml-4 h-11 rounded-lg px-6 ${serviceMaintenanceMode
+                          ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30'
+                          : 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30'
+                          }`}
                       >
                         {serviceMaintenanceMode ? (
                           <>
@@ -1601,7 +1642,7 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                             max="86400"
                           />
                         </div>
-                        <Button 
+                        <Button
                           onClick={handleSaveGeneralSettings}
                           disabled={generalSettingsSaving}
                           className="bg-[#ff3b5c]/20 hover:bg-[#ff3b5c]/30 text-[#ff3b5c] border-[#ff3b5c]/30 h-11 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1673,6 +1714,114 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = confirmAction.confirmColor}
               >
                 {confirmAction.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Staff Modal */}
+      {showCreateStaffModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 rounded-xl w-full max-w-md mx-4 border border-zinc-800 shadow-2xl">
+            <div className="p-6 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[#ff3b5c]/20 flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-[#ff3b5c]" />
+                </div>
+                <h3 className="text-white text-lg font-medium">Tạo tài khoản Staff mới</h3>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <Label className="text-zinc-400 text-sm mb-2 block">Username</Label>
+                <Input
+                  value={newStaffData.username}
+                  onChange={(e) => setNewStaffData({ ...newStaffData, username: e.target.value })}
+                  placeholder="Nhập username..."
+                  className="bg-zinc-800/50 border-zinc-700 text-white h-11 rounded-lg focus:border-[#ff3b5c]/50"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newStaffData.username.trim() && newStaffData.password.trim()) {
+                      handleCreateStaff();
+                      setShowCreateStaffModal(false);
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label className="text-zinc-400 text-sm mb-2 block">
+                  Mật khẩu <span className="text-red-500">*</span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    value={newStaffData.password}
+                    onChange={(e) => {
+                      const password = e.target.value;
+                      setNewStaffData({ ...newStaffData, password });
+                      if (passwordTouched) {
+                        setPasswordError(validatePassword(password));
+                      }
+                    }}
+                    onBlur={() => {
+                      setPasswordTouched(true);
+                      setPasswordError(validatePassword(newStaffData.password));
+                    }}
+                    placeholder="Nhập mật khẩu..."
+                    type="password"
+                    className={`bg-zinc-800/50 border text-white h-11 rounded-lg focus:border-[#ff3b5c]/50 pr-10 ${passwordError && passwordTouched ? 'border-red-500' : 'border-zinc-700'
+                      }`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newStaffData.username.trim() && newStaffData.password.trim()) {
+                        handleCreateStaff();
+                        setShowCreateStaffModal(false);
+                      }
+                    }}
+                  />
+                  {passwordTouched && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {passwordError ? (
+                        <span className="text-red-500 text-lg">❌</span>
+                      ) : newStaffData.password.length >= 8 ? (
+                        <span className="text-green-500 text-lg">✅</span>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
+                {/* Helper text */}
+                <p className={`text-xs mt-1.5 ${passwordError && passwordTouched ? 'text-red-400' : 'text-zinc-500'
+                  }`}>
+                  {passwordError && passwordTouched ? passwordError : 'Mật khẩu phải từ 8-128 ký tự'}
+                </p>
+              </div>
+              <div className="bg-zinc-800/30 border border-zinc-800 rounded-lg p-3">
+                <p className="text-zinc-500 text-xs leading-relaxed">
+                  💡 Tài khoản staff sẽ được tạo với email tự động: <span className="text-[#ff3b5c]">{newStaffData.username || 'username'}@staff.clipiq.local</span>
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 p-6 border-t border-zinc-800">
+              <button
+                onClick={() => {
+                  setShowCreateStaffModal(false);
+                  setNewStaffData({ username: '', password: '' });
+                  setPasswordError('');
+                  setPasswordTouched(false);
+                }}
+                className="flex-1 bg-zinc-800 text-white py-3 rounded-lg hover:bg-zinc-700 transition-colors font-medium"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => {
+                  handleCreateStaff();
+                  setShowCreateStaffModal(false);
+                }}
+                disabled={!newStaffData.username.trim() || !newStaffData.password.trim()}
+                className="flex-1 bg-[#ff3b5c] hover:bg-[#ff3b5c]/90 text-white py-3 rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Tạo tài khoản
               </button>
             </div>
           </div>

@@ -31,6 +31,8 @@ export async function authenticateUser(login, password) {
     );
   }
 
+  console.log(`[Auth] Login attempt - Login: ${login}`);
+
   // Find user by email or username
   const query = `
     SELECT id, username, email, password, role, banned, ban_expiry, ban_reason, warnings
@@ -42,6 +44,7 @@ export async function authenticateUser(login, password) {
   const result = await pool.query(query, [login]);
 
   if (result.rows.length === 0) {
+    console.log(`[Auth] Login failed - User not found: ${login}`);
     // Use same error message for security (don't reveal if user exists)
     throw ApiError.unauthorized(
       'Invalid email/username or password',
@@ -50,16 +53,20 @@ export async function authenticateUser(login, password) {
   }
 
   const user = result.rows[0];
+  console.log(`[Auth] User found - Username: ${user.username}, Role: ${user.role}`);
 
   // Verify password
   const isPasswordValid = await verifyPassword(password, user.password);
 
   if (!isPasswordValid) {
+    console.log(`[Auth] Login failed - Invalid password for user: ${user.username}`);
     throw ApiError.unauthorized(
       'Invalid email/username or password',
       'INVALID_CREDENTIALS'
     );
   }
+
+  console.log(`[Auth] Login successful - User: ${user.username}`);
 
   // Generate tokens
   const userPayload = {

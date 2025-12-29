@@ -305,6 +305,18 @@ export const promoteStaffApi = async (username: string): Promise<UserResponse> =
 };
 
 /**
+ * Create new staff account
+ * @param staffData - Staff account data
+ */
+export const createStaffApi = async (staffData: {
+  username: string;
+  password: string;
+}): Promise<UserResponse> => {
+  const response = await apiClient.post<UserResponse>('/admin/staff/create', staffData);
+  return response.data;
+};
+
+/**
  * Demote staff (set is_demoted flag)
  * @param username - Username of staff to demote
  */

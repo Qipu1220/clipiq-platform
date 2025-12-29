@@ -173,11 +173,8 @@ export async function getVideoById(req, res, next) {
       isSaved = saveCheck.rows.length > 0;
     }
 
-    // Increment views
-    await pool.query(
-      'UPDATE videos SET views = views + 1 WHERE id = $1',
-      [id]
-    );
+    // Note: View count is now tracked via impression system (logWatch endpoint)
+    // No longer incrementing views here to avoid double counting
 
     return res.status(200).json({
       success: true,
@@ -188,7 +185,7 @@ export async function getVideoById(req, res, next) {
         videoUrl: getFullVideoUrl(video.video_url),
         thumbnailUrl: getFullThumbnailUrl(video.thumbnail_url, video.id),
         duration: video.duration,
-        views: video.views + 1,
+        views: video.views,
         likes: video.likes_count || 0,
         comments: video.comments_count || 0,
         uploaderUsername: video.username,

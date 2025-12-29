@@ -12,7 +12,7 @@ import {
   getSystemLogsForDashboard 
 } from '../services/admin.service.js';
 import ApiError from '../utils/apiError.js';
-import { getAllUsers, getStaffMembers, promoteToStaff, demoteStaff, deleteStaffAccount, banUser, unbanUser, deleteUser, toggleMaintenanceMode, toggleServiceMaintenanceMode, getGeneralSettings, updateGeneralSettings, getSystemLogsPaginated } from '../services/admin.service.js';
+import { getAllUsers, getStaffMembers, promoteToStaff, demoteStaff, deleteStaffAccount, banUser, unbanUser, deleteUser, toggleMaintenanceMode, toggleServiceMaintenanceMode, getGeneralSettings, updateGeneralSettings, getSystemLogsPaginated, createStaffAccount } from '../services/admin.service.js';
 import { getAnalyticsStats } from '../services/analytics.service.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
 
@@ -172,6 +172,42 @@ export const promoteStaffController = asyncHandler(async (req, res) => {
   
   return res.status(200).json({
     success: true,
+    data: {
+      user
+    }
+  });
+});
+
+/**
+ * POST /api/v1/admin/staff/create
+ * Create new staff account (Admin only)
+ */
+export const createStaffController = asyncHandler(async (req, res) => {
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      error: 'Username and password are required'
+    });
+  }
+  
+  const performedById = req.user?.userId;
+  if (!performedById) {
+    return res.status(401).json({
+      success: false,
+      error: 'User not authenticated'
+    });
+  }
+  
+  const user = await createStaffAccount({
+    username,
+    password
+  }, performedById);
+  
+  return res.status(201).json({
+    success: true,
+    message: 'Staff account created successfully',
     data: {
       user
     }

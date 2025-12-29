@@ -6,11 +6,12 @@
  */
 
 import express from 'express';
-import { 
-  getDashboardSummary, 
-  getAllUsersController, 
+import {
+  getDashboardSummary,
+  getAllUsersController,
   getStaffMembersController,
   promoteStaffController,
+  createStaffController,
   demoteStaffController,
   deleteStaffAccountController,
   banUserController,
@@ -25,8 +26,32 @@ import {
 } from '../controllers/admin.controller.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { authorize } from '../middlewares/auth.middleware.js';
+import { body, validationResult } from 'express-validator';
 
 const router = express.Router();
+
+/**
+ * Validation middleware for express-validator
+ */
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      error: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid input data',
+      errors: errors.array().map(err => ({
+        field: err.path,
+        message: err.msg,
+        value: err.value
+      }))
+    });
+  }
+
+  next();
+};
 
 /**
  * GET /api/v1/admin/dashboard/summary
@@ -93,6 +118,34 @@ router.get('/staff',
   authenticateToken,
   authorize('admin'),
   getStaffMembersController
+);
+
+/**
+ * POST /api/v1/admin/staff/create
+ * Create new staff account (Admin only)
+ * 
+ * Body:
+ * {
+ *   "username": "staffusername",
+ *   "password": "password123"  // Must be 8-128 characters
+ * }
+ */
+router.post('/staff/create',
+  authenticateToken,
+  authorize('admin'),
+  [
+    body('username')
+      .trim()
+      .notEmpty().withMessage('Username is required')
+      .isLength({ min: 3, max: 50 }).withMessage('Username must be between 3 and 50 characters')
+      .matches(/^[a-zA-Z0-9_]+$/).withMessage('Username can only contain letters, numbers, and underscores'),
+
+    body('password')
+      .notEmpty().withMessage('Password is required')
+      .isLength({ min: 8, max: 128 }).withMessage('Password must be between 8 and 128 characters')
+  ],
+  validate,
+  createStaffController
 );
 
 /**

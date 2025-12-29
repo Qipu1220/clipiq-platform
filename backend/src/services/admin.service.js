@@ -417,6 +417,87 @@ export async function promoteToStaff(username, performedById) {
 }
 
 /**
+ * Create new staff account
+ * @param {Object} staffData - Staff account data
+ * @param {string} staffData.username - Username
+ * @param {string} staffData.password - Plain text password (will be hashed)
+ * @param {string} performedById - UUID of admin performing the action
+ * @returns {Promise<Object>} Created user object
+ */
+export async function createStaffAccount(staffData, performedById) {
+  const { username, password } = staffData;
+  
+  try {
+    // Generate email from username
+    const email = `${username}@staff.clipiq.local`;
+    
+    // Check if username already exists
+    const existingQuery = `
+      SELECT id, username FROM users 
+      WHERE username = $1
+    `;
+    const existingResult = await pool.query(existingQuery, [username]);
+    
+    if (existingResult.rows.length > 0) {
+      throw new ApiError(400, 'Username already exists', 'USERNAME_EXISTS');
+    }
+
+    // Hash password
+    const bcrypt = await import('bcrypt');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create staff account
+    const insertQuery = `
+      INSERT INTO users (username, email, password, role, display_name, created_at, updated_at)
+      VALUES ($1, $2, $3, 'staff', $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      RETURNING id, username, email, role, display_name, created_at
+    `;
+    
+    const result = await pool.query(insertQuery, [
+      username,
+      email,
+      hashedPassword,
+      username
+    ]);
+
+    const user = result.rows[0];
+
+    // Log the action
+    try {
+      await SystemLog.createLog({
+        actionType: 'staff_created',
+        performedById,
+        targetUserId: user.id,
+        details: `Created new staff account: ${username}`,
+        metadata: {
+          targetUsername: username,
+          email: email,
+          role: 'staff'
+        }
+      });
+      console.log(`✅ System log created: staff_created ${username} by user ${performedById}`);
+    } catch (logError) {
+      console.error('Failed to log staff creation:', logError);
+    }
+
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      displayName: user.display_name,
+      createdAt: user.created_at
+    };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    console.error('Error creating staff account:', error);
+    throw new ApiError(500, 'Failed to create staff account', error.message);
+  }
+}
+
+/**
  * Demote staff (set is_demoted flag to true, keep role as staff)
  * @param {string} username - Username of staff to demote
  * @param {string} performedById - UUID of admin performing the action

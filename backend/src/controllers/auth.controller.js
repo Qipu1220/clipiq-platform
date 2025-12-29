@@ -40,6 +40,20 @@ export async function login(req, res, next) {
   try {
     const { login, password } = req.body;
 
+    console.log('[Auth Controller] Login request received');
+    console.log('[Auth Controller] Body:', JSON.stringify(req.body));
+    console.log('[Auth Controller] Login:', login);
+    console.log('[Auth Controller] Password length:', password ? password.length : 0);
+
+    // Validate inputs
+    if (!login || !password) {
+      console.log('[Auth Controller] Missing credentials');
+      return res.status(400).json({
+        success: false,
+        error: 'Email/username and password are required'
+      });
+    }
+
     // Delegate to service layer
     const { user, tokens } = await authService.authenticateUser(login, password);
 
