@@ -30,8 +30,8 @@ export async function ensureBucketExists(bucketName) {
             await minioClient.makeBucket(bucketName);
             console.log(`✅ Created bucket: ${bucketName}`);
 
-            // Set bucket policy to public read for videos and thumbnails
-            if (bucketName === BUCKET_VIDEOS || bucketName === BUCKET_THUMBNAILS) {
+            // Set bucket policy to public read for videos, thumbnails, and avatars
+            if (bucketName === BUCKET_VIDEOS || bucketName === BUCKET_THUMBNAILS || bucketName === BUCKET_AVATARS) {
                 const policy = {
                     Version: '2012-10-17',
                     Statement: [{
@@ -85,6 +85,13 @@ export async function uploadFile(bucketName, objectName, data, metadata = {}) {
  * @returns {string} - Public URL
  */
 export function getFileUrl(bucketName, objectName) {
+    // Use public URL if set (for client-side access), otherwise build from endpoint
+    const publicUrl = process.env.MINIO_PUBLIC_URL;
+    if (publicUrl) {
+        return `${publicUrl}/${bucketName}/${objectName}`;
+    }
+    
+    // Fallback to building URL from endpoint (for internal Docker network)
     const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
     const endpoint = process.env.MINIO_ENDPOINT || 'localhost';
     const port = process.env.MINIO_PORT || 9000;
@@ -120,6 +127,33 @@ export async function uploadThumbnail(imageBuffer, imageName) {
 }
 
 /**
+ * Upload an avatar from base64 data
+ * @param {string} base64Data - Base64 encoded image (with data URI prefix)
+ * @param {string} userId - User ID for filename
+ * @returns {Promise<{url: string, objectName: string}>}
+ */
+export async function uploadAvatar(base64Data, userId) {
+    // Extract MIME type and base64 data
+    const matches = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!matches) {
+        throw new Error('Invalid base64 image format');
+    }
+
+    const imageType = matches[1];
+    const base64Content = matches[2];
+    const buffer = Buffer.from(base64Content, 'base64');
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const objectName = `avatar-${userId}-${timestamp}.${imageType}`;
+
+    const result = await uploadFile(BUCKET_AVATARS, objectName, buffer, {
+        'Content-Type': `image/${imageType}`
+    });
+    return result;
+}
+
+/**
  * Delete a file from MinIO
  * @param {string} bucketName - Bucket name
  * @param {string} objectName - Object name
@@ -142,6 +176,7 @@ export default {
     getFileUrl,
     uploadVideo,
     uploadThumbnail,
+    uploadAvatar,
     deleteFile,
     BUCKET_VIDEOS,
     BUCKET_THUMBNAILS,

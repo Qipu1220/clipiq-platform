@@ -170,6 +170,18 @@ const usersSlice = createSlice({
         user.role = action.payload.role;
       }
     },
+    updateUserDisplayNameByUsername: (state, action: PayloadAction<{ username: string; displayName: string }>) => {
+      const user = state.allUsers.find(u => u.username === action.payload.username);
+      if (user) {
+        user.displayName = action.payload.displayName;
+      }
+    },
+    updateUserAvatarByUsername: (state, action: PayloadAction<{ username: string; avatarUrl: string }>) => {
+      const user = state.allUsers.find(u => u.username === action.payload.username);
+      if (user) {
+        user.avatarUrl = action.payload.avatarUrl;
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -180,7 +192,14 @@ const usersSlice = createSlice({
       .addCase(fetchUserByUsernameThunk.fulfilled, (state, action) => {
         const index = state.allUsers.findIndex(u => u.username === action.payload.username);
         if (index !== -1) {
-          state.allUsers[index] = { ...state.allUsers[index], ...action.payload };
+          // Preserve existing avatarUrl if new payload doesn't have one
+          const existingUser = state.allUsers[index];
+          state.allUsers[index] = {
+            ...existingUser,
+            ...action.payload,
+            // Keep existing avatar if new one is missing/empty
+            avatarUrl: action.payload.avatarUrl || existingUser.avatarUrl
+          };
         } else {
           state.allUsers.push(action.payload);
         }
@@ -222,6 +241,8 @@ export const {
   warnUserByUsername,
   clearWarningsByUsername,
   deleteUserByUsername,
-  updateUserRole
+  updateUserRole,
+  updateUserDisplayNameByUsername,
+  updateUserAvatarByUsername
 } = usersSlice.actions;
 export default usersSlice.reducer;

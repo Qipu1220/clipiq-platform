@@ -29,6 +29,7 @@ export interface VideosState {
   focusedVideoId: string | null;
   isProfileNavigation: boolean; // Flag to prevent fetch when navigating from profile
   currentVideoComments: Comment[];
+  pendingLikes: Record<string, boolean>; // Track pending like operations by video ID
   loading: boolean;
   error: string | null;
   pagination: {
@@ -51,6 +52,7 @@ const initialState: VideosState = {
   focusedVideoId: null,
   isProfileNavigation: false,
   currentVideoComments: [],
+  pendingLikes: {},
   loading: false,
   error: null,
   pagination: {
@@ -202,25 +204,28 @@ export const searchVideosThunk = createAsyncThunk(
 
 export const toggleLikeVideoThunk = createAsyncThunk(
   'videos/toggleLike',
-  async ({ videoId, isLiked }: { videoId: string; isLiked: boolean }, { dispatch, rejectWithValue }) => {
+  async ({ videoId, isLiked }: { videoId: string; isLiked: boolean }, { dispatch, rejectWithValue, getState }) => {
     try {
-      // Optimistic update
+      // Call API first, THEN update Redux state
       if (isLiked) {
-        dispatch(videosSlice.actions.unlikeVideo(videoId));
         await unlikeVideoApi(videoId);
+        dispatch(videosSlice.actions.unlikeVideo(videoId));
       } else {
-        dispatch(videosSlice.actions.likeVideo(videoId));
         await likeVideoApi(videoId);
+        dispatch(videosSlice.actions.likeVideo(videoId));
       }
       return { videoId, isLiked: !isLiked };
     } catch (error: any) {
-      // Revert on failure
-      if (isLiked) {
-        dispatch(videosSlice.actions.likeVideo(videoId));
-      } else {
-        dispatch(videosSlice.actions.unlikeVideo(videoId));
-      }
+      // No need to revert since we haven't updated state yet
       return rejectWithValue(error.response?.data?.message || 'Failed to toggle like');
+    }
+  },
+  {
+    condition: ({ videoId }, { getState }) => {
+      const state = getState() as any;
+      const pendingRequests = state.videos.pendingLikes || {};
+      // Prevent duplicate requests for same video
+      return !pendingRequests[videoId];
     }
   }
 );
@@ -300,6 +305,26 @@ const videosSlice = createSlice({
         trendingVideo.isLiked = true;
         trendingVideo.likes = (trendingVideo.likes || 0) + 1;
       }
+      const userVideo = state.userVideos.find((v) => v.id === videoId);
+      if (userVideo) {
+        userVideo.isLiked = true;
+        userVideo.likes = (userVideo.likes || 0) + 1;
+      }
+      const likedVideo = state.likedVideos.find((v) => v.id === videoId);
+      if (likedVideo) {
+        likedVideo.isLiked = true;
+        likedVideo.likes = (likedVideo.likes || 0) + 1;
+      }
+      const savedVideo = state.savedVideos.find((v) => v.id === videoId);
+      if (savedVideo) {
+        savedVideo.isLiked = true;
+        savedVideo.likes = (savedVideo.likes || 0) + 1;
+      }
+      const searchVideo = state.searchResults.find((v) => v.id === videoId);
+      if (searchVideo) {
+        searchVideo.isLiked = true;
+        searchVideo.likes = (searchVideo.likes || 0) + 1;
+      }
       if (state.selectedVideo?.id === videoId) {
         state.selectedVideo.isLiked = true;
         state.selectedVideo.likes = (state.selectedVideo.likes || 0) + 1;
@@ -316,6 +341,26 @@ const videosSlice = createSlice({
       if (trendingVideo) {
         trendingVideo.isLiked = false;
         trendingVideo.likes = Math.max(0, (trendingVideo.likes || 0) - 1);
+      }
+      const userVideo = state.userVideos.find((v) => v.id === videoId);
+      if (userVideo) {
+        userVideo.isLiked = false;
+        userVideo.likes = Math.max(0, (userVideo.likes || 0) - 1);
+      }
+      const likedVideo = state.likedVideos.find((v) => v.id === videoId);
+      if (likedVideo) {
+        likedVideo.isLiked = false;
+        likedVideo.likes = Math.max(0, (likedVideo.likes || 0) - 1);
+      }
+      const savedVideo = state.savedVideos.find((v) => v.id === videoId);
+      if (savedVideo) {
+        savedVideo.isLiked = false;
+        savedVideo.likes = Math.max(0, (savedVideo.likes || 0) - 1);
+      }
+      const searchVideo = state.searchResults.find((v) => v.id === videoId);
+      if (searchVideo) {
+        searchVideo.isLiked = false;
+        searchVideo.likes = Math.max(0, (searchVideo.likes || 0) - 1);
       }
       if (state.selectedVideo?.id === videoId) {
         state.selectedVideo.isLiked = false;
@@ -604,6 +649,21 @@ const videosSlice = createSlice({
           // If unsaved, remove from savedVideos list
           state.savedVideos = state.savedVideos.filter(v => v.id !== videoId);
         }
+      });
+
+    // Toggle Like Video - Track pending state
+    builder
+      .addCase(toggleLikeVideoThunk.pending, (state, action) => {
+        const videoId = action.meta.arg.videoId;
+        state.pendingLikes[videoId] = true;
+      })
+      .addCase(toggleLikeVideoThunk.fulfilled, (state, action) => {
+        const videoId = action.meta.arg.videoId;
+        delete state.pendingLikes[videoId];
+      })
+      .addCase(toggleLikeVideoThunk.rejected, (state, action) => {
+        const videoId = action.meta.arg.videoId;
+        delete state.pendingLikes[videoId];
       });
   },
 });

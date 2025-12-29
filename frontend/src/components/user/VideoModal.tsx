@@ -93,7 +93,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
 
   const selectedVideo = videos[currentIndex];
 
-  // Update local state when video changes
+  // Update local state only when video ID changes (not on prop updates)
   useEffect(() => {
     if (selectedVideo) {
       setLocalVideoState({
@@ -102,7 +102,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
         likes: selectedVideo.likes || 0
       });
     }
-  }, [selectedVideo?.id, selectedVideo?.isLiked, selectedVideo?.isSaved, selectedVideo?.likes]);
+  }, [selectedVideo?.id]); // Only depend on ID to prevent reset during optimistic updates
 
   // Reset index when modal opens with new initialIndex
   useEffect(() => {
@@ -175,22 +175,28 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
     setLikeAnimation(true);
     setTimeout(() => setLikeAnimation(false), 300);
 
+    // Get fresh state from Redux before calling API
+    const videoFromRedux = videos.find((v: any) => v.id === selectedVideo.id);
+    const currentIsLiked = !!(videoFromRedux?.isLiked || localVideoState.isLiked);
+
     // Optimistic update
-    const wasLiked = localVideoState.isLiked;
     setLocalVideoState(prev => ({
       ...prev,
-      isLiked: !wasLiked,
-      likes: wasLiked ? prev.likes - 1 : prev.likes + 1
+      isLiked: !currentIsLiked,
+      likes: currentIsLiked ? prev.likes - 1 : prev.likes + 1
     }));
 
     try {
-      await dispatch(toggleLikeVideoThunk(selectedVideo.id)).unwrap();
+      await dispatch(toggleLikeVideoThunk({ 
+        videoId: selectedVideo.id, 
+        isLiked: currentIsLiked 
+      })).unwrap();
     } catch (error) {
       // Revert on error
       setLocalVideoState(prev => ({
         ...prev,
-        isLiked: wasLiked,
-        likes: wasLiked ? prev.likes + 1 : prev.likes - 1
+        isLiked: currentIsLiked,
+        likes: currentIsLiked ? prev.likes + 1 : prev.likes - 1
       }));
       toast.error('Không thể thích video');
     } finally {

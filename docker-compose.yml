@@ -81,6 +81,7 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_USE_SSL=false
+      - MINIO_PUBLIC_URL=http://localhost:9000
       - MINIO_BUCKET_VIDEOS=clipiq-videos
       - MINIO_BUCKET_THUMBNAILS=clipiq-thumbnails
       - MINIO_BUCKET_AVATARS=clipiq-avatars

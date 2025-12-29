@@ -61,19 +61,19 @@ export async function getUserByUsernameService(username) {
     username: user.username,
     email: user.email,
     role: user.role,
-    displayName: user.display_name,
+    displayName: user.displayName,
     bio: user.bio,
-    avatarUrl: user.avatar_url,
+    avatarUrl: user.avatarUrl,
     banned: user.banned,
-    banExpiry: user.ban_expiry,
-    banReason: user.ban_reason,
+    banExpiry: user.banExpiry,
+    banReason: user.banReason,
     warnings: user.warnings,
     stats: {
-      videos: parseInt(user.video_count) || 0,
-      followers: parseInt(user.follower_count) || 0,
-      following: parseInt(user.following_count) || 0
+      videos: parseInt(user.videoCount) || 0,
+      followers: parseInt(user.followerCount) || 0,
+      following: parseInt(user.followingCount) || 0
     },
-    createdAt: user.created_at
+    createdAt: user.createdAt
   };
 }
 

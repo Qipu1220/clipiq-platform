@@ -10,6 +10,7 @@
 import * as authService from '../services/auth.service.js';
 import ApiError from '../utils/apiError.js';
 import { SystemSettings } from '../models/SystemSettings.js';
+import * as minioService from '../services/minio.service.js';
 
 /**
  * Login Controller
@@ -194,18 +195,58 @@ export async function getMe(req, res, next) {
 export async function updateProfile(req, res, next) {
   try {
     const userId = req.user.userId;
-    const { displayName, bio, avatarUrl } = req.body;
+    const { displayName, bio } = req.body;
 
     // Delegate to service layer
     const user = await authService.updateUserProfile(userId, {
       displayName,
-      bio,
-      avatarUrl
+      bio
     });
 
     return res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
+      data: { user }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Upload Avatar Controller
+ * 
+ * Upload and update user's avatar (accepts base64 image)
+ * Uploads to MinIO and stores the URL in database
+ * 
+ * PATCH /api/v1/auth/avatar
+ * 
+ * Request Body:
+ * {
+ *   "avatar": "data:image/png;base64,..."
+ * }
+ */
+export async function uploadAvatar(req, res, next) {
+  try {
+    const userId = req.user.userId;
+    const { avatar } = req.body;
+
+    if (!avatar) {
+      throw ApiError.badRequest('Avatar data is required', 'AVATAR_REQUIRED');
+    }
+
+    // Upload avatar to MinIO
+    const { url } = await minioService.uploadAvatar(avatar, userId);
+
+    // Update user's avatar URL in database
+    const user = await authService.updateUserProfile(userId, {
+      avatarUrl: url
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Avatar updated successfully',
       data: { user }
     });
 
@@ -346,6 +387,7 @@ export default {
   refreshToken,
   getMe,
   updateProfile,
+  uploadAvatar,
   getSystemStatus,
   googleLogin,
   register

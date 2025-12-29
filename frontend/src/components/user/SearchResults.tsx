@@ -99,12 +99,12 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
     if (e.deltaY > 0) {
       const nextIndex = (currentVideoIndex + 1) % searchResults.length;
       setCurrentVideoIndex(nextIndex);
-      setSelectedVideo(searchResults[nextIndex]);
+      // Don't set selectedVideo here - let the useEffect sync it from searchResults
       dispatch(fetchCommentsThunk(searchResults[nextIndex].id));
     } else if (e.deltaY < 0) {
       const prevIndex = (currentVideoIndex - 1 + searchResults.length) % searchResults.length;
       setCurrentVideoIndex(prevIndex);
-      setSelectedVideo(searchResults[prevIndex]);
+      // Don't set selectedVideo here - let the useEffect sync it from searchResults
       dispatch(fetchCommentsThunk(searchResults[prevIndex].id));
     }
   };
@@ -124,8 +124,17 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
   // Use backend results for users
   const filteredUsers = activeTab === 'users' ? searchUserResults : [];
 
+  // Sync selectedVideo with Redux updates when searchResults change or index changes
+  useEffect(() => {
+    if (showVideoModal && searchResults.length > 0 && currentVideoIndex >= 0 && currentVideoIndex < searchResults.length) {
+      const updatedVideo = searchResults[currentVideoIndex];
+      console.log('[SearchResults] Syncing selectedVideo:', updatedVideo.id, 'isLiked:', updatedVideo.isLiked, 'isSaved:', updatedVideo.isSaved);
+      // Always update to ensure we have latest state from Redux
+      setSelectedVideo(updatedVideo);
+    }
+  }, [searchResults, currentVideoIndex, showVideoModal]);
+
   const handleVideoClick = (video: any) => {
-    setSelectedVideo(video);
     setShowVideoModal(true);
     const index = searchResults.findIndex(v => v.id === video.id);
     setCurrentVideoIndex(index);
@@ -145,25 +154,14 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
     setLikeAnimation(true);
     setTimeout(() => setLikeAnimation(false), 500);
     
-    const currentIsLiked = !!selectedVideo.isLiked;
-    const currentLikes = selectedVideo.likes || 0;
-    const newIsLiked = !currentIsLiked;
-    const newLikes = currentIsLiked ? currentLikes - 1 : currentLikes + 1;
-    
-    setSelectedVideo((prev: any) => ({
-      ...prev,
-      isLiked: newIsLiked,
-      likes: newLikes
-    }));
+    // Get fresh state from Redux to avoid stale local state
+    const videoFromRedux = searchResults.find((v: any) => v.id === selectedVideo.id);
+    const currentIsLiked = !!(videoFromRedux?.isLiked || selectedVideo.isLiked);
     
     try {
       await dispatch(toggleLikeVideoThunk({ videoId: selectedVideo.id, isLiked: currentIsLiked })).unwrap();
+      // No need for optimistic update - useEffect will sync selectedVideo from searchResults
     } catch (error) {
-      setSelectedVideo((prev: any) => ({
-        ...prev,
-        isLiked: currentIsLiked,
-        likes: currentLikes
-      }));
       toast.error('Không thể thích video');
     } finally {
       setIsLiking(false);
@@ -177,22 +175,12 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
     setBookmarkAnimation(true);
     setTimeout(() => setBookmarkAnimation(false), 500);
     
-    const currentIsSaved = !!selectedVideo.isSaved;
-    const newIsSaved = !currentIsSaved;
-    
-    setSelectedVideo((prev: any) => ({
-      ...prev,
-      isSaved: newIsSaved
-    }));
-    
     try {
       await dispatch(toggleSaveVideoThunk(selectedVideo.id)).unwrap();
-      toast.success(currentIsSaved ? 'Đã bỏ lưu video' : 'Đã lưu video');
+      const wasSaved = !!selectedVideo.isSaved;
+      toast.success(wasSaved ? 'Đã bỏ lưu video' : 'Đã lưu video');
+      // No need for optimistic update - useEffect will sync selectedVideo from searchResults
     } catch (error) {
-      setSelectedVideo((prev: any) => ({
-        ...prev,
-        isSaved: currentIsSaved
-      }));
       toast.error('Không thể lưu video');
     } finally {
       setIsSaving(false);

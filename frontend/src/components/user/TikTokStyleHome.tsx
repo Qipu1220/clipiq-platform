@@ -83,9 +83,11 @@ interface TikTokStyleHomeProps {
   onTabChange?: (tab: 'for-you' | 'following') => void;
   initialShowExplorer?: boolean;
   onExplorerChange?: (show: boolean) => void;
+  initialSearchQuery?: string;
+  onSearchQueryChange?: (query: string) => void;
 }
 
-export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'for-you', onTabChange, initialShowExplorer = false, onExplorerChange }: TikTokStyleHomeProps) {
+export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'for-you', onTabChange, initialShowExplorer = false, onExplorerChange, initialSearchQuery = '', onSearchQueryChange }: TikTokStyleHomeProps) {
   const dispatch = useDispatch();
   const allVideos = useSelector((state: RootState) => state.videos.videos);
   // Filter out processing/failed videos for the home feed
@@ -96,8 +98,8 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
   const { pagination, loading, currentVideoComments, focusedVideoId, searchResults, isProfileNavigation } = useSelector((state: RootState) => state.videos);
 
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeSearchQuery, setActiveSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [activeSearchQuery, setActiveSearchQuery] = useState(initialSearchQuery);
   const [isMuted, setIsMuted] = useState(true);
   const [commentText, setCommentText] = useState('');
   const [activeTab, setActiveTabState] = useState<'for-you' | 'following'>(initialTab);
@@ -395,7 +397,10 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
 
   const handleLike = () => {
     if (!currentUser || !currentVideo) return;
-    dispatch(toggleLikeVideoThunk({ videoId: currentVideo.id, isLiked: !!currentVideo.isLiked }) as any);
+    // Get fresh state from Redux before calling API
+    const videoFromRedux = videos.find((v: any) => v.id === currentVideo.id);
+    const currentIsLiked = !!(videoFromRedux?.isLiked || currentVideo.isLiked);
+    dispatch(toggleLikeVideoThunk({ videoId: currentVideo.id, isLiked: currentIsLiked }) as any);
     setLikeAnimation(true);
     setTimeout(() => setLikeAnimation(false), 500);
   };
@@ -533,6 +538,8 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                 setActiveTab('for-you');
                 setShowExplorer(false);
                 setShowFollowingList(false);
+                setActiveSearchQuery('');
+                onSearchQueryChange?.(''); // Clear parent search state
               }}
             >
               <Home className="w-5 h-5" />
@@ -559,6 +566,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                 setShowExplorer(true);
                 setShowFollowingList(false);
                 setActiveSearchQuery('');
+                onSearchQueryChange?.(''); // Clear parent search state
               }}
             >
               <Compass className="w-5 h-5" />
@@ -700,9 +708,11 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
   // Handle search submit on Enter
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
-      setActiveSearchQuery(searchQuery.trim());
+      const query = searchQuery.trim();
+      setActiveSearchQuery(query);
+      onSearchQueryChange?.(query); // Notify parent
       setShowExplorer(false);
-      dispatch(searchVideosThunk({ query: searchQuery.trim() }) as any);
+      dispatch(searchVideosThunk({ query }) as any);
     }
   };
 
@@ -756,6 +766,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                 onClick={() => {
                   setSearchQuery('');
                   setActiveSearchQuery('');
+                  onSearchQueryChange?.(''); // Clear parent search state
                   setActiveTab('for-you');
                 }}
               >
@@ -813,11 +824,11 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
             }
             setSearchQuery('');
             setActiveSearchQuery('');
+            onSearchQueryChange?.(''); // Clear parent search state
           }}
           onUserClick={(username) => {
             onViewUserProfile?.(username);
-            setSearchQuery('');
-            setActiveSearchQuery('');
+            // DON'T clear search - let parent manage this
           }}
         />
       </div>
@@ -866,6 +877,8 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                 setActiveTab('for-you');
                 setShowExplorer(false);
                 setShowFollowingList(false);
+                setActiveSearchQuery('');
+                onSearchQueryChange?.(''); // Clear parent search state
               }}
             >
               <Home className="w-5 h-5" />
@@ -892,6 +905,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                 setShowExplorer(true);
                 setShowFollowingList(false);
                 setActiveSearchQuery('');
+                onSearchQueryChange?.(''); // Clear parent search state
               }}
             >
               <Compass className="w-5 h-5" />
@@ -1503,9 +1517,10 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                 </div>
               </div>
             ) : (
-              <ScrollArea className="flex-1">
-                <div className="p-4 space-y-2">
-                  {videos.filter(v => v.id !== currentVideo.id).slice(0, 12).map((video) => {
+              <div className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full">
+                  <div className="p-4 space-y-2">
+                    {videos.filter(v => v.id !== currentVideo.id).slice(0, 12).map((video) => {
                     const uploader = users.find(u => u.username === video.uploaderUsername);
                     return (
                       <button
@@ -1535,7 +1550,8 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                     );
                   })}
                 </div>
-              </ScrollArea>
+                </ScrollArea>
+              </div>
             )}
           </>
         )}
@@ -1859,6 +1875,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                     setShowFollowingList(false);
                     setShowExplorer(true);
                     setActiveSearchQuery('');
+                    onSearchQueryChange?.(''); // Clear parent search state
                   }}
                 >
                   <Compass className="w-5 h-5" />

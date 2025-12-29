@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import { updateDisplayName, updateAvatar, logoutThunk, updateProfileThunk } from '../../store/authSlice';
-import { updateUserDisplayName, updateUserAvatar } from '../../store/usersSlice';
+import { updateUserDisplayNameByUsername, updateUserAvatarByUsername } from '../../store/usersSlice';
 import { fetchUserVideosThunk, fetchLikedVideosThunk, fetchSavedVideosThunk } from '../../store/videosSlice';
 import {
     Play, Search, Home, Compass, Users, Video, User,
@@ -18,6 +18,7 @@ import { Label } from '../ui/label';
 import { toast } from 'sonner';
 import { VideoModal } from './VideoModal';
 import { updateVideoApi, deleteVideoApi } from '../../api/videos';
+import { uploadAvatarApi } from '../../api/auth';
 
 interface UserProfileProps {
     onVideoClick?: (videoId: string) => void;
@@ -65,6 +66,22 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, on
     // Fetch data based on active tab
     useEffect(() => {
         if (!currentUser) return;
+
+        // Ensure currentUser is in allUsers for avatar display
+        const userExists = users.find(u => u.username === currentUser.username);
+        if (!userExists || userExists.avatarUrl !== currentUser.avatarUrl) {
+            // Update or add currentUser to allUsers
+            dispatch(updateUserAvatarByUsername({ 
+                username: currentUser.username, 
+                avatarUrl: currentUser.avatarUrl || '' 
+            }));
+            if (currentUser.displayName) {
+                dispatch(updateUserDisplayNameByUsername({ 
+                    username: currentUser.username, 
+                    displayName: currentUser.displayName 
+                }));
+            }
+        }
 
         // Always fetch user videos initially
         dispatch(fetchUserVideosThunk(currentUser.username) as any);
@@ -145,6 +162,23 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, on
         if (!currentUser) return;
 
         try {
+            // Upload avatar first if changed
+            if (avatarUrl && avatarUrl !== currentUser.avatarUrl) {
+                const response = await uploadAvatarApi(avatarUrl);
+                const newAvatarUrl = response.data.user.avatarUrl;
+                
+                // Update Redux state for both authSlice and usersSlice
+                dispatch(updateAvatar(newAvatarUrl));
+                dispatch(updateUserAvatarByUsername({ username: currentUser.username, avatarUrl: newAvatarUrl }));
+                
+                // Update localStorage
+                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                localStorage.setItem('user', JSON.stringify({ ...storedUser, avatarUrl: newAvatarUrl }));
+                
+                toast.success('Cập nhật avatar thành công!');
+            }
+
+            // Then update profile info
             const updates: any = {};
             if (displayName.trim() && displayName !== currentUser.displayName) {
                 updates.displayName = displayName;
@@ -152,24 +186,19 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, on
             if (bio !== currentUser.bio) {
                 updates.bio = bio;
             }
-            if (avatarUrl && avatarUrl !== currentUser.avatarUrl) {
-                updates.avatarUrl = avatarUrl;
-            }
 
             if (Object.keys(updates).length > 0) {
                 await dispatch(updateProfileThunk(updates) as any).unwrap();
 
-                // Also update local users list for consistency (optional)
+                // Also update local users list for consistency
                 if (updates.displayName) {
-                    dispatch(updateUserDisplayName({ username: currentUser.username, displayName: updates.displayName }));
-                }
-                if (updates.avatarUrl) {
-                    dispatch(updateUserAvatar({ username: currentUser.username, avatarUrl: updates.avatarUrl }));
+                    dispatch(updateUserDisplayNameByUsername({ username: currentUser.username, displayName: updates.displayName }));
                 }
 
                 toast.success('Cập nhật hồ sơ thành công!');
-                setShowEditModal(false);
             }
+
+            setShowEditModal(false);
         } catch (error) {
             toast.error('Cập nhật thất bại');
             console.error(error);
@@ -674,26 +703,14 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, on
                                         />
                                     </div>
                                 )}
-                                <div className="flex flex-col gap-2">
-                                    <Button
-                                        onClick={() => fileInputRef.current?.click()}
-                                        variant="outline"
-                                        className="bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700 w-full"
-                                    >
-                                        <Upload className="w-4 h-4 mr-2" />
-                                        Chọn ảnh
-                                    </Button>
-                                    <p className="text-xs text-zinc-500 text-center">Hoặc nhập URL ảnh:</p>
-                                    <Input
-                                        value={avatarUrl}
-                                        onChange={(e) => {
-                                            setAvatarUrl(e.target.value);
-                                            setAvatarPreview(e.target.value);
-                                        }}
-                                        className="bg-zinc-800 border-zinc-700 text-white"
-                                        placeholder="https://example.com/avatar.jpg"
-                                    />
-                                </div>
+                                <Button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    variant="outline"
+                                    className="bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700 w-full"
+                                >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Chọn ảnh
+                                </Button>
                                 <input
                                     type="file"
                                     ref={fileInputRef}

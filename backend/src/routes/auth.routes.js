@@ -9,7 +9,7 @@
  */
 
 import express from 'express';
-import { login, logout, refreshToken, getMe, updateProfile, getSystemStatus, googleLogin, register } from '../controllers/auth.controller.js';
+import { login, logout, refreshToken, getMe, updateProfile, uploadAvatar, getSystemStatus, googleLogin, register } from '../controllers/auth.controller.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { body, validationResult } from 'express-validator';
 
@@ -124,17 +124,42 @@ router.get('/me',
  * Update current authenticated user's profile
  * Requires authentication (JWT token)
  * 
- * Body: { displayName?, bio?, avatarUrl? }
+ * Body: { displayName?, bio? }
+ * Note: Avatar upload should use separate upload endpoint
  */
 router.patch('/me',
   authenticateToken,
   [
     body('displayName').optional().trim().isLength({ max: 50 }).withMessage('Display name too long'),
-    body('bio').optional().trim().isLength({ max: 500 }).withMessage('Bio too long'),
-    body('avatarUrl').optional().trim().isURL().withMessage('Avatar URL must be a valid URL')
+    body('bio').optional().trim().isLength({ max: 500 }).withMessage('Bio too long')
   ],
   validate,
   updateProfile
+);
+
+/**
+ * PATCH /api/v1/auth/avatar
+ * 
+ * Upload and update user avatar
+ * Requires authentication (JWT token)
+ * 
+ * Body: { avatar: 'data:image/...' }
+ */
+router.patch('/avatar',
+  authenticateToken,
+  [
+    body('avatar')
+      .notEmpty().withMessage('Avatar is required')
+      .custom((value) => {
+        const isBase64DataUri = /^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(value);
+        if (!isBase64DataUri) {
+          throw new Error('Avatar must be a base64 image');
+        }
+        return true;
+      })
+  ],
+  validate,
+  uploadAvatar
 );
 
 /**

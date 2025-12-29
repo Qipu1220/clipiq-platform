@@ -3,6 +3,7 @@ import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState, AppDispatch } from './store/store';
 import { restoreSessionThunk } from './store/authSlice';
 import { fetchVideosThunk } from './store/videosSlice';
+import { fetchUserByUsernameThunk } from './store/usersSlice';
 import { isSignInWithEmailLink } from 'firebase/auth';
 import { auth } from './config/firebase';
 import { Toaster } from 'sonner';
@@ -28,11 +29,14 @@ function AppContent() {
   const loading = useSelector((state: RootState) => state.auth.loading);
 
   const [currentPage, setCurrentPage] = useState('home');
+  const [previousPage, setPreviousPage] = useState<string>('home');
+  const [previousContext, setPreviousContext] = useState<{showExplorer: boolean; searchQuery: string}>({showExplorer: false, searchQuery: ''});
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
   const [intendedVideoId, setIntendedVideoId] = useState<string | null>(null);
   const [homeTab, setHomeTab] = useState<'for-you' | 'following'>('for-you');
   const [showExplorer, setShowExplorer] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>(''); // Track active search
   const [isEmailSignInCallback, setIsEmailSignInCallback] = useState(() => {
     // Check sessionStorage for pending password setup (persists across re-renders)
     if (window.sessionStorage.getItem('emailLinkNeedPasswordSetup') === 'true') {
@@ -92,6 +96,11 @@ function AppContent() {
       console.log('🔄 User authenticated, refetching videos to update like status');
       dispatch(fetchVideosThunk());
       
+      // Sync currentUser to allUsers for avatar display
+      if (currentUser) {
+        dispatch(fetchUserByUsernameThunk(currentUser.username));
+      }
+      
       // If there was an intended video from shared link, navigate to it
       if (intendedVideoId) {
         console.log('🎯 Navigating to intended video:', intendedVideoId);
@@ -100,7 +109,7 @@ function AppContent() {
         setIntendedVideoId(null); // Clear after use
       }
     }
-  }, [isAuthenticated, dispatch, intendedVideoId]);
+  }, [isAuthenticated, dispatch, intendedVideoId, currentUser]);
 
   // Show loading screen while checking session
   if (loading && !isAuthenticated) {
@@ -134,6 +143,9 @@ function AppContent() {
   }
 
   const handleNavigate = (page: string, tab?: 'for-you' | 'following') => {
+    // Track previous page before navigating
+    setPreviousPage(currentPage);
+    
     // Handle explorer navigation
     if (page === 'explorer') {
       setCurrentPage('home');
@@ -169,6 +181,8 @@ function AppContent() {
   };
 
   const handleViewUserProfile = (username: string) => {
+    setPreviousPage(currentPage); // Track where we came from
+    setPreviousContext({showExplorer, searchQuery}); // Track context (explorer/search state)
     setSelectedUsername(username);
     // If viewing own profile, go to profile page, otherwise go to public profile page
     if (username === currentUser?.username) {
@@ -176,6 +190,13 @@ function AppContent() {
     } else {
       setCurrentPage('view-user-profile');
     }
+  };
+
+  const handleBackFromProfile = () => {
+    // Restore previous page and context
+    setCurrentPage(previousPage);
+    setShowExplorer(previousContext.showExplorer);
+    setSearchQuery(previousContext.searchQuery);
   };
 
   const renderPage = () => {
@@ -219,20 +240,20 @@ function AppContent() {
         return <VideoPlayer videoId={selectedVideoId} onBack={() => handleNavigate('home')} onViewUserProfile={handleViewUserProfile} />;
       }
       if (currentPage === 'view-user-profile' && selectedUsername) {
-        return <PublicUserProfile username={selectedUsername} onVideoClick={() => setCurrentPage('home')} onBack={() => handleNavigate('home')} />;
+        return <PublicUserProfile username={selectedUsername} onVideoClick={() => setCurrentPage('home')} onBack={handleBackFromProfile} />;
       }
       if (currentPage === 'profile') {
         return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
       }
       // Use TikTok-style layout for home page
-      return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} initialTab={homeTab} onTabChange={setHomeTab} initialShowExplorer={showExplorer} onExplorerChange={setShowExplorer} />;
+      return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} initialTab={homeTab} onTabChange={setHomeTab} initialShowExplorer={showExplorer} onExplorerChange={setShowExplorer} initialSearchQuery={searchQuery} onSearchQueryChange={setSearchQuery} />;
     }
 
     if (currentPage === 'profile') {
       return <UserProfile onVideoClick={() => setCurrentPage('home')} onNavigateHome={() => handleNavigate('home')} onNavigateUpload={() => handleNavigate('upload')} onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} />;
     }
 
-    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} initialTab={homeTab} onTabChange={setHomeTab} initialShowExplorer={showExplorer} onExplorerChange={setShowExplorer} />;
+    return <TikTokStyleHome onViewUserProfile={handleViewUserProfile} onNavigate={handleNavigate} initialTab={homeTab} onTabChange={setHomeTab} initialShowExplorer={showExplorer} onExplorerChange={setShowExplorer} initialSearchQuery={searchQuery} onSearchQueryChange={setSearchQuery} />;
   };
 
   return (

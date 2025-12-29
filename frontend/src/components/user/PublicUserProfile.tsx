@@ -49,10 +49,11 @@ export function PublicUserProfile({ username, onVideoClick, onBack, isStaffView 
 
   useEffect(() => {
     if (username) {
+      // Always fetch fresh user data when profile is opened
       // @ts-ignore - dispatch type issue
-      dispatch(fetchUserVideosThunk(username));
-      // @ts-ignore
       dispatch(fetchUserByUsernameThunk(username));
+      // @ts-ignore  
+      dispatch(fetchUserVideosThunk(username));
     }
   }, [dispatch, username]);
 

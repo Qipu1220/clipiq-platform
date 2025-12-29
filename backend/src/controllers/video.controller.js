@@ -401,7 +401,11 @@ export async function searchVideos(req, res, next) {
          SELECT 1 FROM playlist_videos pv 
          JOIN playlists p ON pv.playlist_id = p.id 
          WHERE pv.video_id = v.id AND p.user_id = $2 AND p.name = 'Đã lưu'
-       ) as is_saved
+       ) as is_saved,
+       EXISTS(
+         SELECT 1 FROM likes 
+         WHERE video_id = v.id AND user_id = $2
+       ) as is_liked
        FROM videos v
        LEFT JOIN users u ON v.uploader_id = u.id
        WHERE v.id = ANY($1::uuid[]) AND v.status = 'active' AND v.processing_status = 'ready'
@@ -415,8 +419,13 @@ export async function searchVideos(req, res, next) {
     // I'll keep the status check but maybe the videos are 'deleted' or something?
     // Let's modify the query to return status so I can see WHY they are filtered if they exist.
 
-    const dbResult = await pool.query(query, [videoIds, req.user?.userId || null]);
+    const userId = req.user?.userId || null;
+    console.log('[Search] User ID for isLiked/isSaved check:', userId);
+    
+    const dbResult = await pool.query(query, [videoIds, userId]);
     const dbVideos = dbResult.rows;
+    
+    console.log('[Search] Sample video isLiked/isSaved:', dbVideos[0]?.id, 'isLiked:', dbVideos[0]?.is_liked, 'isSaved:', dbVideos[0]?.is_saved);
 
     // 3. Re-order DB results to match the ranking from search engine
     const videos = videoIds.map(id => {
@@ -436,8 +445,8 @@ export async function searchVideos(req, res, next) {
         uploaderUsername: video.username,
         uploaderDisplayName: video.display_name,
         uploaderAvatarUrl: video.avatar_url,
-        uploaderAvatarUrl: video.avatar_url,
         isSaved: video.is_saved,
+        isLiked: video.is_liked,
         processingStatus: video.processing_status,
         createdAt: video.created_at,
         uploadedAt: video.created_at,

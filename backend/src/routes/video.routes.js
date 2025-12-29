@@ -47,7 +47,7 @@ const uploadFields = upload.fields([
 ]);
 
 // Public routes - MUST be before /:id
-router.get('/search', searchVideos); // Search videos
+router.get('/search', optionalAuth, searchVideos); // Search videos
 router.get('/trending', getTrendingVideos); // Get trending videos
 router.get('/', optionalAuth, getVideos); // Get video feed
 

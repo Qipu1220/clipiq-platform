@@ -121,6 +121,12 @@ export const updateProfileApi = async (data: UpdateProfileRequest): Promise<Upda
   return response.data;
 };
 
+// Upload user avatar
+export const uploadAvatarApi = async (avatar: string): Promise<UpdateProfileResponse> => {
+  const response = await apiClient.patch<UpdateProfileResponse>('/auth/avatar', { avatar });
+  return response.data;
+};
+
 // Get system status (maintenance mode)
 export const getSystemStatusApi = async (): Promise<{ success: boolean; data: { maintenanceMode: boolean; serviceMaintenanceMode: boolean } }> => {
   const response = await apiClient.get('/auth/status');

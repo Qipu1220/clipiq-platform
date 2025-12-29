@@ -177,9 +177,10 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
     setLikeAnimation(true);
     setTimeout(() => setLikeAnimation(false), 500);
     
-    // Capture current state before async operation
-    const currentIsLiked = !!selectedVideo.isLiked;
-    const currentLikes = selectedVideo.likes || 0;
+    // Get fresh state from Redux to avoid stale local state
+    const videoFromRedux = explorerVideos.find((v: any) => v.id === selectedVideo.id);
+    const currentIsLiked = !!(videoFromRedux?.isLiked || selectedVideo.isLiked);
+    const currentLikes = videoFromRedux?.likes || selectedVideo.likes || 0;
     const newIsLiked = !currentIsLiked;
     const newLikes = currentIsLiked ? currentLikes - 1 : currentLikes + 1;
     
