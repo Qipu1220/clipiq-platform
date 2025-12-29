@@ -144,6 +144,18 @@ export const toggleSaveVideoApi = async (videoId: string): Promise<{ success: bo
   return response.data;
 };
 
+// Update video (title, description)
+export const updateVideoApi = async (videoId: string, data: { title?: string; description?: string }): Promise<{ success: boolean; message: string }> => {
+  const response = await apiClient.put(`/videos/${videoId}`, data);
+  return response.data;
+};
+
+// Delete video
+export const deleteVideoApi = async (videoId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await apiClient.delete(`/videos/${videoId}`);
+  return response.data;
+};
+
 export default {
   fetchVideosApi,
   fetchVideoByIdApi,
@@ -154,6 +166,8 @@ export default {
   likeVideoApi,
   unlikeVideoApi,
   toggleSaveVideoApi,
+  updateVideoApi,
+  deleteVideoApi,
   getCommentsApi,
   addCommentApi,
   deleteCommentApi

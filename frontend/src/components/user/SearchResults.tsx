@@ -1,12 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
 import {
-  Heart, User, Play, Search, Loader2
+  Heart, User, Play, Search, Loader2, Share2, Bookmark, MessageCircle, X, Copy, Flag, Trash2
 } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { searchUsersThunk } from '../../store/usersSlice';
-import { useEffect } from 'react';
+import {
+  toggleLikeVideoThunk,
+  toggleSaveVideoThunk,
+  fetchCommentsThunk,
+  addCommentThunk,
+  deleteCommentThunk
+} from '../../store/videosSlice';
+import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
+import { copyVideoLink, shareVideoApi, generateShareUrl } from '../../api/share';
+import { toast } from 'sonner';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import { ScrollArea } from '../ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '../ui/dropdown-menu';
+import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
 
 interface SearchResultsProps {
   searchQuery: string;
@@ -23,6 +53,32 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
   const searchUserResults = useSelector((state: RootState) => state.users.searchUserResults);
   const userStatus = useSelector((state: RootState) => state.users.status);
   const videos = useSelector((state: RootState) => state.videos.videos);
+  const currentUser = useSelector((state: RootState) => state.auth.currentUser);
+  const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
+  const currentVideoComments = useSelector((state: RootState) => state.videos.currentVideoComments);
+
+  // Video modal states
+  const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [likeAnimation, setLikeAnimation] = useState(false);
+  const [bookmarkAnimation, setBookmarkAnimation] = useState(false);
+  const [followAnimation, setFollowAnimation] = useState(false);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [isLiking, setIsLiking] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Report states
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportType, setReportType] = useState('spam');
+  const [reportReason, setReportReason] = useState('');
+  const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
+  
+  // Comment report states
+  const [showCommentReportModal, setShowCommentReportModal] = useState(false);
+  const [selectedComment, setSelectedComment] = useState<any>(null);
+  const [commentReportReason, setCommentReportReason] = useState('');
+  const [showCommentReportConfirm, setShowCommentReportConfirm] = useState(false);
 
   // Trigger user search when tab changes or query changes
   useEffect(() => {
@@ -31,39 +87,271 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
     }
   }, [activeTab, searchQuery, dispatch]);
 
+  // Handle wheel event to change videos in modal
+  const handleWheel = (e: WheelEvent) => {
+    if (!showVideoModal || searchResults.length === 0) return;
+    
+    const target = e.target as HTMLElement;
+    if (target.closest('.sidebar-scroll')) return;
+    
+    e.preventDefault();
+    
+    if (e.deltaY > 0) {
+      const nextIndex = (currentVideoIndex + 1) % searchResults.length;
+      setCurrentVideoIndex(nextIndex);
+      setSelectedVideo(searchResults[nextIndex]);
+      dispatch(fetchCommentsThunk(searchResults[nextIndex].id));
+    } else if (e.deltaY < 0) {
+      const prevIndex = (currentVideoIndex - 1 + searchResults.length) % searchResults.length;
+      setCurrentVideoIndex(prevIndex);
+      setSelectedVideo(searchResults[prevIndex]);
+      dispatch(fetchCommentsThunk(searchResults[prevIndex].id));
+    }
+  };
+
+  useEffect(() => {
+    if (showVideoModal) {
+      window.addEventListener('wheel', handleWheel, { passive: false });
+      return () => {
+        window.removeEventListener('wheel', handleWheel);
+      };
+    }
+  }, [showVideoModal, currentVideoIndex, searchResults]);
+
   // Use backend results directly for videos
   const filteredVideos = searchResults;
 
   // Use backend results for users
   const filteredUsers = activeTab === 'users' ? searchUserResults : [];
 
+  const handleVideoClick = (video: any) => {
+    setSelectedVideo(video);
+    setShowVideoModal(true);
+    const index = searchResults.findIndex(v => v.id === video.id);
+    setCurrentVideoIndex(index);
+    dispatch(fetchCommentsThunk(video.id));
+  };
+
+  const handleCloseModal = () => {
+    setShowVideoModal(false);
+    setSelectedVideo(null);
+    setCommentText('');
+  };
+
+  const handleLike = async () => {
+    if (!selectedVideo || !currentUser || isLiking) return;
+    
+    setIsLiking(true);
+    setLikeAnimation(true);
+    setTimeout(() => setLikeAnimation(false), 500);
+    
+    const currentIsLiked = !!selectedVideo.isLiked;
+    const currentLikes = selectedVideo.likes || 0;
+    const newIsLiked = !currentIsLiked;
+    const newLikes = currentIsLiked ? currentLikes - 1 : currentLikes + 1;
+    
+    setSelectedVideo((prev: any) => ({
+      ...prev,
+      isLiked: newIsLiked,
+      likes: newLikes
+    }));
+    
+    try {
+      await dispatch(toggleLikeVideoThunk({ videoId: selectedVideo.id, isLiked: currentIsLiked })).unwrap();
+    } catch (error) {
+      setSelectedVideo((prev: any) => ({
+        ...prev,
+        isLiked: currentIsLiked,
+        likes: currentLikes
+      }));
+      toast.error('Không thể thích video');
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!selectedVideo || !currentUser || isSaving) return;
+    
+    setIsSaving(true);
+    setBookmarkAnimation(true);
+    setTimeout(() => setBookmarkAnimation(false), 500);
+    
+    const currentIsSaved = !!selectedVideo.isSaved;
+    const newIsSaved = !currentIsSaved;
+    
+    setSelectedVideo((prev: any) => ({
+      ...prev,
+      isSaved: newIsSaved
+    }));
+    
+    try {
+      await dispatch(toggleSaveVideoThunk(selectedVideo.id)).unwrap();
+      toast.success(currentIsSaved ? 'Đã bỏ lưu video' : 'Đã lưu video');
+    } catch (error) {
+      setSelectedVideo((prev: any) => ({
+        ...prev,
+        isSaved: currentIsSaved
+      }));
+      toast.error('Không thể lưu video');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleComment = async () => {
+    if (!commentText.trim() || !selectedVideo || !currentUser) return;
+    
+    try {
+      await dispatch(addCommentThunk({
+        videoId: selectedVideo.id,
+        text: commentText.trim()
+      })).unwrap();
+      setCommentText('');
+      toast.success('Đã thêm bình luận');
+    } catch (error) {
+      toast.error('Không thể thêm bình luận');
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!selectedVideo) return;
+    
+    try {
+      await dispatch(deleteCommentThunk({ videoId: selectedVideo.id, commentId })).unwrap();
+      toast.success('Đã xóa bình luận');
+    } catch (error) {
+      toast.error('Không thể xóa bình luận');
+    }
+  };
+
+  const handleSubscribe = async () => {
+    if (!currentUser || !selectedVideo || currentUser.username === selectedVideo.uploaderUsername) return;
+
+    const isSubscribed = subscriptions[currentUser.username]?.includes(selectedVideo.uploaderUsername);
+    
+    setFollowAnimation(true);
+    setTimeout(() => setFollowAnimation(false), 500);
+
+    if (isSubscribed) {
+      dispatch(unsubscribeFromUser({
+        follower: currentUser.username,
+        following: selectedVideo.uploaderUsername,
+      }));
+    } else {
+      dispatch(subscribeToUser({
+        follower: currentUser.username,
+        following: selectedVideo.uploaderUsername,
+      }));
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!selectedVideo) return;
+    try {
+      const token = localStorage.getItem('accessToken');
+      await copyVideoLink(selectedVideo.id, token || undefined);
+      toast.success('Đã copy link video');
+    } catch (error) {
+      toast.error('Không thể copy link');
+    }
+  };
+
+  const handleShareToPlatform = async (platform: 'facebook' | 'twitter' | 'whatsapp' | 'telegram') => {
+    if (!selectedVideo) return;
+    try {
+      const url = generateShareUrl(selectedVideo.id, platform);
+      window.open(url, '_blank', 'width=600,height=400');
+      const token = localStorage.getItem('accessToken');
+      await shareVideoApi(selectedVideo.id, platform, token || undefined);
+    } catch (error) {
+      console.error('Share failed:', error);
+    }
+  };
+
+  // Copy comment text helper
+  const handleCopyComment = (text: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast.success('Đã copy bình luận'))
+        .catch(() => {
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.select();
+          try {
+            document.execCommand('copy');
+            toast.success('Đã copy bình luận');
+          } catch (err) {
+            toast.error('Không thể copy bình luận');
+          }
+          document.body.removeChild(textArea);
+        });
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        toast.success('Đã copy bình luận');
+      } catch (err) {
+        toast.error('Không thể copy bình luận');
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
+  const handleUserClickFromModal = (username: string) => {
+    handleCloseModal();
+    onUserClick(username);
+  };
+
+  const formatCount = (count: number) => {
+    if (!count || typeof count !== 'number') return '0';
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+    return count.toString();
+  };
+
+  const uploaderInfo = selectedVideo ? users.find(u => u.username === selectedVideo.uploaderUsername) : null;
+  const isSubscribed = currentUser && selectedVideo
+    ? subscriptions[currentUser.username]?.includes(selectedVideo.uploaderUsername)
+    : false;
+
   return (
-    <div className="flex-1 flex flex-col bg-black">
-      {/* Search Tabs */}
-      <div className="border-b border-zinc-900/50 bg-black sticky top-0 z-10">
-        <div className="flex items-center gap-8 px-6">
-          <button
-            onClick={() => setActiveTab('top')}
-            className={`py-4 relative transition-colors ${activeTab === 'top' ? 'text-white' : 'text-zinc-500 hover:text-zinc-400'
-              }`}
-          >
-            <span className="font-medium">Top</span>
-            {activeTab === 'top' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white"></div>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`py-4 relative transition-colors ${activeTab === 'users' ? 'text-white' : 'text-zinc-500 hover:text-zinc-400'
-              }`}
-          >
-            <span className="font-medium">Người dùng</span>
-            {activeTab === 'users' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white"></div>
-            )}
-          </button>
+    <div className="flex-1 flex flex-col bg-black overflow-hidden">
+      {/* Search Tabs - Hidden when modal is open */}
+      {!showVideoModal && (
+        <div className="border-b border-zinc-900/50 bg-black sticky top-0 z-10">
+          <div className="flex items-center gap-8 px-6">
+            <button
+              onClick={() => setActiveTab('top')}
+              className={`py-4 relative transition-colors ${activeTab === 'top' ? 'text-white' : 'text-zinc-500 hover:text-zinc-400'
+                }`}
+            >
+              <span className="font-medium">Top</span>
+              {activeTab === 'top' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white"></div>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`py-4 relative transition-colors ${activeTab === 'users' ? 'text-white' : 'text-zinc-500 hover:text-zinc-400'
+                }`}
+            >
+              <span className="font-medium">Người dùng</span>
+              {activeTab === 'users' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white"></div>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Search Results Content */}
       <div className="flex-1 overflow-y-auto">
@@ -86,7 +374,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                     return (
                       <div
                         key={video.id}
-                        onClick={() => onVideoClick(video.id)}
+                        onClick={() => handleVideoClick(video)}
                         className="group cursor-pointer"
                       >
                         {/* Video Thumbnail */}
@@ -243,6 +531,515 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
           </div>
         )}
       </div>
+
+      {/* Video Modal - Explorer Style */}
+      {showVideoModal && selectedVideo && (
+        <div className="fixed inset-0 bg-black z-[60] flex">
+          <div className="w-full h-full flex">
+            {/* Video Player Section */}
+            <div className="flex-1 flex items-center justify-center bg-black">
+              <div className="relative w-full h-full flex items-center justify-center">
+                <video
+                  src={selectedVideo.videoUrl}
+                  poster={selectedVideo.thumbnailUrl}
+                  controls
+                  autoPlay
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            </div>
+
+            {/* Info & Comments Section */}
+            <div className="w-[420px] flex-shrink-0 bg-zinc-900 flex flex-col overflow-hidden h-full">
+              {/* Close Button */}
+              <button
+                onClick={handleCloseModal}
+                title="Đóng"
+                className="absolute top-4 right-4 z-10 text-zinc-400 hover:text-white transition-colors bg-black/50 rounded-full p-2 hover:bg-black/70"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              {/* Scrollable Content */}
+              <ScrollArea className="flex-1 pt-2 h-full sidebar-scroll">
+                <div className="p-4 space-y-4 pb-20">
+                  {/* User Info */}
+                  <div className="flex items-center justify-between">
+                    <div 
+                      className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => handleUserClickFromModal(selectedVideo.uploaderUsername)}
+                    >
+                      {uploaderInfo?.avatarUrl ? (
+                        <img
+                          src={uploaderInfo.avatarUrl}
+                          alt={selectedVideo.uploaderUsername}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
+                          <User className="w-5 h-5 text-zinc-500" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-white font-medium">
+                          {uploaderInfo?.displayName || selectedVideo.uploaderUsername}
+                        </p>
+                        <p className="text-zinc-500 text-sm">@{selectedVideo.uploaderUsername}</p>
+                      </div>
+                    </div>
+
+                    {currentUser?.username !== selectedVideo.uploaderUsername && (
+                      <Button
+                        onClick={handleSubscribe}
+                        size="sm"
+                        className={`${
+                          isSubscribed
+                            ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                            : 'bg-[#ff3b5c] hover:bg-[#e6344f] text-white'
+                        } transition-all ${followAnimation ? 'scale-110' : 'scale-100'}`}
+                      >
+                        {isSubscribed ? 'Đang follow' : 'Follow'}
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Video Info */}
+                  <div>
+                    <h4 className="text-white font-medium mb-2">{selectedVideo.title}</h4>
+                    <p className="text-zinc-400 text-sm">{selectedVideo.description}</p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-3 py-2 border-y border-zinc-800">
+                    <button
+                      onClick={handleLike}
+                      className={`flex items-center gap-1.5 transition-all ${
+                        selectedVideo.isLiked ? 'text-[#ff3b5c]' : 'text-zinc-400 hover:text-white'
+                      } ${likeAnimation ? 'scale-125' : 'scale-100'}`}
+                    >
+                      <Heart className={`w-5 h-5 ${selectedVideo.isLiked ? 'fill-current' : ''}`} />
+                      <span className="text-sm font-medium">{formatCount(selectedVideo.likes || 0)}</span>
+                    </button>
+
+                    <button className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors">
+                      <MessageCircle className="w-5 h-5" />
+                      <span className="text-sm font-medium">{currentVideoComments.length || 0}</span>
+                    </button>
+
+                    <button
+                      onClick={handleSave}
+                      title="Lưu video"
+                      className={`flex items-center gap-1.5 transition-all ${
+                        selectedVideo.isSaved ? 'text-yellow-500' : 'text-zinc-400 hover:text-white'
+                      } ${bookmarkAnimation ? 'scale-125' : 'scale-100'}`}
+                    >
+                      <Bookmark className={`w-5 h-5 ${selectedVideo.isSaved ? 'fill-current' : ''}`} />
+                    </button>
+
+                    {/* Share Button with Dropdown Menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors">
+                          <Share2 className="w-5 h-5" />
+                          <span className="text-sm font-medium">{formatCount(selectedVideo.shares || 0)}</span>
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-zinc-800 border-zinc-700">
+                        <DropdownMenuItem onClick={handleCopyLink} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copy Link
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-zinc-700" />
+                        <DropdownMenuItem onClick={() => handleShareToPlatform('facebook')} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <span className="mr-2">📘</span> Facebook
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleShareToPlatform('twitter')} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <span className="mr-2">🐦</span> Twitter
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleShareToPlatform('whatsapp')} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <span className="mr-2">💬</span> WhatsApp
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleShareToPlatform('telegram')} className="text-white hover:bg-zinc-700 cursor-pointer">
+                          <span className="mr-2">✈️</span> Telegram
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Report Video Button */}
+                    {currentUser?.username !== selectedVideo.uploaderUsername && (
+                      <button
+                        onClick={() => setShowReportModal(true)}
+                        className="flex items-center gap-1.5 text-zinc-400 hover:text-red-400 transition-colors ml-auto"
+                        title="Báo cáo video"
+                      >
+                        <Flag className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Comments Section */}
+                  <div>
+                    <h5 className="text-white font-medium mb-3">
+                      Bình luận ({currentVideoComments.length || 0})
+                    </h5>
+
+                    {/* Comment Input */}
+                    <div className="mb-4 space-y-2">
+                      <Textarea
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
+                        placeholder="Thêm bình luận..."
+                        className="bg-zinc-800 border-zinc-700 text-white resize-none"
+                        rows={2}
+                      />
+                      <Button
+                        onClick={handleComment}
+                        disabled={!commentText.trim()}
+                        size="sm"
+                        className="bg-[#ff3b5c] hover:bg-[#e6344f] text-white w-full"
+                      >
+                        Đăng
+                      </Button>
+                    </div>
+
+                    {/* Comments List */}
+                    <div className="space-y-3">
+                      {currentVideoComments.length > 0 ? (
+                        currentVideoComments.map((comment: any) => {
+                          const commentUser = users.find(u => u.username === comment.username);
+                          return (
+                            <div key={comment.id} className="flex gap-2 group">
+                              {commentUser?.avatarUrl ? (
+                                <img
+                                  src={commentUser.avatarUrl}
+                                  alt={comment.username}
+                                  className="w-8 h-8 rounded-full object-cover flex-shrink-0 cursor-pointer"
+                                  onClick={() => handleUserClickFromModal(comment.username)}
+                                />
+                              ) : (
+                                <div 
+                                  className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                  onClick={() => handleUserClickFromModal(comment.username)}
+                                >
+                                  <User className="w-4 h-4 text-zinc-500" />
+                                </div>
+                              )}
+                              <div className="flex-1">
+                                <div className="bg-zinc-800 rounded-lg p-2">
+                                  <p 
+                                    className="text-white text-sm font-medium cursor-pointer hover:text-[#ff3b5c]"
+                                    onClick={() => handleUserClickFromModal(comment.username)}
+                                  >
+                                    {commentUser?.displayName || comment.username}
+                                  </p>
+                                  <p className="text-zinc-300 text-sm">{comment.text}</p>
+                                </div>
+                                {/* Comment actions */}
+                                <div className="flex items-center gap-3 mt-1">
+                                  {/* Copy button - always visible on hover */}
+                                  <button
+                                    onClick={() => handleCopyComment(comment.text)}
+                                    className="text-zinc-500 hover:text-white text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                    Copy
+                                  </button>
+                                  
+                                  {currentUser?.username === comment.username ? (
+                                    <button
+                                      onClick={() => handleDeleteComment(comment.id)}
+                                      className="text-zinc-500 hover:text-red-500 text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      Xóa
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        setSelectedComment(comment);
+                                        setShowCommentReportModal(true);
+                                      }}
+                                      className="text-zinc-500 hover:text-red-400 text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <Flag className="w-3 h-3" />
+                                      Tố cáo
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center py-8">
+                          <MessageCircle className="w-10 h-10 text-zinc-700 mx-auto mb-2" />
+                          <p className="text-zinc-500 text-sm">Chưa có bình luận nào</p>
+                          <p className="text-zinc-600 text-xs">Hãy là người đầu tiên bình luận!</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Video Modal */}
+      {showReportModal && selectedVideo && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85">
+          <div className="bg-zinc-900 rounded-xl shadow-2xl w-full max-w-md mx-4 border border-zinc-800">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-red-600">
+                  <Flag className="w-5 h-5 text-white" />
+                </div>
+                <h2 className="text-white text-xl">Báo cáo video</h2>
+              </div>
+              <button
+                onClick={() => setShowReportModal(false)}
+                title="Đóng"
+                className="text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div className="bg-zinc-800 p-3 rounded-lg">
+                <p className="text-zinc-400 text-sm mb-1">Bạn đang báo cáo:</p>
+                <p className="text-white">{selectedVideo.title}</p>
+              </div>
+
+              <div>
+                <label className="block text-white text-sm mb-2" htmlFor="reportType">Loại vi phạm:</label>
+                <select
+                  id="reportType"
+                  title="Chọn loại vi phạm"
+                  value={reportType}
+                  onChange={(e) => setReportType(e.target.value)}
+                  className="w-full bg-zinc-800 text-white p-3 rounded-lg border border-zinc-700 focus:border-red-500 focus:outline-none transition-colors"
+                >
+                  <option value="spam">Spam hoặc quảng cáo</option>
+                  <option value="harassment">Quấy rối hoặc bắt nạt</option>
+                  <option value="hate">Ngôn từ gây thù ghét</option>
+                  <option value="violence">Bạo lực hoặc nguy hiểm</option>
+                  <option value="nudity">Nội dung không phù hợp</option>
+                  <option value="copyright">Vi phạm bản quyền</option>
+                  <option value="misleading">Thông tin sai lệch</option>
+                  <option value="other">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-white text-sm mb-2">Chi tiết (không bắt buộc):</label>
+                <Textarea
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  placeholder="Mô tả thêm về vấn đề bạn gặp phải..."
+                  className="bg-zinc-800 border-zinc-700 text-white resize-none"
+                  rows={4}
+                />
+              </div>
+
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                <p className="text-yellow-500 text-xs">
+                  ⚠️ Báo cáo sai sự thật có thể bị xử phạt. Staff sẽ xem xét trong 24-48 giờ.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 p-6 border-t border-zinc-800">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="flex-1 bg-zinc-800 text-white py-3 rounded-lg hover:bg-zinc-700 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => setShowVideoReportConfirm(true)}
+                className="flex-1 text-white py-3 rounded-lg transition-all bg-red-600 hover:bg-red-700"
+              >
+                Gửi báo cáo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comment Report Modal */}
+      {showCommentReportModal && selectedComment && selectedVideo && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/85">
+          <div className="bg-zinc-900 rounded-2xl w-full max-w-lg border border-zinc-800">
+            {/* Header */}
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-red-600">
+                  <Flag className="w-5 h-5 text-white" />
+                </div>
+                <h2 className="text-white text-xl">Báo cáo bình luận</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCommentReportModal(false);
+                  setSelectedComment(null);
+                  setCommentReportReason('');
+                }}
+                title="Đóng"
+                className="text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div className="bg-zinc-800 p-3 rounded-lg">
+                <p className="text-zinc-400 text-sm mb-1">Bình luận của:</p>
+                <p className="text-white mb-2">{selectedComment.username}</p>
+                <p className="text-zinc-300 text-sm italic">"{selectedComment.text}"</p>
+              </div>
+
+              <div>
+                <label className="text-white text-sm mb-2 block">Lý do báo cáo</label>
+                <Textarea
+                  value={commentReportReason}
+                  onChange={(e) => setCommentReportReason(e.target.value)}
+                  placeholder="Mô tả lý do bạn báo cáo bình luận này..."
+                  className="bg-zinc-800 border-zinc-700 text-white min-h-[120px] resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-zinc-800 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowCommentReportModal(false);
+                  setSelectedComment(null);
+                  setCommentReportReason('');
+                }}
+                className="flex-1 bg-zinc-800 text-white py-3 rounded-lg hover:bg-zinc-700 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => {
+                  if (!commentReportReason.trim()) {
+                    toast.error('Vui lòng nhập lý do báo cáo');
+                    return;
+                  }
+                  setShowCommentReportConfirm(true);
+                }}
+                className="flex-1 text-white py-3 rounded-lg transition-all bg-red-600 hover:bg-red-700"
+              >
+                Gửi báo cáo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Video Report Confirmation Dialog */}
+      <AlertDialog open={showVideoReportConfirm} onOpenChange={setShowVideoReportConfirm}>
+        <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <Flag className="w-5 h-5 text-red-500" />
+              Xác nhận báo cáo video
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              Bạn có chắc chắn muốn gửi báo cáo này không? Hành động này không thể hoàn tác.
+              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <p className="text-yellow-500 text-sm">
+                  ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai sự thật có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700">
+              Hủy bỏ
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (currentUser && selectedVideo) {
+                  dispatch(addVideoReport({
+                    videoId: selectedVideo.id,
+                    userId: currentUser.id,
+                    type: reportType,
+                    reason: reportReason,
+                  }));
+                  toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
+                  setShowReportModal(false);
+                  setShowVideoReportConfirm(false);
+                  setReportReason('');
+                  setReportType('spam');
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Xác nhận gửi báo cáo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Comment Report Confirmation Dialog */}
+      <AlertDialog open={showCommentReportConfirm} onOpenChange={setShowCommentReportConfirm}>
+        <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <Flag className="w-5 h-5 text-red-500" />
+              Xác nhận báo cáo bình luận
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              Bạn có chắc chắn muốn báo cáo bình luận của <strong className="text-white">{selectedComment?.username}</strong> không?
+              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <p className="text-yellow-500 text-sm">
+                  ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700">
+              Hủy bỏ
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (selectedComment && selectedVideo && currentUser) {
+                  dispatch(addCommentReport({
+                    id: Date.now().toString(),
+                    commentId: selectedComment.id,
+                    commentText: selectedComment.text,
+                    commentUsername: selectedComment.username,
+                    videoId: selectedVideo.id,
+                    videoTitle: selectedVideo.title,
+                    reporterId: currentUser.id,
+                    reporterUsername: currentUser.username,
+                    reason: commentReportReason,
+                    timestamp: new Date().toISOString(),
+                    status: 'pending',
+                  }));
+                  toast.success('Báo cáo bình luận đã được gửi!');
+                  setShowCommentReportModal(false);
+                  setShowCommentReportConfirm(false);
+                  setSelectedComment(null);
+                  setCommentReportReason('');
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Xác nhận gửi báo cáo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

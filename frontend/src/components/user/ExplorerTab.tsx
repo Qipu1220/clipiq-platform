@@ -691,34 +691,34 @@ export function ExplorerTab({ onUserClick }: ExplorerTabProps) {
                                 </div>
                                 {/* Comment actions */}
                                 <div className="flex items-center gap-3 mt-1">
+                                  {/* Copy button - always visible on hover */}
+                                  <button
+                                    onClick={() => handleCopyComment(comment.text)}
+                                    className="text-zinc-500 hover:text-white text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                    Copy
+                                  </button>
+                                  
                                   {currentUser?.username === comment.username ? (
                                     <button
                                       onClick={() => handleDeleteComment(comment.id)}
-                                      className="text-zinc-500 hover:text-red-500 text-xs flex items-center gap-1"
+                                      className="text-zinc-500 hover:text-red-500 text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
                                     >
                                       <Trash2 className="w-3 h-3" />
                                       Xóa
                                     </button>
                                   ) : (
-                                    <>
-                                      <button
-                                        onClick={() => handleCopyComment(comment.text)}
-                                        className="text-zinc-500 hover:text-white text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      >
-                                        <Copy className="w-3 h-3" />
-                                        Copy
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setSelectedComment(comment);
-                                          setShowCommentReportModal(true);
-                                        }}
-                                        className="text-zinc-500 hover:text-red-400 text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      >
-                                        <Flag className="w-3 h-3" />
-                                        Tố cáo
-                                      </button>
-                                    </>
+                                    <button
+                                      onClick={() => {
+                                        setSelectedComment(comment);
+                                        setShowCommentReportModal(true);
+                                      }}
+                                      className="text-zinc-500 hover:text-red-400 text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <Flag className="w-3 h-3" />
+                                      Tố cáo
+                                    </button>
                                   )}
                                 </div>
                               </div>

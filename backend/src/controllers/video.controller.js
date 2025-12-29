@@ -255,7 +255,7 @@ export async function updateVideo(req, res, next) {
   try {
     const { id } = req.params;
     const { title, description } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.userId; // Use userId from JWT token
 
     // Check if video exists and user is owner
     const videoCheck = await pool.query(
@@ -267,7 +267,8 @@ export async function updateVideo(req, res, next) {
       throw new ApiError(404, 'Video not found');
     }
 
-    if (videoCheck.rows[0].uploader_id !== userId && req.user.role !== 'admin') {
+    // Compare as strings to handle UUID comparison
+    if (String(videoCheck.rows[0].uploader_id) !== String(userId) && req.user.role !== 'admin') {
       throw new ApiError(403, 'Not authorized to update this video');
     }
 
@@ -293,7 +294,7 @@ export async function updateVideo(req, res, next) {
 export async function deleteVideo(req, res, next) {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.userId; // Use userId from JWT token
 
     // Check if video exists
     const videoCheck = await pool.query(
@@ -305,8 +306,8 @@ export async function deleteVideo(req, res, next) {
       throw new ApiError(404, 'Video not found');
     }
 
-    // Check authorization
-    if (videoCheck.rows[0].uploader_id !== userId && req.user.role !== 'admin') {
+    // Check authorization - compare as strings to handle UUID
+    if (String(videoCheck.rows[0].uploader_id) !== String(userId) && req.user.role !== 'admin') {
       throw new ApiError(403, 'Not authorized to delete this video');
     }
 

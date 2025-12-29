@@ -7,7 +7,7 @@ import { fetchUserVideosThunk, fetchLikedVideosThunk, fetchSavedVideosThunk } fr
 import {
     Play, Search, Home, Compass, Users, Video, User,
     Share2, Settings, Upload, Heart, Eye, LogOut, ChevronDown,
-    X, Image as ImageIcon, Bookmark
+    X, Image as ImageIcon, Bookmark, MoreVertical, Pencil, Trash2
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
@@ -17,6 +17,7 @@ import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { toast } from 'sonner';
 import { VideoModal } from './VideoModal';
+import { updateVideoApi, deleteVideoApi } from '../../api/videos';
 
 interface UserProfileProps {
     onVideoClick?: (videoId: string) => void;
@@ -47,8 +48,19 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, on
     const [showVideoModal, setShowVideoModal] = useState(false);
     const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
 
+    // Video management state
+    const [videoMenuOpen, setVideoMenuOpen] = useState<string | null>(null);
+    const [showEditVideoModal, setShowEditVideoModal] = useState(false);
+    const [showDeleteVideoModal, setShowDeleteVideoModal] = useState(false);
+    const [editingVideo, setEditingVideo] = useState<{ id: string; title: string; description: string } | null>(null);
+    const [editVideoTitle, setEditVideoTitle] = useState('');
+    const [editVideoDescription, setEditVideoDescription] = useState('');
+    const [isUpdatingVideo, setIsUpdatingVideo] = useState(false);
+    const [isDeletingVideo, setIsDeletingVideo] = useState(false);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
+    const videoMenuRef = useRef<HTMLDivElement>(null);
 
     // Fetch data based on active tab
     useEffect(() => {
@@ -97,16 +109,19 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, on
             if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
                 setShowUserMenu(false);
             }
+            if (videoMenuRef.current && !videoMenuRef.current.contains(event.target as Node)) {
+                setVideoMenuOpen(null);
+            }
         };
 
-        if (showUserMenu) {
+        if (showUserMenu || videoMenuOpen) {
             document.addEventListener('mousedown', handleClickOutside);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [showUserMenu]);
+    }, [showUserMenu, videoMenuOpen]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -165,6 +180,64 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, on
         if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
         if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
         return count.toString();
+    };
+
+    // Video management handlers
+    const handleOpenEditVideo = (video: { id: string; title: string; description?: string }) => {
+        setEditingVideo({ id: video.id, title: video.title, description: video.description || '' });
+        setEditVideoTitle(video.title);
+        setEditVideoDescription(video.description || '');
+        setVideoMenuOpen(null);
+        setShowEditVideoModal(true);
+    };
+
+    const handleOpenDeleteVideo = (video: { id: string; title: string }) => {
+        setEditingVideo({ id: video.id, title: video.title, description: '' });
+        setVideoMenuOpen(null);
+        setShowDeleteVideoModal(true);
+    };
+
+    const handleUpdateVideo = async () => {
+        if (!editingVideo) return;
+
+        setIsUpdatingVideo(true);
+        try {
+            await updateVideoApi(editingVideo.id, {
+                title: editVideoTitle.trim(),
+                description: editVideoDescription.trim()
+            });
+            toast.success('Cập nhật video thành công!');
+            setShowEditVideoModal(false);
+            setEditingVideo(null);
+            // Refresh videos list
+            if (currentUser) {
+                dispatch(fetchUserVideosThunk(currentUser.username) as any);
+            }
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Cập nhật video thất bại');
+        } finally {
+            setIsUpdatingVideo(false);
+        }
+    };
+
+    const handleDeleteVideo = async () => {
+        if (!editingVideo) return;
+
+        setIsDeletingVideo(true);
+        try {
+            await deleteVideoApi(editingVideo.id);
+            toast.success('Xóa video thành công!');
+            setShowDeleteVideoModal(false);
+            setEditingVideo(null);
+            // Refresh videos list
+            if (currentUser) {
+                dispatch(fetchUserVideosThunk(currentUser.username) as any);
+            }
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Xóa video thất bại');
+        } finally {
+            setIsDeletingVideo(false);
+        }
     };
 
     if (!currentUser) {
@@ -505,6 +578,51 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, on
                                         {/* Video info overlay */}
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
+                                        {/* 3-dot menu for own videos (only in 'videos' tab) */}
+                                        {activeTab === 'videos' && (
+                                            <div className="absolute top-2 right-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setVideoMenuOpen(videoMenuOpen === video.id ? null : video.id);
+                                                    }}
+                                                    className="p-1.5 bg-black/60 hover:bg-black/80 rounded-full transition-colors"
+                                                    title="Tùy chọn"
+                                                >
+                                                    <MoreVertical className="w-4 h-4 text-white" />
+                                                </button>
+
+                                                {/* Dropdown menu */}
+                                                {videoMenuOpen === video.id && (
+                                                    <div
+                                                        ref={videoMenuRef}
+                                                        className="absolute top-full right-0 mt-1 bg-zinc-800 rounded-lg shadow-lg border border-zinc-700 overflow-hidden min-w-[140px] z-40"
+                                                    >
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleOpenEditVideo(video);
+                                                            }}
+                                                            className="w-full px-4 py-2.5 text-left text-sm text-white hover:bg-zinc-700 flex items-center gap-2 transition-colors whitespace-nowrap"
+                                                        >
+                                                            <Pencil className="w-4 h-4 flex-shrink-0" />
+                                                            <span>Chỉnh sửa</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleOpenDeleteVideo(video);
+                                                            }}
+                                                            className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-zinc-700 flex items-center gap-2 transition-colors whitespace-nowrap"
+                                                        >
+                                                            <Trash2 className="w-4 h-4 flex-shrink-0" />
+                                                            <span>Xóa video</span>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* Bottom info */}
                                         <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
                                             <div className="flex items-center justify-between mb-1">
@@ -633,6 +751,134 @@ export function UserProfile({ onVideoClick, onNavigateHome, onNavigateUpload, on
                 onClose={() => setShowVideoModal(false)}
                 onUserClick={onViewUserProfile}
             />
+
+            {/* Edit Video Modal */}
+            {showEditVideoModal && editingVideo && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+                    <div className="bg-zinc-900 rounded-xl w-full max-w-lg mx-4 border border-zinc-800">
+                        <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+                            <h2 className="text-white text-xl font-medium">Chỉnh sửa video</h2>
+                            <button
+                                onClick={() => {
+                                    setShowEditVideoModal(false);
+                                    setEditingVideo(null);
+                                }}
+                                className="text-zinc-400 hover:text-white transition-colors"
+                                title="Đóng"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            {/* Title */}
+                            <div>
+                                <Label className="text-zinc-300 mb-2 block">Tiêu đề</Label>
+                                <Input
+                                    value={editVideoTitle}
+                                    onChange={(e) => setEditVideoTitle(e.target.value)}
+                                    className="bg-zinc-800 border-zinc-700 text-white"
+                                    placeholder="Nhập tiêu đề video"
+                                    maxLength={100}
+                                />
+                            </div>
+
+                            {/* Description */}
+                            <div>
+                                <Label className="text-zinc-300 mb-2 block">Mô tả</Label>
+                                <Textarea
+                                    value={editVideoDescription}
+                                    onChange={(e) => setEditVideoDescription(e.target.value)}
+                                    className="bg-zinc-800 border-zinc-700 text-white resize-none"
+                                    placeholder="Nhập mô tả video..."
+                                    rows={4}
+                                    maxLength={500}
+                                />
+                            </div>
+
+                            {/* Buttons */}
+                            <div className="flex gap-3 pt-4">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setShowEditVideoModal(false);
+                                        setEditingVideo(null);
+                                    }}
+                                    className="flex-1 border-zinc-500 bg-zinc-700 text-white hover:bg-zinc-600"
+                                    disabled={isUpdatingVideo}
+                                >
+                                    Hủy
+                                </Button>
+                                <Button
+                                    onClick={handleUpdateVideo}
+                                    className="flex-1 text-white"
+                                    style={{ backgroundColor: '#ff3b5c' }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e6315a'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff3b5c'}
+                                    disabled={isUpdatingVideo || !editVideoTitle.trim()}
+                                >
+                                    {isUpdatingVideo ? 'Đang lưu...' : 'Lưu thay đổi'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Video Confirmation Modal */}
+            {showDeleteVideoModal && editingVideo && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+                    <div className="bg-zinc-900 rounded-xl w-full max-w-md mx-4 border border-zinc-800">
+                        <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+                            <h2 className="text-white text-xl font-medium">Xóa video</h2>
+                            <button
+                                onClick={() => {
+                                    setShowDeleteVideoModal(false);
+                                    setEditingVideo(null);
+                                }}
+                                className="text-zinc-400 hover:text-white transition-colors"
+                                title="Đóng"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6">
+                            <p className="text-zinc-300 mb-2">
+                                Bạn có chắc chắn muốn xóa video này?
+                            </p>
+                            <p className="text-zinc-400 text-sm mb-6 line-clamp-2">
+                                "{editingVideo.title}"
+                            </p>
+                            <p className="text-red-400 text-sm mb-6">
+                                Hành động này không thể hoàn tác!
+                            </p>
+
+                            {/* Buttons */}
+                            <div className="flex gap-3">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setShowDeleteVideoModal(false);
+                                        setEditingVideo(null);
+                                    }}
+                                    className="flex-1 border-zinc-500 bg-zinc-700 text-white hover:bg-zinc-600"
+                                    disabled={isDeletingVideo}
+                                >
+                                    Hủy
+                                </Button>
+                                <Button
+                                    onClick={handleDeleteVideo}
+                                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                                    disabled={isDeletingVideo}
+                                >
+                                    {isDeletingVideo ? 'Đang xóa...' : 'Xóa video'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

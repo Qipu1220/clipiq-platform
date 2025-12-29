@@ -58,6 +58,62 @@ export function cleanupTempFiles(videoId) {
 }
 
 /**
+ * Extract first frame from video as thumbnail using the keyframe extraction service
+ * This is a quick operation for generating thumbnail before returning to frontend
+ * @param {Buffer} videoBuffer - Video data
+ * @returns {Promise<Buffer|null>} - First frame as image buffer or null
+ */
+async function extractFirstFrameAsThumbnail(videoBuffer) {
+    if (!EXTRACT_KEYFRAME_URL) {
+        console.warn('EXTRACT_KEYFRAME_URL not configured, cannot auto-extract thumbnail');
+        return null;
+    }
+
+    try {
+        // Create form data with video file
+        const formData = new FormData();
+        const blob = new Blob([videoBuffer], { type: 'video/mp4' });
+        formData.append('file', blob, 'video.mp4');
+
+        console.log(`📸 Extracting first frame for thumbnail...`);
+
+        const response = await fetch(EXTRACT_KEYFRAME_URL, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Keyframe API error (${response.status}):`, errorText);
+            return null;
+        }
+
+        // Response is a ZIP file
+        const zipBuffer = Buffer.from(await response.arrayBuffer());
+
+        // Extract first image from ZIP
+        const AdmZip = (await import('adm-zip')).default;
+        const zip = new AdmZip(zipBuffer);
+        const zipEntries = zip.getEntries();
+
+        for (const entry of zipEntries) {
+            if (!entry.isDirectory && entry.entryName.match(/\.(jpg|jpeg|png|webp)$/i)) {
+                // Return the first image found
+                const imageBuffer = entry.getData();
+                console.log(`✅ Extracted first frame as thumbnail (${imageBuffer.length} bytes)`);
+                return imageBuffer;
+            }
+        }
+
+        console.warn('No image found in keyframe extraction result');
+        return null;
+    } catch (error) {
+        console.error('Failed to extract first frame for thumbnail:', error);
+        return null;
+    }
+}
+
+/**
  * Extract keyframes from video using external service
  * Returns ZIP file containing keyframe images
  * @param {Buffer} videoBuffer - Video data
@@ -506,19 +562,22 @@ export async function processVideoUpload(videoBuffer, options) {
         const videoUploadResult = await minioService.uploadVideo(videoBuffer, videoFileName);
         console.log(`✅ Video uploaded: ${videoUploadResult.url}`);
 
-        // Step 2: Handle thumbnail (only if user provided one)
+        // Step 2: Handle thumbnail (only if user provided one, otherwise background will generate)
         let thumbnailUrl = null;
+        const thumbFileName = `thumb_${sanitizedTitle}_${timestamp}.jpg`;
+        
         if (thumbnailBuffer) {
-            // User provided thumbnail
-            const thumbFileName = `thumb_${sanitizedTitle}_${timestamp}.jpg`;
+            // User provided thumbnail - upload it now
             const thumbResult = await minioService.uploadThumbnail(thumbnailBuffer, thumbFileName);
             thumbnailUrl = thumbFileName; // Store just filename, not full URL
             console.log(`✅ Custom thumbnail uploaded: ${thumbResult.url}`);
+        } else {
+            // No thumbnail provided - will be auto-generated in background processing
+            console.log('ℹ️ No thumbnail provided, will be auto-generated in background');
         }
-        // If no thumbnail, it will be generated from the first keyframe later in background processing.
 
         // Step 3: Create database record immediately
-        console.log('\nStep 2: Creating database record...');
+        console.log('\nStep 3: Creating database record...');
         videoRecord = await createVideoRecord({
             title,
             description,

@@ -585,7 +585,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
                               {currentUser?.username === comment.username && (
                                 <button
                                   onClick={() => handleDeleteComment(comment.id)}
-                                  className="text-zinc-500 hover:text-red-500 text-xs"
+                                  className="text-zinc-500 hover:text-red-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
                                   Xóa
                                 </button>

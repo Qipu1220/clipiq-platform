@@ -25,7 +25,7 @@ export async function classifyQuery(queryText) {
         const prompt = `
     Analyze the following video search query and classify it into three categories:
     1. "title": Exact or partial keywords likely to appear in a video title.
-    2. "semantic": Contextual or descriptive meaning for vector search.
+    2. "semantic": Contextual or descriptive meaning for vector search, must be english.
     3. "ocr": Visible text that might appear inside the video (on screen).
 
     Query: "${queryText}"
