@@ -124,6 +124,7 @@ export async function getMyShares(req, res, next) {
       shares: row.shares_count || 0,
       isLiked: row.is_liked,
       isSaved: row.is_saved,
+      uploaderId: row.uploader_id,
       uploaderUsername: row.username,
       uploaderDisplayName: row.display_name,
       uploaderAvatarUrl: row.avatar_url,

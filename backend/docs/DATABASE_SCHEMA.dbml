@@ -1,306 +1,361 @@
-// ClipIQ Platform - Database Schema (DBML)
-// Generated from PostgreSQL migrations
-// Date: 2025-11-24
-// 
-// This schema represents the actual production database structure
-// All tables use UUID primary keys for better scalability and security
-//
-// View online: https://dbdiagram.io/
+// ClipIQ Database Schema (DBML)
+// Generated: 2025-12-30
+// Database: PostgreSQL with UUID primary keys
 
-Project ClipIQ_Platform {
-  database_type: 'PostgreSQL'
-  Note: '''
-    ClipIQ - YouTube Clone Platform
-    Features: Video streaming, user management, comments, likes, subscriptions,
-    notifications, reports, appeals, view history, and playlists
-  '''
-}
-
-// ============================================================================
-// CORE TABLES
-// ============================================================================
+// =============================================
+// Core Tables
+// =============================================
 
 Table users {
-  id uuid [pk, default: `gen_random_uuid()`]
-  username varchar(50) [unique, not null]
-  email varchar(255) [unique, not null]
-  role varchar(20) [not null, default: 'user', note: 'admin | staff | user']
-  password varchar(255) [not null, note: 'bcrypt hashed']
-  banned boolean [default: false]
-  ban_expiry timestamp [null, note: 'NULL = permanent ban']
-  ban_reason text [null]
-  warnings integer [default: 0, note: 'Number of warnings']
-  display_name varchar(100) [null]
-  bio text [null]
-  avatar_url varchar(500) [null, note: 'MinIO S3 URL']
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+  id UUID [pk, default: `gen_random_uuid()`, note: 'Unique user identifier']
+  username VARCHAR(50) [unique, not null, note: 'Unique username for display and @ mentions']
+  email VARCHAR(255) [unique, not null, note: 'Email for password recovery and notifications']
+  role VARCHAR(20) [not null, default: 'user', note: "User role: 'admin', 'staff', 'user'"]
+  password VARCHAR(255) [not null, note: 'Bcrypt hashed password']
+  banned BOOLEAN [default: false, note: 'Whether user is currently banned']
+  ban_expiry TIMESTAMP [null, note: 'Ban expiration timestamp (NULL = permanent)']
+  ban_reason TEXT [null, note: 'Reason for ban (shown to user)']
+  warnings INTEGER [default: 0, note: 'Number of warnings received (0-3)']
+  is_demoted BOOLEAN [default: false, note: 'Flag for demoted staff (cannot access staff features)']
+  display_name VARCHAR(100) [null, note: 'Display name (can be changed)']
+  bio TEXT [null, note: 'User biography/description']
+  avatar_url VARCHAR(500) [null, note: 'Avatar image URL from MinIO S3']
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+  updated_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
     username
     email
     role
-    (banned, ban_expiry) [where: 'banned = TRUE']
+    (banned, ban_expiry) [name: 'idx_users_banned_expiry', where: 'banned = TRUE']
+    is_demoted [name: 'idx_users_is_demoted', where: "role = 'staff'"]
     created_at
   }
-  
-  Note: 'Core user table with role-based access control'
 }
 
 Table videos {
-  id uuid [pk, default: `gen_random_uuid()`]
-  title varchar(255) [not null]
-  description text [null]
-  uploader_id uuid [not null, ref: > users.id]
-  thumbnail_url varchar(500) [null, note: 'MinIO S3 URL']
-  video_url varchar(500) [not null, note: 'MinIO S3 key/URL']
-  duration integer [null, note: 'Duration in seconds']
-  views integer [default: 0]
-  status varchar(20) [default: 'active', note: 'active | deleted | flagged']
-  upload_date timestamp [default: `CURRENT_TIMESTAMP`]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+  id UUID [pk, default: `gen_random_uuid()`, note: 'UUID identifier for the video']
+  title VARCHAR(255) [not null]
+  description TEXT [null]
+  uploader_id UUID [not null, ref: > users.id, note: 'UUID of the uploader']
+  thumbnail_url VARCHAR(500) [null, note: 'Thumbnail image URL from MinIO S3']
+  video_url VARCHAR(500) [not null, note: 'Video file URL/key in MinIO S3']
+  duration INTEGER [note: 'Video duration in seconds']
+  views INTEGER [default: 0, note: 'Total view count']
+  likes_count INTEGER [default: 0, note: 'Cached like count']
+  comments_count INTEGER [default: 0, note: 'Cached comment count']
+  shares_count INTEGER [default: 0, note: 'Cached share count']
+  status VARCHAR(20) [default: 'active', note: "Video status: 'active', 'deleted', 'flagged'"]
+  processing_status VARCHAR(20) [default: 'processing', note: "Processing status: 'processing', 'ready', 'failed'"]
+  upload_date TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+  updated_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
     uploader_id
-    (upload_date) [type: btree, name: 'idx_videos_upload_date_desc']
-    (views) [type: btree, name: 'idx_videos_views_desc']
+    upload_date [type: btree, note: 'DESC']
+    views [type: btree, note: 'DESC']
+    likes_count [type: btree, note: 'DESC']
+    comments_count [type: btree, note: 'DESC']
+    shares_count [type: btree, note: 'DESC']
     status
-    (title) [type: gin, note: 'Full-text search']
+    processing_status
   }
-  
-  Note: 'Video metadata - actual files stored in MinIO S3'
 }
 
 Table comments {
-  id uuid [pk, default: `gen_random_uuid()`]
-  video_id uuid [not null, ref: > videos.id]
-  user_id uuid [not null, ref: > users.id]
-  parent_id uuid [null, ref: > comments.id, note: 'For nested replies']
-  text text [not null]
-  edited boolean [default: false]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+  id UUID [pk, default: `gen_random_uuid()`]
+  video_id UUID [not null, ref: > videos.id, note: 'Video being commented on']
+  user_id UUID [not null, ref: > users.id, note: 'User who made the comment']
+  parent_id UUID [null, ref: > comments.id, note: 'Parent comment ID for nested replies (NULL = top-level)']
+  text TEXT [not null, note: 'Comment content']
+  edited BOOLEAN [default: false, note: 'Whether comment was edited']
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+  updated_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
     video_id
     user_id
     parent_id
-    (created_at) [type: btree]
+    created_at [type: btree, note: 'DESC']
   }
-  
-  Note: 'Comments with nested reply support (self-referencing)'
 }
 
 Table likes {
-  id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
-  video_id uuid [not null, ref: > videos.id]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+  id UUID [pk, default: `gen_random_uuid()`]
+  user_id UUID [not null, ref: > users.id, note: 'User who liked the video']
+  video_id UUID [not null, ref: > videos.id, note: 'Video that was liked']
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
     user_id
     video_id
-    (created_at) [type: btree]
+    created_at [type: btree, note: 'DESC']
     (user_id, video_id) [unique, name: 'unique_user_video_like']
   }
-  
-  Note: 'Many-to-Many junction table for user-video likes'
 }
 
-// ============================================================================
-// SOCIAL FEATURES
-// ============================================================================
-
-Table subscriptions {
-  id uuid [pk, default: `gen_random_uuid()`]
-  follower_id uuid [not null, ref: > users.id, note: 'Subscriber']
-  following_id uuid [not null, ref: > users.id, note: 'Content creator']
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
-  indexes {
-    follower_id
-    following_id
-    (created_at) [type: btree]
-    (follower_id, following_id) [unique, name: 'unique_follower_following']
-  }
-  
-  Note: 'Self-referencing M:M for user subscriptions (follows)'
-}
-
-Table notifications {
-  id uuid [pk, default: `gen_random_uuid()`]
-  type varchar(50) [not null, note: 'new_video | new_comment | new_like | new_subscriber | video_flagged | ban_warning | ban_appeal_resolved']
-  receiver_id uuid [not null, ref: > users.id]
-  actor_id uuid [null, ref: > users.id, note: 'Who triggered notification']
-  video_id uuid [null, ref: > videos.id]
-  comment_id uuid [null, ref: > comments.id]
-  message text [null, note: 'Optional custom message']
-  read boolean [default: false]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
-  indexes {
-    receiver_id
-    type
-    read
-    (created_at) [type: btree]
-    (receiver_id, read) [where: 'read = FALSE', name: 'idx_notifications_receiver_unread']
-  }
-  
-  Note: 'Extensible notification system for various events'
-}
-
-// ============================================================================
-// MODERATION SYSTEM
-// ============================================================================
+// =============================================
+// Content Moderation & Reports
+// =============================================
 
 Table user_reports {
-  id uuid [pk, default: `gen_random_uuid()`]
-  reported_user_id uuid [not null, ref: > users.id]
-  reported_by_id uuid [not null, ref: > users.id]
-  reason text [not null]
-  evidence_url varchar(500) [null, note: 'Screenshot/link evidence']
-  status varchar(20) [default: 'pending', note: 'pending | reviewed | resolved']
-  reviewed_by_id uuid [null, ref: > users.id, note: 'Staff/admin who reviewed']
-  reviewed_at timestamp [null]
-  resolution_note text [null]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+  id UUID [pk, default: `gen_random_uuid()`]
+  reported_user_id UUID [not null, ref: > users.id, note: 'User being reported']
+  reported_by_id UUID [not null, ref: > users.id, note: 'User who submitted the report']
+  reason TEXT [not null, note: 'Reason for report']
+  evidence_url VARCHAR(500) [null, note: 'Optional evidence (screenshot, link)']
+  status VARCHAR(20) [default: 'pending', note: "'pending', 'reviewed', 'resolved'"]
+  reviewed_by_id UUID [null, ref: > users.id, note: 'Staff/admin who reviewed']
+  reviewed_at TIMESTAMP [null]
+  resolution_note TEXT [null]
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
     status
     reported_user_id
     reported_by_id
-    (created_at) [type: btree]
+    created_at [type: btree, note: 'DESC']
   }
-  
-  Note: 'User violation reports - moderated by staff'
 }
 
 Table video_reports {
-  id uuid [pk, default: `gen_random_uuid()`]
-  video_id uuid [not null, ref: > videos.id]
-  reported_by_id uuid [not null, ref: > users.id]
-  reason text [not null]
-  evidence_url varchar(500) [null, note: 'Screenshot/link evidence']
-  status varchar(20) [default: 'pending', note: 'pending | reviewed | resolved']
-  reviewed_by_id uuid [null, ref: > users.id, note: 'Staff/admin who reviewed']
-  reviewed_at timestamp [null]
-  resolution_note text [null]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+  id UUID [pk, default: `gen_random_uuid()`]
+  video_id UUID [not null, ref: > videos.id, note: 'Video being reported']
+  reported_by_id UUID [not null, ref: > users.id, note: 'User who submitted the report']
+  reason TEXT [not null, note: 'Reason for report']
+  evidence_url VARCHAR(500) [null, note: 'Optional evidence']
+  status VARCHAR(20) [default: 'pending', note: "'pending', 'reviewed', 'resolved'"]
+  reviewed_by_id UUID [null, ref: > users.id, note: 'Staff/admin who reviewed']
+  reviewed_at TIMESTAMP [null]
+  resolution_note TEXT [null]
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
     status
     video_id
     reported_by_id
-    (created_at) [type: btree]
+    created_at [type: btree, note: 'DESC']
   }
-  
-  Note: 'Video violation reports - moderated by staff'
+}
+
+Table comment_reports {
+  id UUID [pk, default: `gen_random_uuid()`]
+  comment_id UUID [not null, ref: > comments.id, note: 'Comment being reported']
+  reported_by_id UUID [not null, ref: > users.id, note: 'User who submitted the report']
+  reason TEXT [not null, note: 'Type of violation with optional details']
+  evidence_url VARCHAR(500) [null]
+  status VARCHAR(20) [default: 'pending', note: "'pending', 'reviewed', 'resolved'"]
+  reviewed_by_id UUID [null, ref: > users.id]
+  reviewed_at TIMESTAMP [null]
+  resolution_note TEXT [null]
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    status
+    comment_id
+    reported_by_id
+    created_at [type: btree, note: 'DESC']
+    (comment_id, reported_by_id) [unique, name: 'idx_comment_reports_unique_report', where: "status IN ('pending', 'reviewed')"]
+  }
 }
 
 Table appeals {
-  id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id, note: 'User appealing ban']
-  reason text [not null]
-  status varchar(20) [default: 'pending', note: 'pending | approved | denied']
-  reviewed_by_id uuid [null, ref: > users.id, note: 'Staff/admin who reviewed']
-  reviewed_at timestamp [null]
-  resolution_note text [null]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+  id UUID [pk, default: `gen_random_uuid()`]
+  user_id UUID [not null, ref: > users.id, note: 'User submitting the appeal']
+  reason TEXT [not null, note: 'Appeal reason/explanation']
+  status VARCHAR(20) [default: 'pending', note: "'pending', 'approved', 'denied'"]
+  reviewed_by_id UUID [null, ref: > users.id]
+  reviewed_at TIMESTAMP [null]
+  resolution_note TEXT [null]
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
     status
     user_id
-    (created_at) [type: btree]
+    created_at [type: btree, note: 'DESC']
   }
-  
-  Note: 'Ban appeals - reviewed by staff/admin'
 }
 
-// ============================================================================
-// ANALYTICS & PLAYLISTS
-// ============================================================================
+// =============================================
+// Social Features
+// =============================================
 
-Table view_history {
-  id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
-  video_id uuid [not null, ref: > videos.id]
-  watch_duration integer [null, note: 'Seconds watched']
-  completed boolean [default: false]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+Table subscriptions {
+  id UUID [pk, default: `gen_random_uuid()`]
+  follower_id UUID [not null, ref: > users.id, note: 'User who is following (subscriber)']
+  following_id UUID [not null, ref: > users.id, note: 'User being followed (content creator)']
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
-    user_id
-    video_id
-    (user_id, video_id)
-    (created_at) [type: btree]
+    follower_id
+    following_id
+    created_at [type: btree, note: 'DESC']
+    (follower_id, following_id) [unique, name: 'unique_follower_following']
   }
-  
-  Note: 'Track user viewing history and watch time for analytics'
 }
+
+Table notifications {
+  id UUID [pk, default: `gen_random_uuid()`]
+  type VARCHAR(50) [not null, note: "'new_video', 'new_comment', 'new_like', 'new_subscriber', 'video_flagged', 'ban_warning', 'ban_appeal_resolved'"]
+  receiver_id UUID [not null, ref: > users.id, note: 'User who receives the notification']
+  actor_id UUID [null, ref: > users.id, note: 'User who triggered (NULL for system)']
+  video_id UUID [null, ref: > videos.id, note: 'Related video (if applicable)']
+  comment_id UUID [null, ref: > comments.id, note: 'Related comment (if applicable)']
+  message TEXT [null, note: 'Optional custom notification message']
+  read BOOLEAN [default: false, note: 'Whether notification has been read']
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    receiver_id
+    type
+    read
+    created_at [type: btree, note: 'DESC']
+    (receiver_id, read) [name: 'idx_notifications_receiver_unread', where: 'read = FALSE']
+  }
+}
+
+Table shares {
+  id UUID [pk, default: `gen_random_uuid()`]
+  user_id UUID [null, ref: > users.id, note: 'User who shared (NULL for anonymous)']
+  video_id UUID [not null, ref: > videos.id, note: 'Video that was shared']
+  share_type VARCHAR(50) [not null, note: "'link', 'facebook', 'twitter', 'whatsapp', 'embed', etc."]
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    user_id [where: 'user_id IS NOT NULL']
+    video_id
+    share_type
+    created_at [type: btree, note: 'DESC']
+    (video_id, created_at) [name: 'idx_shares_video_created']
+  }
+}
+
+// =============================================
+// Playlists & Saved Videos
+// =============================================
 
 Table playlists {
-  id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
-  name varchar(255) [not null]
-  description text [null]
-  visibility varchar(20) [default: 'public', note: 'public | unlisted | private']
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+  id UUID [pk, default: `gen_random_uuid()`]
+  user_id UUID [not null, ref: > users.id, note: 'Playlist owner']
+  name VARCHAR(255) [not null]
+  description TEXT [null]
+  visibility VARCHAR(20) [default: 'public', note: "'public', 'unlisted', 'private'"]
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+  updated_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
     user_id
     visibility
-    (created_at) [type: btree]
+    created_at [type: btree, note: 'DESC']
   }
-  
-  Note: 'User-created playlists'
 }
 
 Table playlist_videos {
-  id uuid [pk, default: `gen_random_uuid()`]
-  playlist_id uuid [not null, ref: > playlists.id]
-  video_id uuid [not null, ref: > videos.id]
-  position integer [not null, note: 'Order in playlist']
-  added_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
+  id UUID [pk, default: `gen_random_uuid()`]
+  playlist_id UUID [not null, ref: > playlists.id]
+  video_id UUID [not null, ref: > videos.id]
+  position INTEGER [not null, note: 'Position in playlist (for ordering)']
+  added_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
   indexes {
     playlist_id
     video_id
     (playlist_id, position)
     (playlist_id, video_id) [unique, name: 'unique_playlist_video']
-    (playlist_id, position) [unique, name: 'unique_playlist_position']
   }
-  
-  Note: 'Junction table linking playlists to videos with ordering'
 }
 
-// ============================================================================
-// SYSTEM CONFIGURATION
-// ============================================================================
+// =============================================
+// Analytics & Tracking
+// =============================================
+
+Table view_history {
+  id UUID [pk, default: `gen_random_uuid()`]
+  user_id UUID [not null, ref: > users.id, note: 'User who watched']
+  video_id UUID [not null, ref: > videos.id, note: 'Video watched']
+  watch_duration INTEGER [note: 'Seconds watched']
+  completed BOOLEAN [default: false, note: 'Whether user watched entire video']
+  impression_id UUID [null, ref: > impressions.id, note: 'Related impression (for tracking)']
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    user_id
+    video_id
+    (user_id, video_id)
+    impression_id
+    created_at [type: btree, note: 'DESC']
+  }
+}
+
+Table impressions {
+  id UUID [pk, default: `gen_random_uuid()`]
+  user_id UUID [not null, ref: > users.id]
+  video_id UUID [not null, ref: > videos.id]
+  session_id UUID [not null, note: 'Client session identifier']
+  position INTEGER [not null, note: 'Position in feed']
+  source TEXT [not null, note: "'personal', 'trending', 'random'"]
+  model_version TEXT [null, note: 'Recommendation model version']
+  shown_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (user_id, shown_at) [name: 'idx_impr_user_time', type: btree, note: 'DESC']
+    (user_id, session_id) [name: 'idx_impr_user_session']
+  }
+}
+
+// =============================================
+// System & Administration
+// =============================================
 
 Table system_settings {
-  key varchar(100) [pk]
-  value text [not null]
-  description text [null]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
-  
-  Note: 'Global system configuration (key-value store)'
+  key VARCHAR(100) [pk, note: 'Setting key (unique identifier)']
+  value TEXT [not null, note: 'Setting value (stored as text)']
+  description TEXT [null, note: 'Human-readable description']
+  updated_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Key-value store for global configuration. Default keys: maintenance_mode, service_maintenance_mode, app_version, max_video_size_mb, max_upload_per_day, max_video_duration_minutes'
 }
 
-// ============================================================================
-// RELATIONSHIP SUMMARY
-// ============================================================================
+Table system_logs {
+  id UUID [pk, default: `gen_random_uuid()`]
+  action_type VARCHAR(50) [not null, note: "'user_banned', 'staff_promoted', 'maintenance_toggle', etc."]
+  performed_by_id UUID [null, ref: > users.id, note: 'Admin/staff who performed action']
+  target_user_id UUID [null, ref: > users.id, note: 'User affected (if applicable)']
+  target_video_id UUID [null, ref: > videos.id, note: 'Video affected (if applicable)']
+  details TEXT [null, note: 'Human-readable description']
+  metadata JSONB [null, note: 'Additional structured data (JSON)']
+  created_at TIMESTAMP [default: `CURRENT_TIMESTAMP`]
 
-// Users -> Videos (1:N): One user can upload many videos
-// Users -> Comments (1:N): One user can write many comments
-// Videos -> Comments (1:N): One video can have many comments
-// Comments -> Comments (1:N): Self-referencing for nested replies
-// Users <-> Videos (M:N via likes): Users can like multiple videos
-// Users <-> Users (M:N via subscriptions): Users can follow other users
-// Users -> Notifications (1:N): One user receives many notifications
-// Users -> Reports (1:N as reporter): One user can report multiple times
-// Users -> Appeals (1:N): One user can submit multiple appeals
-// Users -> View History (1:N): One user has many view records
-// Users -> Playlists (1:N): One user can create many playlists
-// Playlists <-> Videos (M:N via playlist_videos): Many-to-many with ordering
+  indexes {
+    action_type
+    performed_by_id
+    target_user_id
+    target_video_id
+    created_at [type: btree, note: 'DESC']
+  }
+}
+
+// =============================================
+// Relationship Notes
+// =============================================
+
+// users 1--* videos (uploader)
+// users 1--* comments (author)
+// users *--* videos (via likes)
+// users *--* videos (via view_history)
+// users *--* users (via subscriptions - self-referencing)
+// videos 1--* comments
+// videos *--* playlists (via playlist_videos)
+// playlists 1--* playlist_videos
+// users 1--* playlists
+// users 1--* notifications (receiver)
+// users 1--* user_reports (reporter & reported)
+// videos 1--* video_reports
+// comments 1--* comment_reports
+// users 1--* appeals
+// users 1--* shares
+// videos 1--* shares
+// users 1--* impressions
+// videos 1--* impressions
+// impressions 1--* view_history

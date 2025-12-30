@@ -13,7 +13,7 @@ import {
   addCommentThunk,
   deleteCommentThunk
 } from '../../store/videosSlice';
-import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
+import { followUserThunk, unfollowUserThunk } from '../../store/notificationsSlice';
 import { copyVideoLink, shareVideoApi, generateShareUrl } from '../../api/share';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
@@ -54,7 +54,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
   const userStatus = useSelector((state: RootState) => state.users.status);
   const videos = useSelector((state: RootState) => state.videos.videos);
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
-  const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
+  const followingIds = useSelector((state: RootState) => state.notifications.followingIds);
   const currentVideoComments = useSelector((state: RootState) => state.videos.currentVideoComments);
 
   // Video modal states
@@ -216,21 +216,31 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
   const handleSubscribe = async () => {
     if (!currentUser || !selectedVideo || currentUser.username === selectedVideo.uploaderUsername) return;
 
-    const isSubscribed = subscriptions[currentUser.username]?.includes(selectedVideo.uploaderUsername);
+    // Try to get uploaderId from video first (API response), then from users array (fallback)
+    const uploader = users.find(u => u.username === selectedVideo.uploaderUsername);
+    const uploaderId = selectedVideo.uploaderId || uploader?.id;
+
+    if (!uploaderId) {
+      console.error('[SearchResults] No uploader ID found for:', selectedVideo.uploaderUsername);
+      toast.error('Không thể tìm thấy thông tin người dùng');
+      return;
+    }
+
+    const isCurrentlySubscribed = followingIds.includes(uploaderId);
 
     setFollowAnimation(true);
     setTimeout(() => setFollowAnimation(false), 500);
 
-    if (isSubscribed) {
-      dispatch(unsubscribeFromUser({
-        follower: currentUser.username,
-        following: selectedVideo.uploaderUsername,
-      }));
-    } else {
-      dispatch(subscribeToUser({
-        follower: currentUser.username,
-        following: selectedVideo.uploaderUsername,
-      }));
+    try {
+      if (isCurrentlySubscribed) {
+        await dispatch(unfollowUserThunk({ userId: uploaderId, username: selectedVideo.uploaderUsername })).unwrap();
+        toast.success('Đã bỏ follow');
+      } else {
+        await dispatch(followUserThunk({ userId: uploaderId, username: selectedVideo.uploaderUsername })).unwrap();
+        toast.success(`Đã follow ${selectedVideo.uploaderUsername}`);
+      }
+    } catch (error) {
+      toast.error('Không thể thực hiện thao tác');
     }
   };
 
@@ -307,8 +317,9 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
   };
 
   const uploaderInfo = selectedVideo ? users.find(u => u.username === selectedVideo.uploaderUsername) : null;
-  const isSubscribed = currentUser && selectedVideo
-    ? subscriptions[currentUser.username]?.includes(selectedVideo.uploaderUsername)
+  const uploaderIdForCheck = selectedVideo?.uploaderId || uploaderInfo?.id;
+  const isSubscribed = currentUser && uploaderIdForCheck
+    ? followingIds.includes(uploaderIdForCheck)
     : false;
 
   return (
@@ -581,8 +592,8 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                         onClick={handleSubscribe}
                         size="sm"
                         className={`${isSubscribed
-                            ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
-                            : 'bg-[#ff3b5c] hover:bg-[#e6344f] text-white'
+                          ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                          : 'bg-[#ff3b5c] hover:bg-[#e6344f] text-white'
                           } transition-all ${followAnimation ? 'scale-110' : 'scale-100'}`}
                       >
                         {isSubscribed ? 'Đang follow' : 'Follow'}

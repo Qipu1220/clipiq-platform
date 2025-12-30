@@ -21,6 +21,7 @@ import impressionRoutes from './routes/impression.routes.js';
 import feedRoutes from './routes/feed.routes.js';
 import explorerRoutes from './routes/explorer.routes.js';
 import shareRoutes from './routes/share.routes.js';
+import subscriptionRoutes from './routes/subscription.routes.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
@@ -37,10 +38,10 @@ const PORT = process.env.PORT || 5000;
 
 // CORS - Allow frontend to access API
 // Parse CORS_ORIGIN from environment variable (can be comma-separated string or array)
-const corsOrigin = process.env.CORS_ORIGIN 
+const corsOrigin = process.env.CORS_ORIGIN
   ? (typeof process.env.CORS_ORIGIN === 'string' && process.env.CORS_ORIGIN.includes(',')
-      ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
-      : process.env.CORS_ORIGIN)
+    ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
+    : process.env.CORS_ORIGIN)
   : ['http://localhost:3000', 'http://localhost:5173'];
 
 app.use(cors({
@@ -73,7 +74,7 @@ app.get('/health', (req, res) => {
 });
 
 // API v1 routes
-app.use('/api/v1/auth', authRoutes); 
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1', shareRoutes); // Mount share routes (handles /videos/:id/share and /shares/*)
 app.use('/api/v1/videos', videoRoutes);
 app.use('/api/v1/users', userRoutes);
@@ -84,6 +85,7 @@ app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/events', impressionRoutes); // Changed from /impressions to avoid ad blockers
 app.use('/api/v1/feed', feedRoutes);
 app.use('/api/v1/explorer', explorerRoutes);
+app.use('/api/v1/subscriptions', subscriptionRoutes);
 
 // ===========================================
 // Error Handling
@@ -114,7 +116,7 @@ app.listen(PORT, () => {
   console.log('   POST   /api/v1/auth/refresh    - Refresh token');
   console.log('   GET    /api/v1/auth/me         - Get current user');
   console.log('='.repeat(50));
-  
+
   // Setup automated maintenance tasks
   setupMaintenanceJobs();
 });

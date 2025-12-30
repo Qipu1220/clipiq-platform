@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
 import { likeVideo, addComment, incrementViewCount, fetchVideoByIdThunk } from '../../store/videosSlice';
 import { reportVideoApi, reportCommentApi } from '../../api/reports';
-import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
+import { followUserThunk, unfollowUserThunk } from '../../store/notificationsSlice';
 import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User, Bell, BellOff, MoreVertical, Copy, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -106,8 +106,8 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
   const uploaderInfo = video ? users.find(u => u.username === video.uploader) : null;
 
   // Check if user is subscribed to the uploader
-  const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
-  const isSubscribed = currentUser ? subscriptions[currentUser.username]?.includes(video.uploader) : false;
+  const followingIds = useSelector((state: RootState) => state.notifications.followingIds);
+  const isSubscribed = currentUser && uploaderInfo ? followingIds.includes(uploaderInfo.id) : false;
 
   // Fetch video if not in store (e.g., from shared link)
   useEffect(() => {
@@ -199,19 +199,19 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
     return views.toString();
   };
 
-  const handleSubscribe = () => {
-    if (!currentUser || currentUser.username === video.uploader) return;
+  const handleSubscribe = async () => {
+    if (!currentUser || !uploaderInfo || currentUser.username === video.uploader) return;
 
-    if (isSubscribed) {
-      dispatch(unsubscribeFromUser({
-        follower: currentUser.username,
-        following: video.uploader,
-      }));
-    } else {
-      dispatch(subscribeToUser({
-        follower: currentUser.username,
-        following: video.uploader,
-      }));
+    try {
+      if (isSubscribed) {
+        await dispatch(unfollowUserThunk({ userId: uploaderInfo.id, username: video.uploader })).unwrap();
+        toast.success('Đã bỏ follow');
+      } else {
+        await dispatch(followUserThunk({ userId: uploaderInfo.id, username: video.uploader })).unwrap();
+        toast.success(`Đã follow ${video.uploader}`);
+      }
+    } catch (error) {
+      toast.error('Không thể thực hiện thao tác');
     }
   };
 

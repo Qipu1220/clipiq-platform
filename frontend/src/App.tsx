@@ -4,6 +4,7 @@ import { store, RootState, AppDispatch } from './store/store';
 import { restoreSessionThunk, getCurrentUserThunk } from './store/authSlice';
 import { fetchVideosThunk } from './store/videosSlice';
 import { fetchUserByUsernameThunk } from './store/usersSlice';
+import { fetchFollowingThunk, setSubscriptions } from './store/notificationsSlice';
 import { isSignInWithEmailLink } from 'firebase/auth';
 import { auth } from './config/firebase';
 import { Toaster } from 'sonner';
@@ -97,6 +98,15 @@ function AppContent() {
     if (isAuthenticated) {
       console.log('🔄 User authenticated, refetching videos to update like status');
       dispatch(fetchVideosThunk());
+
+      // Fetch following list for subscription status
+      dispatch(fetchFollowingThunk()).then((result) => {
+        // Set subscriptions for backwards compatibility
+        if (result.payload && currentUser) {
+          const usernames = (result.payload as any[]).map((u: any) => u.username);
+          dispatch(setSubscriptions({ username: currentUser.username, following: usernames }));
+        }
+      });
 
       // Sync currentUser to allUsers for avatar display
       if (currentUser) {

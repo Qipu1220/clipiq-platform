@@ -3,7 +3,7 @@ import { RootState } from '../../store/store';
 import { User, Video, ArrowLeft, Plus, Check, Flag, X, Eye, Heart, Share2, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
+import { followUserThunk, unfollowUserThunk } from '../../store/notificationsSlice';
 import { fetchUserVideosThunk } from '../../store/videosSlice';
 import { fetchUserByUsernameThunk } from '../../store/usersSlice';
 import { useState, useEffect } from 'react';
@@ -27,6 +27,7 @@ export function PublicUserProfile({ username, onVideoClick, onBack, isStaffView 
   const allUsers = useSelector((state: RootState) => state.users.allUsers);
   const userVideos = useSelector((state: RootState) => state.videos.userVideos);
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
+  const followingIds = useSelector((state: RootState) => state.notifications.followingIds);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
 
   const [showReportModal, setShowReportModal] = useState(false);
@@ -36,7 +37,7 @@ export function PublicUserProfile({ username, onVideoClick, onBack, isStaffView 
   const [showWarnModal, setShowWarnModal] = useState(false);
   const [banReason, setBanReason] = useState('');
   const [warnReason, setWarnReason] = useState('');
-  
+
   // Video modal state
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
@@ -45,7 +46,7 @@ export function PublicUserProfile({ username, onVideoClick, onBack, isStaffView 
 
   // const userVideos = videos.filter(v => v.uploaderUsername === username); // Removed: using state.videos.userVideos now
 
-  const isSubscribed = currentUser && subscriptions[currentUser.username]?.includes(username);
+  const isSubscribed = currentUser && user ? followingIds.includes(user.id) : false;
 
   useEffect(() => {
     if (username) {
@@ -71,19 +72,21 @@ export function PublicUserProfile({ username, onVideoClick, onBack, isStaffView 
     );
   }
 
-  const handleSubscribe = () => {
-    if (!currentUser) return;
+  const handleSubscribe = async () => {
+    if (!currentUser || !user) return;
 
-    if (isSubscribed) {
-      dispatch(unsubscribeFromUser({
-        follower: currentUser.username,
-        following: username,
-      }));
-    } else {
-      dispatch(subscribeToUser({
-        follower: currentUser.username,
-        following: username,
-      }));
+    try {
+      if (isSubscribed) {
+        // @ts-ignore
+        await dispatch(unfollowUserThunk({ userId: user.id, username: username })).unwrap();
+        toast.success('Đã bỏ follow');
+      } else {
+        // @ts-ignore
+        await dispatch(followUserThunk({ userId: user.id, username: username })).unwrap();
+        toast.success(`Đã follow ${username}`);
+      }
+    } catch (error) {
+      toast.error('Không thể thực hiện thao tác');
     }
   };
 
@@ -95,14 +98,14 @@ export function PublicUserProfile({ username, onVideoClick, onBack, isStaffView 
     try {
       console.log('📝 Reporting user:', username, 'reason:', reportType);
       await reportUserApi(username, reportType, reportReason || undefined);
-      
+
       // Also update Redux for UI consistency
       dispatch(addUserReport({
         username: username,
         type: reportType,
         reason: reportReason
       }));
-      
+
       toast.success(`Báo cáo user "@${username}" thành công`);
       setShowReportModal(false);
       setReportType('spam');

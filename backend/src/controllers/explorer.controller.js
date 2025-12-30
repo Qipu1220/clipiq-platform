@@ -56,6 +56,7 @@ export async function getExplorerFeed(req, res, next) {
       impressions: parseInt(row.impressions_count) || 0,
       isLiked: row.is_liked || false,
       isSaved: row.is_saved || false,
+      uploaderId: row.uploader_id,
       uploaderUsername: row.username,
       uploaderDisplayName: row.display_name,
       uploaderAvatarUrl: row.avatar_url,

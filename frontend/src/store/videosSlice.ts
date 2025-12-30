@@ -89,7 +89,7 @@ export const fetchPersonalFeedThunk = createAsyncThunk(
       console.log('[Feed] Skipping fetch - profile navigation in progress');
       return { videos: state.videos.videos, pagination: state.videos.pagination, skipped: true };
     }
-    
+
     try {
       console.log('[Feed] Fetching personal feed, limit:', limit);
       const response = await getPersonalFeed(limit);
@@ -105,6 +105,7 @@ export const fetchPersonalFeedThunk = createAsyncThunk(
         duration: item.duration,
         views: item.views,
         uploadDate: item.upload_date,
+        uploaderId: item.uploader_id,
         uploaderUsername: item.uploader_username,
         uploaderDisplayName: item.uploader_display_name,
         uploaderAvatarUrl: item.uploader_avatar,

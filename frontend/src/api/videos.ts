@@ -10,6 +10,7 @@ export interface Video {
   views: number;
   likes: number; // likes count from backend
   comments: number;
+  uploaderId?: string;
   uploaderUsername: string;
   uploaderDisplayName?: string;
   uploaderAvatarUrl?: string;

@@ -31,7 +31,7 @@ import {
   addCommentThunk,
   deleteCommentThunk
 } from '../../store/videosSlice';
-import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
+import { followUserThunk, unfollowUserThunk } from '../../store/notificationsSlice';
 import { reportVideoApi, reportCommentApi } from '../../api/reports';
 import { copyVideoLink, shareVideoApi, generateShareUrl } from '../../api/share';
 import { toast } from 'sonner';
@@ -62,7 +62,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
   const dispatch = useDispatch<AppDispatch>();
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
-  const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
+  const followingIds = useSelector((state: RootState) => state.notifications.followingIds);
   const currentVideoComments = useSelector((state: RootState) => state.videos.currentVideoComments);
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -159,7 +159,8 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
   if (!isOpen || !selectedVideo) return null;
 
   const uploaderInfo = users.find(u => u.username === selectedVideo.uploaderUsername);
-  const isSubscribed = currentUser && subscriptions[currentUser.username]?.includes(selectedVideo.uploaderUsername);
+  const uploaderIdForCheck = selectedVideo.uploaderId || uploaderInfo?.id;
+  const isSubscribed = currentUser && uploaderIdForCheck && followingIds.includes(uploaderIdForCheck);
 
   const formatCount = (count: number | undefined) => {
     if (!count || typeof count !== 'number') return '0';
@@ -262,19 +263,28 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
   const handleSubscribe = async () => {
     if (!currentUser || !selectedVideo || currentUser.username === selectedVideo.uploaderUsername) return;
 
+    // Try to get uploaderId from video first (API response), then from uploaderInfo (fallback)
+    const uploaderId = selectedVideo.uploaderId || uploaderInfo?.id;
+
+    if (!uploaderId) {
+      console.error('[VideoModal] No uploader ID found for:', selectedVideo.uploaderUsername);
+      toast.error('Không thể tìm thấy thông tin người dùng');
+      return;
+    }
+
     setFollowAnimation(true);
     setTimeout(() => setFollowAnimation(false), 500);
 
-    if (isSubscribed) {
-      dispatch(unsubscribeFromUser({
-        follower: currentUser.username,
-        following: selectedVideo.uploaderUsername,
-      }));
-    } else {
-      dispatch(subscribeToUser({
-        follower: currentUser.username,
-        following: selectedVideo.uploaderUsername,
-      }));
+    try {
+      if (isSubscribed) {
+        await dispatch(unfollowUserThunk({ userId: uploaderId, username: selectedVideo.uploaderUsername })).unwrap();
+        toast.success('Đã bỏ follow');
+      } else {
+        await dispatch(followUserThunk({ userId: uploaderId, username: selectedVideo.uploaderUsername })).unwrap();
+        toast.success(`Đã follow ${selectedVideo.uploaderUsername}`);
+      }
+    } catch (error) {
+      toast.error('Không thể thực hiện thao tác');
     }
   };
 

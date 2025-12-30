@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
 import { likeVideo, addComment, incrementViewCount, fetchVideosThunk, toggleLikeVideoThunk, addCommentThunk, fetchCommentsThunk, deleteCommentThunk, toggleSaveVideoThunk, setFocusedVideoId, searchVideosThunk, addVideo, fetchPersonalFeedThunk, setProfileNavigation } from '../../store/videosSlice';
-import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
+import { followUserThunk, unfollowUserThunk, subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { logoutThunk } from '../../store/authSlice';
 import {
   Play, Search, Home, Compass, Users, Video, MessageCircle,
@@ -94,6 +94,8 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
   const videos = allVideos.filter(v => v.processing_status === 'ready' || !v.processing_status);
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
+  const followingIds = useSelector((state: RootState) => state.notifications.followingIds);
+  const followingUsernames = useSelector((state: RootState) => state.notifications.followingUsernames);
   const subscriptions = useSelector((state: RootState) => state.notifications.subscriptions);
   const { pagination, loading, currentVideoComments, focusedVideoId, searchResults, isProfileNavigation } = useSelector((state: RootState) => state.videos);
 
@@ -169,7 +171,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
   const currentVideo = filteredVideos[currentVideoIndex];
   const uploaderInfo = currentVideo ? users.find(u => u.username === currentVideo.uploaderUsername) : null;
   const isSubscribed = currentUser && currentVideo
-    ? subscriptions[currentUser.username]?.includes(currentVideo.uploaderUsername)
+    ? (uploaderInfo ? followingIds.includes(uploaderInfo.id) : followingUsernames.includes(currentVideo.uploaderUsername))
     : false;
 
   // Handle initial video focus from profile click
@@ -425,22 +427,45 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
     setCommentText('');
   };
 
-  const handleSubscribe = () => {
-    if (!currentUser || !currentVideo || currentUser.username === currentVideo.uploaderUsername) return;
-
-    if (isSubscribed) {
-      dispatch(unsubscribeFromUser({
-        follower: currentUser.username,
-        following: currentVideo.uploaderUsername,
-      }));
-    } else {
-      dispatch(subscribeToUser({
-        follower: currentUser.username,
-        following: currentVideo.uploaderUsername,
-      }));
+  const handleSubscribe = async () => {
+    if (!currentUser || !currentVideo || currentUser.username === currentVideo.uploaderUsername) {
+      console.log('[Subscribe] Early return:', { currentUser: !!currentUser, currentVideo: !!currentVideo, isSelf: currentUser?.username === currentVideo?.uploaderUsername });
+      return;
     }
+
+    // Try to get uploaderId from video first (new API), then from users array (fallback)
+    const uploader = users.find(u => u.username === currentVideo.uploaderUsername);
+    const uploaderId = currentVideo.uploaderId || uploader?.id;
+
+    console.log('[Subscribe] Attempting:', {
+      uploaderUsername: currentVideo.uploaderUsername,
+      videoUploaderId: currentVideo.uploaderId,
+      uploaderFromUsers: uploader?.id,
+      finalUploaderId: uploaderId,
+      uploaderFound: !!uploader
+    });
+
+    if (!uploaderId) {
+      console.error('[Subscribe] No uploader ID found for:', currentVideo.uploaderUsername);
+      toast.error('Không thể tìm thấy thông tin người dùng. Vui lòng tải lại trang.');
+      return;
+    }
+
     setFollowAnimation(true);
     setTimeout(() => setFollowAnimation(false), 500);
+
+    try {
+      if (isSubscribed) {
+        await dispatch(unfollowUserThunk({ userId: uploaderId, username: currentVideo.uploaderUsername }) as any).unwrap();
+        toast.success('Đã bỏ follow');
+      } else {
+        await dispatch(followUserThunk({ userId: uploaderId, username: currentVideo.uploaderUsername }) as any).unwrap();
+        toast.success(`Đã follow ${currentVideo.uploaderUsername}`);
+      }
+    } catch (error) {
+      console.error('[Subscribe] Error:', error);
+      toast.error('Không thể thực hiện thao tác');
+    }
   };
 
   const handleCommentClick = () => {
@@ -594,7 +619,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
             <div className="h-px bg-zinc-800 my-3" />
 
             <div className="text-zinc-500 text-xs px-3 mb-2 font-medium">Tài khoản đã follow</div>
-            {subscriptions[currentUser.username]?.slice(0, 8).map((username) => {
+            {followingUsernames.slice(0, 8).map((username) => {
               const user = users.find(u => u.username === username);
               return (
                 <button
@@ -933,7 +958,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
             <div className="h-px bg-zinc-800 my-3" />
 
             <div className="text-zinc-500 text-xs px-3 mb-2 font-medium">Tài khoản đã follow</div>
-            {subscriptions[currentUser.username]?.slice(0, 8).map((username) => {
+            {followingUsernames.slice(0, 8).map((username) => {
               const user = users.find(u => u.username === username);
               return (
                 <button
@@ -970,7 +995,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
           {filteredVideos.map((video, index) => {
             const uploader = users.find(u => u.username === video.uploaderUsername);
             const isVideoLiked = video.isLiked || false;
-            const isVideoSubscribed = subscriptions[currentUser.username]?.includes(video.uploaderUsername);
+            const isVideoSubscribed = uploader ? followingIds.includes(uploader.id) : followingUsernames.includes(video.uploaderUsername);
 
             return (
               <div
@@ -1982,7 +2007,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
             {/* Following List Content */}
             <ScrollArea className="flex-1">
               <div className="p-6">
-                {(!subscriptions[currentUser.username] || subscriptions[currentUser.username].length === 0) ? (
+                {(followingUsernames.length === 0) ? (
                   // Empty State
                   <div className="flex flex-col items-center justify-center py-20 px-6">
                     <div className="w-24 h-24 rounded-full mb-6 flex items-center justify-center" style={{ backgroundColor: 'rgba(255, 59, 92, 0.1)' }}>
@@ -1996,9 +2021,9 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                 ) : (
                   // Grid Layout - TikTok Style
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                    {subscriptions[currentUser.username].map((username) => {
+                    {followingUsernames.map((username) => {
                       const user = users.find(u => u.username === username);
-                      const isCurrentlyFollowing = subscriptions[currentUser.username]?.includes(username);
+                      const isCurrentlyFollowing = followingUsernames.includes(username);
 
                       return (
                         <div

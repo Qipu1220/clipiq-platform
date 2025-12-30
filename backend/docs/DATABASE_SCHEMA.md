@@ -1,505 +1,413 @@
-# ClipIQ Platform - Database Schema
+# ClipIQ Database Schema Documentation
 
-**Date:** 2025-11-24  
-**Database:** PostgreSQL 14+  
-**Primary Keys:** UUID (using `gen_random_uuid()`)
+> **Last Updated:** 2025-12-30  
+> **Database:** PostgreSQL with UUID Primary Keys  
+> **Total Tables:** 17
 
 ## Overview
 
-ClipIQ is a YouTube-like video streaming platform with role-based access control and comprehensive moderation features.
-
-**Key Features:**
-- Video streaming (files stored in MinIO S3)
-- User management (Admin/Staff/User roles)
-- Comments with nested replies
-- Social features (likes, subscriptions, notifications)
-- Moderation system (reports, appeals)
-- Analytics (view history)
-- Playlists
+ClipIQ uses a PostgreSQL database with UUID primary keys for all entities. The schema supports:
+- Multi-role user system (admin, staff, user)
+- Video management with processing states
+- Social features (likes, comments, subscriptions, shares)
+- Content moderation (reports, appeals, bans, warnings)
+- Analytics (impressions, view history)
+- Playlists and saved videos
 
 ---
 
-## Tables Summary
+## Table Summary
 
-| Table | Purpose | Records (Initial) |
-|-------|---------|-------------------|
-| `users` | User accounts with roles | 62 (2 admin + 10 staff + 50 users) |
-| `videos` | Video metadata | 100 |
-| `comments` | Video comments with replies | - |
-| `likes` | User-video likes | - |
-| `subscriptions` | User follows | - |
-| `notifications` | User notifications | - |
-| `user_reports` | Report user violations | - |
-| `video_reports` | Report video violations | - |
-| `appeals` | Ban appeals | - |
-| `view_history` | Watch analytics | - |
-| `playlists` | User playlists | - |
-| `playlist_videos` | Playlist-video junction | - |
-| `system_settings` | Configuration | ~20+ settings |
+| Table | Description | Key Features |
+|-------|-------------|--------------|
+| `users` | User accounts | Roles, bans, warnings, profiles |
+| `videos` | Video metadata | Processing status, denormalized counts |
+| `comments` | Video comments | Nested replies support |
+| `likes` | User-video likes | Many-to-many junction |
+| `user_reports` | User violation reports | Staff moderation |
+| `video_reports` | Video violation reports | Staff moderation |
+| `comment_reports` | Comment violation reports | Staff moderation |
+| `appeals` | Ban appeals | User appeal system |
+| `subscriptions` | User follows | Self-referencing M:M |
+| `notifications` | User notifications | Multiple event types |
+| `shares` | Video shares | Social sharing tracking |
+| `playlists` | User playlists | Public/private/unlisted |
+| `playlist_videos` | Playlist-video junction | Ordered videos |
+| `view_history` | Watch history | Duration tracking |
+| `impressions` | Feed impressions | Recommendation analytics |
+| `system_settings` | Global config | Key-value store |
+| `system_logs` | Admin actions log | Audit trail |
 
 ---
 
 ## Core Tables
 
-### 1. `users`
+### users
 
-User accounts with role-based access control.
+Core user table supporting admin, staff, and regular users.
 
-```sql
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    username VARCHAR(50) UNIQUE NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'user', -- 'admin' | 'staff' | 'user'
-    password VARCHAR(255) NOT NULL, -- bcrypt hashed
-    banned BOOLEAN DEFAULT FALSE,
-    ban_expiry TIMESTAMP NULL, -- NULL = permanent ban
-    ban_reason TEXT NULL,
-    warnings INTEGER DEFAULT 0,
-    display_name VARCHAR(100),
-    bio TEXT,
-    avatar_url VARCHAR(500), -- MinIO S3 URL
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, default | Unique identifier |
+| `username` | VARCHAR(50) | UNIQUE, NOT NULL | Display username |
+| `email` | VARCHAR(255) | UNIQUE, NOT NULL | Account email |
+| `role` | VARCHAR(20) | NOT NULL, CHECK | 'admin', 'staff', 'user' |
+| `password` | VARCHAR(255) | NOT NULL | Bcrypt hash |
+| `banned` | BOOLEAN | default: false | Ban status |
+| `ban_expiry` | TIMESTAMP | NULL | NULL = permanent ban |
+| `ban_reason` | TEXT | NULL | Shown to user |
+| `warnings` | INTEGER | default: 0, CHECK >= 0 | Warning count (0-3) |
+| `is_demoted` | BOOLEAN | default: false | Demoted staff flag |
+| `display_name` | VARCHAR(100) | NULL | Optional display name |
+| `bio` | TEXT | NULL | User biography |
+| `avatar_url` | VARCHAR(500) | NULL | MinIO S3 URL |
+| `created_at` | TIMESTAMP | default: NOW | Account creation |
+| `updated_at` | TIMESTAMP | default: NOW | Last update |
 
-**Indexes:**
-- `username`, `email`, `role`
-- `(banned, ban_expiry)` WHERE banned = TRUE
-- `created_at`
+### videos
 
-**Roles:**
-- `admin` - Full system access, user management, toggle maintenance mode
-- `staff` - Content moderation, review reports/appeals
-- `user` - Regular user (upload videos, comment, like, subscribe)
+Video metadata (files stored in MinIO S3).
 
----
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Video identifier |
+| `title` | VARCHAR(255) | NOT NULL | Video title |
+| `description` | TEXT | NULL | Video description |
+| `uploader_id` | UUID | FK → users, NOT NULL | Uploader reference |
+| `thumbnail_url` | VARCHAR(500) | NULL | Thumbnail S3 URL |
+| `video_url` | VARCHAR(500) | NOT NULL | Video S3 URL/key |
+| `duration` | INTEGER | CHECK >= 0 | Duration in seconds |
+| `views` | INTEGER | default: 0 | View count |
+| `likes_count` | INTEGER | default: 0 | Cached like count |
+| `comments_count` | INTEGER | default: 0 | Cached comment count |
+| `shares_count` | INTEGER | default: 0 | Cached share count |
+| `status` | VARCHAR(20) | CHECK | 'active', 'deleted', 'flagged' |
+| `processing_status` | VARCHAR(20) | CHECK | 'processing', 'ready', 'failed' |
+| `upload_date` | TIMESTAMP | default: NOW | Upload timestamp |
+| `created_at` | TIMESTAMP | default: NOW | Creation time |
+| `updated_at` | TIMESTAMP | default: NOW | Last update |
 
-### 2. `videos`
+### comments
 
-Video metadata (actual video files stored in MinIO S3).
+User comments on videos with nested reply support.
 
-```sql
-CREATE TABLE videos (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    uploader_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    thumbnail_url VARCHAR(500), -- MinIO S3 URL
-    video_url VARCHAR(500) NOT NULL, -- MinIO S3 key
-    duration INTEGER, -- seconds
-    views INTEGER DEFAULT 0,
-    status VARCHAR(20) DEFAULT 'active', -- 'active' | 'deleted' | 'flagged'
-    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Comment identifier |
+| `video_id` | UUID | FK → videos, NOT NULL | Video reference |
+| `user_id` | UUID | FK → users, NOT NULL | Author reference |
+| `parent_id` | UUID | FK → comments, NULL | Parent for nested replies |
+| `text` | TEXT | NOT NULL | Comment content |
+| `edited` | BOOLEAN | default: false | Edit flag |
+| `created_at` | TIMESTAMP | default: NOW | Creation time |
+| `updated_at` | TIMESTAMP | default: NOW | Last update |
 
-**Indexes:**
-- `uploader_id`
-- `upload_date DESC`, `views DESC`
-- `status`
-- Full-text search on `title` (GIN index)
+### likes
 
-**Storage:**
-- Videos: `clipiq-videos` bucket in MinIO
-- Thumbnails: `clipiq-thumbnails` bucket in MinIO
+Junction table for user-video likes (Many-to-Many).
 
----
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Like identifier |
+| `user_id` | UUID | FK → users, NOT NULL | User reference |
+| `video_id` | UUID | FK → videos, NOT NULL | Video reference |
+| `created_at` | TIMESTAMP | default: NOW | Like timestamp |
 
-### 3. `comments`
-
-Comments on videos with nested reply support.
-
-```sql
-CREATE TABLE comments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    parent_id UUID REFERENCES comments(id) ON DELETE CASCADE, -- nested replies
-    text TEXT NOT NULL,
-    edited BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-**Indexes:**
-- `video_id`, `user_id`, `parent_id`
-- `created_at DESC`
-
-**Note:** `parent_id` is NULL for top-level comments, otherwise references parent comment.
+**Constraints:**
+- `UNIQUE (user_id, video_id)` - One like per user per video
 
 ---
 
-### 4. `likes`
+## Content Moderation Tables
 
-Many-to-many junction table for user-video likes.
+### user_reports
 
-```sql
-CREATE TABLE likes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (user_id, video_id)
-);
-```
+Reports about user violations.
 
-**Indexes:**
-- `user_id`, `video_id`
-- `created_at DESC`
-- **Unique constraint:** `(user_id, video_id)`
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Report identifier |
+| `reported_user_id` | UUID | User being reported |
+| `reported_by_id` | UUID | Reporter |
+| `reason` | TEXT | Report reason |
+| `evidence_url` | VARCHAR(500) | Optional evidence |
+| `status` | VARCHAR(20) | 'pending', 'reviewed', 'resolved' |
+| `reviewed_by_id` | UUID | Staff reviewer |
+| `reviewed_at` | TIMESTAMP | Review timestamp |
+| `resolution_note` | TEXT | Resolution details |
+| `created_at` | TIMESTAMP | Report creation |
+
+### video_reports
+
+Reports about video violations.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Report identifier |
+| `video_id` | UUID | Video being reported |
+| `reported_by_id` | UUID | Reporter |
+| `reason` | TEXT | Report reason |
+| `evidence_url` | VARCHAR(500) | Optional evidence |
+| `status` | VARCHAR(20) | 'pending', 'reviewed', 'resolved' |
+| `reviewed_by_id` | UUID | Staff reviewer |
+| `reviewed_at` | TIMESTAMP | Review timestamp |
+| `resolution_note` | TEXT | Resolution details |
+| `created_at` | TIMESTAMP | Report creation |
+
+### comment_reports
+
+Reports about comment violations.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Report identifier |
+| `comment_id` | UUID | Comment being reported |
+| `reported_by_id` | UUID | Reporter |
+| `reason` | TEXT | Violation type with details |
+| `evidence_url` | VARCHAR(500) | Optional evidence |
+| `status` | VARCHAR(20) | 'pending', 'reviewed', 'resolved' |
+| `reviewed_by_id` | UUID | Staff reviewer |
+| `reviewed_at` | TIMESTAMP | Review timestamp |
+| `resolution_note` | TEXT | Resolution details |
+| `created_at` | TIMESTAMP | Report creation |
+
+### appeals
+
+Ban appeals from users.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Appeal identifier |
+| `user_id` | UUID | User submitting appeal |
+| `reason` | TEXT | Appeal reason/explanation |
+| `status` | VARCHAR(20) | 'pending', 'approved', 'denied' |
+| `reviewed_by_id` | UUID | Staff reviewer |
+| `reviewed_at` | TIMESTAMP | Review timestamp |
+| `resolution_note` | TEXT | Resolution details |
+| `created_at` | TIMESTAMP | Appeal creation |
 
 ---
 
-## Social Features
+## Social Features Tables
 
-### 5. `subscriptions`
+### subscriptions
 
-User subscriptions (follows) - self-referencing many-to-many.
+User follow relationships (self-referencing M:M).
 
-```sql
-CREATE TABLE subscriptions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CHECK (follower_id != following_id),
-    UNIQUE (follower_id, following_id)
-);
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Subscription identifier |
+| `follower_id` | UUID | User following (subscriber) |
+| `following_id` | UUID | User being followed |
+| `created_at` | TIMESTAMP | Subscription time |
 
-**Indexes:**
-- `follower_id`, `following_id`
-- `created_at DESC`
-- **Unique constraint:** `(follower_id, following_id)`
+**Constraints:**
+- `UNIQUE (follower_id, following_id)`
+- `CHECK (follower_id != following_id)` - No self-follow
 
-**Note:** Users cannot subscribe to themselves.
+### notifications
 
----
+User notifications for various events.
 
-### 6. `notifications`
-
-Extensible notification system for various events.
-
-```sql
-CREATE TABLE notifications (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    type VARCHAR(50) NOT NULL, -- see types below
-    receiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    video_id UUID REFERENCES videos(id) ON DELETE SET NULL,
-    comment_id UUID REFERENCES comments(id) ON DELETE SET NULL,
-    message TEXT,
-    read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Notification identifier |
+| `type` | VARCHAR(50) | Event type (see below) |
+| `receiver_id` | UUID | Recipient user |
+| `actor_id` | UUID | Triggering user (NULL for system) |
+| `video_id` | UUID | Related video (if applicable) |
+| `comment_id` | UUID | Related comment (if applicable) |
+| `message` | TEXT | Custom message (optional) |
+| `read` | BOOLEAN | Read status |
+| `created_at` | TIMESTAMP | Notification time |
 
 **Notification Types:**
-- `new_video` - Subscribed channel uploaded new video
-- `new_comment` - Someone commented on your video
-- `new_like` - Someone liked your video
-- `new_subscriber` - Someone subscribed to you
-- `video_flagged` - Your video was flagged by staff
-- `ban_warning` - Warning issued
-- `ban_appeal_resolved` - Appeal decision
+- `new_video`, `new_comment`, `new_like`, `new_subscriber`
+- `video_flagged`, `ban_warning`, `ban_appeal_resolved`
 
-**Indexes:**
-- `receiver_id`, `type`, `read`
-- `created_at DESC`
-- `(receiver_id, read)` WHERE read = FALSE
+### shares
 
----
+Video sharing tracking.
 
-## Moderation System
-
-### 7. `user_reports`
-
-Reports about user violations (harassment, spam, etc.).
-
-```sql
-CREATE TABLE user_reports (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reported_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reported_by_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reason TEXT NOT NULL,
-    evidence_url VARCHAR(500), -- screenshot/link
-    status VARCHAR(20) DEFAULT 'pending', -- 'pending' | 'reviewed' | 'resolved'
-    reviewed_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    reviewed_at TIMESTAMP,
-    resolution_note TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CHECK (reported_user_id != reported_by_id)
-);
-```
-
-**Indexes:**
-- `status`, `reported_user_id`, `reported_by_id`
-- `created_at DESC`
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Share identifier |
+| `user_id` | UUID | User who shared (NULL for anonymous) |
+| `video_id` | UUID | Video shared |
+| `share_type` | VARCHAR(50) | 'link', 'facebook', 'twitter', etc. |
+| `created_at` | TIMESTAMP | Share timestamp |
 
 ---
 
-### 8. `video_reports`
+## Playlist Tables
 
-Reports about video violations (inappropriate content, copyright, etc.).
-
-```sql
-CREATE TABLE video_reports (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-    reported_by_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reason TEXT NOT NULL,
-    evidence_url VARCHAR(500),
-    status VARCHAR(20) DEFAULT 'pending',
-    reviewed_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    reviewed_at TIMESTAMP,
-    resolution_note TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-**Indexes:**
-- `status`, `video_id`, `reported_by_id`
-- `created_at DESC`
-
----
-
-### 9. `appeals`
-
-Ban appeals submitted by users.
-
-```sql
-CREATE TABLE appeals (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reason TEXT NOT NULL,
-    status VARCHAR(20) DEFAULT 'pending', -- 'pending' | 'approved' | 'denied'
-    reviewed_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    reviewed_at TIMESTAMP,
-    resolution_note TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-**Indexes:**
-- `status`, `user_id`
-- `created_at DESC`
-
----
-
-## Analytics & Features
-
-### 10. `view_history`
-
-Track user viewing history and watch time.
-
-```sql
-CREATE TABLE view_history (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-    watch_duration INTEGER, -- seconds watched
-    completed BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-**Indexes:**
-- `user_id`, `video_id`
-- `(user_id, video_id)`
-- `created_at DESC`
-
----
-
-### 11. `playlists`
+### playlists
 
 User-created playlists.
 
-```sql
-CREATE TABLE playlists (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    visibility VARCHAR(20) DEFAULT 'public', -- 'public' | 'unlisted' | 'private'
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Playlist identifier |
+| `user_id` | UUID | Playlist owner |
+| `name` | VARCHAR(255) | Playlist name |
+| `description` | TEXT | Optional description |
+| `visibility` | VARCHAR(20) | 'public', 'unlisted', 'private' |
+| `created_at` | TIMESTAMP | Creation time |
+| `updated_at` | TIMESTAMP | Last update |
 
-**Indexes:**
-- `user_id`, `visibility`
-- `created_at DESC`
+### playlist_videos
 
----
+Junction table for playlist-video relationships.
 
-### 12. `playlist_videos`
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Entry identifier |
+| `playlist_id` | UUID | Playlist reference |
+| `video_id` | UUID | Video reference |
+| `position` | INTEGER | Order position in playlist |
+| `added_at` | TIMESTAMP | Addition timestamp |
 
-Junction table linking playlists to videos with ordering.
-
-```sql
-CREATE TABLE playlist_videos (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    playlist_id UUID NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
-    video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-    position INTEGER NOT NULL, -- order in playlist
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (playlist_id, video_id),
-    UNIQUE (playlist_id, position)
-);
-```
-
-**Indexes:**
-- `playlist_id`, `video_id`
-- `(playlist_id, position)`
-- **Unique constraints:** 
-  - `(playlist_id, video_id)` - No duplicate videos
-  - `(playlist_id, position)` - No duplicate positions
+**Constraints:**
+- `UNIQUE (playlist_id, video_id)`
+- `UNIQUE (playlist_id, position)`
 
 ---
 
-## System Configuration
+## Analytics Tables
 
-### 13. `system_settings`
+### view_history
+
+User video view tracking.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Entry identifier |
+| `user_id` | UUID | Viewer |
+| `video_id` | UUID | Video watched |
+| `watch_duration` | INTEGER | Seconds watched |
+| `completed` | BOOLEAN | Full video watched |
+| `impression_id` | UUID | Related impression |
+| `created_at` | TIMESTAMP | View timestamp |
+
+### impressions
+
+Feed impression tracking for recommendation analytics.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Impression identifier |
+| `user_id` | UUID | User viewing feed |
+| `video_id` | UUID | Video shown |
+| `session_id` | UUID | Client session |
+| `position` | INTEGER | Position in feed |
+| `source` | TEXT | 'personal', 'trending', 'random' |
+| `model_version` | TEXT | Recommendation model version |
+| `shown_at` | TIMESTAMP | Display timestamp |
+
+---
+
+## System Tables
+
+### system_settings
 
 Global configuration key-value store.
 
-```sql
-CREATE TABLE system_settings (
-    key VARCHAR(100) PRIMARY KEY,
-    value TEXT NOT NULL,
-    description TEXT,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+| Key | Default Value | Description |
+|-----|---------------|-------------|
+| `maintenance_mode` | 'false' | Full maintenance mode |
+| `service_maintenance_mode` | 'false' | Staff-accessible maintenance |
+| `app_version` | '1.0.0' | Application version |
+| `max_video_size_mb` | '500' | Max video file size |
+| `max_upload_per_day` | '10' | Daily upload limit |
+| `max_video_duration_minutes` | '60' | Max video duration |
 
-**Default Settings:**
-- `maintenance_mode` - Enable/disable maintenance mode
-- `app_version` - Current application version
-- `max_video_size_mb` - Maximum video file size
-- `max_upload_per_day` - Maximum uploads per user per day
-- `max_video_duration_minutes` - Maximum video length
+### system_logs
 
----
+Audit log for admin/staff actions.
 
-## Relationships
-
-### One-to-Many (1:N)
-- `users` → `videos` (uploader)
-- `users` → `comments` (author)
-- `videos` → `comments` (video comments)
-- `comments` → `comments` (nested replies)
-- `users` → `notifications` (receiver)
-- `users` → `playlists` (owner)
-- `users` → `appeals` (appellant)
-
-### Many-to-Many (M:N)
-- `users` ↔ `videos` (via `likes`)
-- `users` ↔ `users` (via `subscriptions`)
-- `playlists` ↔ `videos` (via `playlist_videos`)
-
-### Moderation Chain
-- `users` → `user_reports` (reporter)
-- `users` → `video_reports` (reporter)
-- `staff/admin` → `user_reports` (reviewer)
-- `staff/admin` → `video_reports` (reviewer)
-- `staff/admin` → `appeals` (reviewer)
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Log entry identifier |
+| `action_type` | VARCHAR(50) | Action type (e.g., 'user_banned') |
+| `performed_by_id` | UUID | Admin/staff who acted |
+| `target_user_id` | UUID | Affected user |
+| `target_video_id` | UUID | Affected video |
+| `details` | TEXT | Human-readable description |
+| `metadata` | JSONB | Additional structured data |
+| `created_at` | TIMESTAMP | Action timestamp |
 
 ---
 
-## Migrations
-
-Database schema is managed through numbered migration files:
+## Entity Relationship Diagram
 
 ```
-backend/src/database/migrations/
-├── 001_create_users_table.sql
-├── 002_create_videos_table.sql
-├── 003_create_comments_table.sql
-├── 004_create_likes_table.sql
-├── 005_create_reports_tables.sql
-├── 006_create_subscriptions_table.sql
-├── 007_create_notifications_table.sql
-├── 008_create_system_settings_table.sql
-├── 009_create_view_history_table.sql
-└── 010_create_playlists_tables.sql
-```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│   users     │────<│    videos    │────<│  comments   │
+└─────────────┘     └──────────────┘     └─────────────┘
+      │                    │                    │
+      │ ┌──────────────────┼────────────────────┤
+      │ │                  │                    │
+      │ │    ┌─────────────┴─────────────┐      │
+      │ │    │                           │      │
+      ▼ ▼    ▼                           ▼      ▼
+┌──────────┐ ┌──────────────┐  ┌────────────────────┐
+│  likes   │ │ video_reports│  │  comment_reports   │
+└──────────┘ └──────────────┘  └────────────────────┘
 
-**Run migrations:**
-```bash
-npm run migrate
-# or
-make migrate
+┌─────────────┐     ┌────────────────┐
+│   users     │────<│  subscriptions │>────│ users │
+└─────────────┘     └────────────────┘
+
+┌─────────────┐     ┌─────────────┐     ┌───────────────────┐
+│   users     │────<│  playlists  │────<│  playlist_videos  │
+└─────────────┘     └─────────────┘     └───────────────────┘
+                                               │
+                                               ▼
+                                        ┌──────────────┐
+                                        │    videos    │
+                                        └──────────────┘
+
+┌─────────────┐     ┌─────────────┐     ┌──────────────┐
+│   users     │────<│ impressions │────>│    videos    │
+└─────────────┘     └─────────────┘     └──────────────┘
+      │                    │
+      │                    ▼
+      │             ┌──────────────┐
+      └────────────>│ view_history │
+                    └──────────────┘
 ```
 
 ---
 
-## Seeding
+## Indexes Summary
 
-Database is auto-seeded on first startup with:
-- 2 admin accounts
-- 10 staff accounts
-- 50 regular users
-- 100 sample videos (2 per user)
-- System settings
-
-**Manual seeding:**
-```bash
-npm run seed
-# or
-make seed
-```
+Key indexes for query performance:
+- Users: username, email, role, banned status
+- Videos: uploader_id, upload_date, views, likes_count, status, processing_status
+- Comments: video_id, user_id, parent_id, created_at
+- Reports: status, created_at (all report tables)
+- Subscriptions: follower_id, following_id
+- Notifications: receiver_id, read status, type
 
 ---
 
-## Indexes Strategy
+## Triggers
 
-**Performance indexes:**
-- Foreign keys (all have indexes)
-- Frequently queried columns (status, role, created_at)
-- Full-text search (video titles)
-- Composite indexes for common queries
+1. **update_updated_at_column()** - Auto-updates `updated_at` on record changes
+   - Applied to: users, videos, comments, playlists, system_settings
 
-**Unique constraints:**
-- Prevent duplicate likes
-- Prevent duplicate subscriptions
-- Prevent self-subscriptions
-- Prevent self-reporting
+2. **update_video_shares_count()** - Auto-updates `videos.shares_count` on share insert/delete
 
 ---
 
-## Storage
+## Foreign Key Behavior
 
-**PostgreSQL:** All relational data
-**MinIO S3:** File storage
-- `clipiq-videos` - Video files
-- `clipiq-thumbnails` - Thumbnail images  
-- `clipiq-avatars` - User avatar images
-
----
-
-## Security
-
-- **UUID Primary Keys:** Non-sequential, harder to guess
-- **Bcrypt Passwords:** Hashed with salt
-- **ON DELETE CASCADE:** Automatic cleanup
-- **CHECK Constraints:** Data validation at DB level
-- **Foreign Keys:** Referential integrity
-- **Unique Constraints:** Prevent duplicates
-
----
-
-## DBML Diagram
-
-View visual database diagram at: https://dbdiagram.io/
-
-Import `DATABASE_SCHEMA.dbml` to see interactive ERD.
-
----
-
-**Last Updated:** 2025-11-24  
-**Schema Version:** 1.0
+| Relationship | ON DELETE |
+|--------------|-----------|
+| videos → users | CASCADE |
+| comments → videos/users | CASCADE |
+| likes → users/videos | CASCADE |
+| reports → related entity | CASCADE |
+| reports.reviewed_by → users | SET NULL |
+| notifications.actor → users | SET NULL |
+| shares.user → users | SET NULL |
