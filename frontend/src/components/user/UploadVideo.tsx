@@ -35,11 +35,7 @@ export function UploadVideo({ onUploadComplete }: UploadVideoProps) {
         setError('Vui lòng chọn file video');
         return;
       }
-      // Check file size (max 100MB)
-      if (file.size > 100 * 1024 * 1024) {
-        setError('File video không được vượt quá 100MB');
-        return;
-      }
+
       setVideoFile(file);
       setError('');
     }
@@ -236,7 +232,7 @@ export function UploadVideo({ onUploadComplete }: UploadVideoProps) {
                           </div>
                         ) : (
                           <p className="text-zinc-400">
-                            Click để chọn video (tối đa 100MB)
+                            Click để chọn video
                           </p>
                         )}
                       </div>

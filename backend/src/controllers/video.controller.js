@@ -12,6 +12,7 @@ import * as VideoService from '../services/video.service.js';
 import * as LikeService from '../services/like.service.js';
 import * as CommentService from '../services/comment.service.js';
 import * as PlaylistService from '../services/playlist.service.js';
+import { SystemSettings } from '../models/SystemSettings.js';
 
 /**
  * GET /api/v1/videos - Get video feed (For You / Following)
@@ -103,6 +104,23 @@ export async function uploadVideo(req, res, next) {
 
     const videoFile = req.files.video[0];
     const thumbnailFile = req.files.thumbnail ? req.files.thumbnail[0] : null;
+
+    // Validate file size against admin settings
+    try {
+      const settings = await SystemSettings.getSettings(['max_upload_size_mb']);
+      const maxSizeMB = parseInt(settings.max_upload_size_mb || '500');
+      const fileSizeMB = videoFile.size / (1024 * 1024);
+
+      if (fileSizeMB > maxSizeMB) {
+        throw new ApiError(400, `Video quá lớn. Giới hạn tối đa là ${maxSizeMB}MB, file của bạn là ${fileSizeMB.toFixed(1)}MB`);
+      }
+    } catch (settingsError) {
+      // If settings check fails, log but continue with upload (don't block on settings error)
+      if (settingsError instanceof ApiError) {
+        throw settingsError;
+      }
+      console.warn('Could not check upload size limit:', settingsError.message);
+    }
 
     // Import upload service dynamically
     const uploadService = await import('../services/upload.service.js');

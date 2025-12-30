@@ -1666,15 +1666,6 @@ export function AdminDashboard({ onVideoClick, onViewUserProfile }: AdminDashboa
                     ) : (
                       <>
                         <div>
-                          <Label className="text-zinc-400 mb-2 block text-sm">Tên ứng dụng</Label>
-                          <Input
-                            value={generalSettingsForm.siteName}
-                            onChange={(e) => setGeneralSettingsForm({ ...generalSettingsForm, siteName: e.target.value })}
-                            className="bg-zinc-900/50 border-zinc-800/50 text-white h-11 rounded-lg focus:border-zinc-700"
-                            placeholder="Nhập tên ứng dụng"
-                          />
-                        </div>
-                        <div>
                           <Label className="text-zinc-400 mb-2 block text-sm">Giới hạn upload (MB)</Label>
                           <Input
                             type="number"
