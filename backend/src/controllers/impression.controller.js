@@ -6,7 +6,6 @@
  */
 
 import * as impressionService from '../services/impression.service.js';
-import pool from '../config/database.js';
 import ApiError from '../utils/apiError.js';
 
 /**
@@ -54,17 +53,14 @@ export async function logImpression(req, res, next) {
             return next(new ApiError(403, 'User ID mismatch'));
         }
 
-        // Verify video exists and is active
-        const videoResult = await pool.query(
-            'SELECT id, status FROM videos WHERE id = $1',
-            [video_id]
-        );
+        // Verify video exists and is active (using service)
+        const video = await impressionService.getVideoForImpression(video_id);
 
-        if (videoResult.rows.length === 0) {
+        if (!video) {
             return next(new ApiError(404, 'Video not found'));
         }
 
-        if (videoResult.rows[0].status !== 'active') {
+        if (video.status !== 'active') {
             return next(new ApiError(400, 'Video is not active'));
         }
 
@@ -133,13 +129,10 @@ export async function logWatch(req, res, next) {
             return next(new ApiError(403, 'User ID mismatch'));
         }
 
-        // Verify video exists
-        const videoResult = await pool.query(
-            'SELECT id FROM videos WHERE id = $1',
-            [video_id]
-        );
+        // Verify video exists (using service)
+        const videoExists = await impressionService.videoExists(video_id);
 
-        if (videoResult.rows.length === 0) {
+        if (!videoExists) {
             return next(new ApiError(404, 'Video not found'));
         }
 

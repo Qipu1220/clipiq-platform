@@ -109,15 +109,15 @@ export async function resolveVideoReport(reportId, action, reviewedById, note) {
     // Delete the video (soft delete - set status to 'deleted')
     await pool.query("UPDATE videos SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [report.video_id]);
   } else if (action === 'ban_user') {
-    // Ban the video uploader
+    // Ban the video uploader (permanent ban - ban_expiry = NULL)
     await pool.query(
-      'UPDATE users SET banned = true, ban_reason = $1, banned_at = CURRENT_TIMESTAMP WHERE id = $2',
+      'UPDATE users SET banned = true, ban_reason = $1, ban_expiry = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [`Reported video violated guidelines: ${report.reason}`, report.video_uploader_id]
     );
   } else if (action === 'warn_user') {
     // Increment warning count
     await pool.query(
-      'UPDATE users SET warnings = warnings + 1 WHERE id = $1',
+      'UPDATE users SET warnings = warnings + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
       [report.video_uploader_id]
     );
   }
@@ -221,15 +221,15 @@ export async function resolveUserReport(reportId, action, reviewedById, note) {
 
   // Perform the action based on the decision
   if (action === 'ban_user') {
-    // Ban the reported user
+    // Ban the reported user (permanent ban - ban_expiry = NULL)
     await pool.query(
-      'UPDATE users SET banned = true, ban_reason = $1, banned_at = CURRENT_TIMESTAMP WHERE id = $2',
+      'UPDATE users SET banned = true, ban_reason = $1, ban_expiry = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [`User behavior violated guidelines: ${report.reason}`, report.reported_user_id]
     );
   } else if (action === 'warn_user') {
     // Increment warning count
     await pool.query(
-      'UPDATE users SET warnings = warnings + 1 WHERE id = $1',
+      'UPDATE users SET warnings = warnings + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
       [report.reported_user_id]
     );
   } else if (action === 'delete_content') {

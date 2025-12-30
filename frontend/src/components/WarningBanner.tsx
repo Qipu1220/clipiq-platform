@@ -3,14 +3,12 @@ import { useState } from 'react';
 interface WarningBannerProps {
   warnings: number;
   username: string;
-  userRole?: 'admin' | 'staff' | 'user';
 }
 
-export function WarningBanner({ warnings, username, userRole = 'user' }: WarningBannerProps) {
+export function WarningBanner({ warnings, username }: WarningBannerProps) {
   const [isMinimized, setIsMinimized] = useState(false);
 
-  // Don't show banner for staff/admin or if no warnings
-  if (warnings === 0 || userRole !== 'user') return null;
+  if (warnings === 0) return null;
 
   const getAccentColor = () => {
     if (warnings >= 3) return '#ef4444'; // red-500
@@ -82,17 +80,17 @@ export function WarningBanner({ warnings, username, userRole = 'user' }: Warning
         overflow: 'hidden'
       }}>
         {/* Header */}
-        <div style={{ 
-          padding: '16px 20px', 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'space-between',
           borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ 
-              width: '40px', 
-              height: '40px', 
+            <div style={{
+              width: '40px',
+              height: '40px',
               borderRadius: '10px',
               background: `${getAccentColor()}15`,
               display: 'flex',
@@ -113,7 +111,7 @@ export function WarningBanner({ warnings, username, userRole = 'user' }: Warning
           </div>
           <button
             onClick={() => setIsMinimized(true)}
-            style={{ 
+            style={{
               color: '#71717a',
               background: 'rgba(255, 255, 255, 0.05)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -142,24 +140,24 @@ export function WarningBanner({ warnings, username, userRole = 'user' }: Warning
         <div style={{ padding: '20px' }}>
           {/* Warning count badge */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-            <div style={{ 
+            <div style={{
               background: `${getAccentColor()}10`,
-              borderRadius: '12px', 
+              borderRadius: '12px',
               padding: '10px 20px',
               border: `1px solid ${getAccentColor()}25`,
               boxShadow: `0 0 20px ${getAccentColor()}15`
             }}>
-              <span style={{ 
-                color: getAccentColor(), 
-                fontWeight: '700', 
+              <span style={{
+                color: getAccentColor(),
+                fontWeight: '700',
                 fontSize: '22px',
                 letterSpacing: '-0.02em'
               }}>
                 {warnings}
               </span>
-              <span style={{ 
-                color: '#d4d4d8', 
-                fontWeight: '500', 
+              <span style={{
+                color: '#d4d4d8',
+                fontWeight: '500',
                 fontSize: '15px',
                 marginLeft: '8px'
               }}>
@@ -169,11 +167,11 @@ export function WarningBanner({ warnings, username, userRole = 'user' }: Warning
           </div>
 
           {/* Message */}
-          <p style={{ 
-            color: '#e4e4e7', 
-            fontSize: '13px', 
-            textAlign: 'center', 
-            marginBottom: '20px', 
+          <p style={{
+            color: '#e4e4e7',
+            fontSize: '13px',
+            textAlign: 'center',
+            marginBottom: '20px',
             lineHeight: '1.6',
             fontWeight: '400'
           }}>
@@ -182,11 +180,11 @@ export function WarningBanner({ warnings, username, userRole = 'user' }: Warning
 
           {/* Progress bar */}
           <div style={{ marginBottom: '16px' }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              fontSize: '11px', 
-              color: '#a1a1aa', 
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '11px',
+              color: '#a1a1aa',
               marginBottom: '8px',
               fontWeight: '500',
               textTransform: 'uppercase',
@@ -195,19 +193,19 @@ export function WarningBanner({ warnings, username, userRole = 'user' }: Warning
               <span>Mức độ</span>
               <span style={{ color: getAccentColor(), fontWeight: '600' }}>{warnings}/3</span>
             </div>
-            <div style={{ 
-              width: '100%', 
-              background: 'rgba(255, 255, 255, 0.06)', 
-              borderRadius: '6px', 
-              height: '6px', 
+            <div style={{
+              width: '100%',
+              background: 'rgba(255, 255, 255, 0.06)',
+              borderRadius: '6px',
+              height: '6px',
               overflow: 'hidden',
               border: '1px solid rgba(255, 255, 255, 0.05)'
             }}>
               <div
-                style={{ 
+                style={{
                   background: `linear-gradient(90deg, ${getAccentColor()} 0%, ${getAccentColor()}90 100%)`,
-                  height: '100%', 
-                  borderRadius: '6px', 
+                  height: '100%',
+                  borderRadius: '6px',
                   transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
                   width: `${Math.min((warnings / 3) * 100, 100)}%`,
                   boxShadow: `0 0 12px ${getAccentColor()}60`

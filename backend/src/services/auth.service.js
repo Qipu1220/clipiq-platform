@@ -66,6 +66,34 @@ export async function authenticateUser(login, password) {
     );
   }
 
+  // Check if user is banned
+  if (user.banned) {
+    const now = new Date();
+    // Check if ban has expired (ban_expiry = NULL means permanent ban)
+    if (!user.ban_expiry || new Date(user.ban_expiry) > now) {
+      console.log(`[Auth] Login blocked - User ${user.username} is banned. Reason: ${user.ban_reason}`);
+      throw ApiError.forbidden(
+        'Your account has been banned',
+        'USER_BANNED',
+        {
+          reason: user.ban_reason,
+          expiry: user.ban_expiry,
+          permanent: !user.ban_expiry
+        }
+      );
+    } else {
+      // Ban has expired, unban the user
+      console.log(`[Auth] Ban expired for user ${user.username}, unbanning...`);
+      await pool.query(
+        'UPDATE users SET banned = false, ban_reason = NULL, ban_expiry = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [user.id]
+      );
+      user.banned = false;
+      user.ban_reason = null;
+      user.ban_expiry = null;
+    }
+  }
+
   console.log(`[Auth] Login successful - User: ${user.username}`);
 
   // Generate tokens

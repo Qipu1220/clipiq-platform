@@ -67,6 +67,32 @@ export async function getImpressionById(impressionId) {
 }
 
 /**
+ * Get video for impression validation
+ * @param {string} videoId - Video UUID
+ * @returns {Promise<Object|null>} Video record or null
+ */
+export async function getVideoForImpression(videoId) {
+    const result = await pool.query(
+        'SELECT id, status, processing_status FROM videos WHERE id = $1',
+        [videoId]
+    );
+    return result.rows[0] || null;
+}
+
+/**
+ * Check if video exists
+ * @param {string} videoId - Video UUID
+ * @returns {Promise<boolean>}
+ */
+export async function videoExists(videoId) {
+    const result = await pool.query(
+        'SELECT id FROM videos WHERE id = $1',
+        [videoId]
+    );
+    return result.rows.length > 0;
+}
+
+/**
  * Get video IDs seen by user within a time window
  * Used for anti-repeat logic in feed generation
  * @param {string} userId - User UUID
@@ -261,6 +287,8 @@ export async function batchCreateImpressions(userId, sessionId, feedItems, model
 export default {
     createImpression,
     getImpressionById,
+    getVideoForImpression,
+    videoExists,
     getSeenVideoIds,
     getSessionSeenVideos,
     createWatchEvent,

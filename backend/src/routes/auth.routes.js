@@ -11,32 +11,10 @@
 import express from 'express';
 import { login, logout, refreshToken, getMe, updateProfile, uploadAvatar, getSystemStatus, googleLogin, register } from '../controllers/auth.controller.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
-import { body, validationResult } from 'express-validator';
+import { validate } from '../middlewares/validation.middleware.js';
+import { body } from 'express-validator';
 
 const router = express.Router();
-
-/**
- * Validation middleware for express-validator
- */
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      error: 'Validation failed',
-      code: 'VALIDATION_ERROR',
-      message: 'Invalid input data',
-      errors: errors.array().map(err => ({
-        field: err.path,
-        message: err.msg,
-        value: err.value
-      }))
-    });
-  }
-
-  next();
-};
 
 /**
  * POST /api/v1/auth/login

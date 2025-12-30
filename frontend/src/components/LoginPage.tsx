@@ -20,7 +20,7 @@ export function LoginPage() {
   const [showEmailLink, setShowEmailLink] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  
+
   const dispatch = useDispatch<AppDispatch>();
   const { loading, error } = useSelector((state: RootState) => state.auth);
 
@@ -57,7 +57,7 @@ export function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Clear any previous errors
     dispatch(clearError());
     setLocalError(null);
@@ -78,15 +78,15 @@ export function LoginPage() {
           displayName: userCredential.user.displayName || undefined,
           photoURL: userCredential.user.photoURL || undefined
         })).unwrap();
-        
+
         return; // Success, exit
       } catch (firebaseError: any) {
         console.log('Firebase login failed, trying backend:', firebaseError.code);
-        
+
         // If Firebase fails with user-not-found or wrong-password, try backend
-        if (firebaseError.code === 'auth/user-not-found' || 
-            firebaseError.code === 'auth/wrong-password' ||
-            firebaseError.code === 'auth/invalid-credential') {
+        if (firebaseError.code === 'auth/user-not-found' ||
+          firebaseError.code === 'auth/wrong-password' ||
+          firebaseError.code === 'auth/invalid-credential') {
           // Fall through to backend login
         } else if (firebaseError.code === 'auth/invalid-email') {
           setLocalError('Email không hợp lệ');
@@ -162,13 +162,13 @@ export function LoginPage() {
             {/* Logo section - clean & centered */}
             <div className="flex flex-col items-center gap-6 mb-10">
               <div className="flex justify-center">
-                <img 
-                  src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png" 
-                  alt="ShortV Logo" 
+                <img
+                  src="https://res.cloudinary.com/dranb4kom/image/upload/v1764573751/Logo_4x_vacejp.png"
+                  alt="ShortV Logo"
                   className="w-16 h-16 object-contain"
                 />
               </div>
-              
+
               <div className="text-center">
                 <h1 className="text-white text-4xl tracking-tight logo-text">
                   shortv
@@ -192,7 +192,7 @@ export function LoginPage() {
                   disabled={loading}
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="password" className="text-zinc-400 block mb-2 text-sm">
                   Mật khẩu
@@ -219,7 +219,7 @@ export function LoginPage() {
               </div>
 
               {displayError && (
-                <div className="bg-[#ff3b5c]/10 border border-[#ff3b5c]/20 text-[#ff9fb3] p-3.5 rounded-xl text-sm">
+                <div className="bg-[#ff3b5c]/10 border border-[#ff3b5c]/20 text-[#ff9fb3] p-4 rounded-xl text-sm whitespace-pre-line">
                   {displayError}
                 </div>
               )}

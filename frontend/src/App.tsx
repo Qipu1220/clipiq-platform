@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import { store, RootState, AppDispatch } from './store/store';
-import { restoreSessionThunk } from './store/authSlice';
+import { restoreSessionThunk, getCurrentUserThunk } from './store/authSlice';
 import { fetchVideosThunk } from './store/videosSlice';
 import { fetchUserByUsernameThunk } from './store/usersSlice';
 import { isSignInWithEmailLink } from 'firebase/auth';
@@ -20,6 +20,8 @@ import { ReportUser } from './components/user/ReportUser';
 import { PublicUserProfile } from './components/user/PublicUserProfile';
 import { UserProfile } from './components/user/UserProfile';
 import { EmailSignInCallback } from './components/auth/EmailSignInCallback';
+import { WarningBanner } from './components/WarningBanner';
+import { BannedModal } from './components/BannedModal';
 
 function AppContent() {
   const dispatch = useDispatch<AppDispatch>();
@@ -30,7 +32,7 @@ function AppContent() {
 
   const [currentPage, setCurrentPage] = useState('home');
   const [previousPage, setPreviousPage] = useState<string>('home');
-  const [previousContext, setPreviousContext] = useState<{showExplorer: boolean; searchQuery: string}>({showExplorer: false, searchQuery: ''});
+  const [previousContext, setPreviousContext] = useState<{ showExplorer: boolean; searchQuery: string }>({ showExplorer: false, searchQuery: '' });
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
   const [intendedVideoId, setIntendedVideoId] = useState<string | null>(null);
@@ -57,11 +59,11 @@ function AppContent() {
   useEffect(() => {
     const path = window.location.pathname;
     const videoMatch = path.match(/\/video\/([a-zA-Z0-9-]+)/);
-    
+
     if (videoMatch && videoMatch[1]) {
       const videoId = videoMatch[1];
       console.log('🔗 Detected video ID from URL:', videoId);
-      
+
       // If not authenticated, save for after login
       if (!isAuthenticated) {
         setIntendedVideoId(videoId);
@@ -71,7 +73,7 @@ function AppContent() {
         setSelectedVideoId(videoId);
         setCurrentPage('video-player');
       }
-      
+
       // Clean URL without reload
       window.history.replaceState({}, '', '/');
     }
@@ -95,12 +97,12 @@ function AppContent() {
     if (isAuthenticated) {
       console.log('🔄 User authenticated, refetching videos to update like status');
       dispatch(fetchVideosThunk());
-      
+
       // Sync currentUser to allUsers for avatar display
       if (currentUser) {
         dispatch(fetchUserByUsernameThunk(currentUser.username));
       }
-      
+
       // If there was an intended video from shared link, navigate to it
       if (intendedVideoId) {
         console.log('🎯 Navigating to intended video:', intendedVideoId);
@@ -110,6 +112,18 @@ function AppContent() {
       }
     }
   }, [isAuthenticated, dispatch, intendedVideoId, currentUser]);
+
+  // Periodically refresh user data to get updated warnings, ban status, etc.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Refresh user data every 30 seconds
+    const intervalId = setInterval(() => {
+      dispatch(getCurrentUserThunk());
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(intervalId);
+  }, [isAuthenticated, dispatch]);
 
   // Show loading screen while checking session
   if (loading && !isAuthenticated) {
@@ -123,11 +137,11 @@ function AppContent() {
   // Handle email sign-in callback
   if (isEmailSignInCallback) {
     return (
-      <EmailSignInCallback 
+      <EmailSignInCallback
         onComplete={() => {
           setIsEmailSignInCallback(false);
           window.history.replaceState({}, document.title, '/');
-        }} 
+        }}
       />
     );
   }
@@ -142,10 +156,25 @@ function AppContent() {
     return <MaintenanceScreen />;
   }
 
+  // Show banned modal if user is banned (staff and admin bypass this)
+  if (currentUser?.banned && currentUser?.role === 'user') {
+    const isBanActive = !currentUser.banExpiry || new Date(currentUser.banExpiry) > new Date();
+
+    if (isBanActive) {
+      return (
+        <BannedModal
+          banReason={currentUser.banReason}
+          banExpiry={currentUser.banExpiry}
+          isPermanent={!currentUser.banExpiry}
+        />
+      );
+    }
+  }
+
   const handleNavigate = (page: string, tab?: 'for-you' | 'following') => {
     // Track previous page before navigating
     setPreviousPage(currentPage);
-    
+
     // Handle explorer navigation
     if (page === 'explorer') {
       setCurrentPage('home');
@@ -182,7 +211,7 @@ function AppContent() {
 
   const handleViewUserProfile = (username: string) => {
     setPreviousPage(currentPage); // Track where we came from
-    setPreviousContext({showExplorer, searchQuery}); // Track context (explorer/search state)
+    setPreviousContext({ showExplorer, searchQuery }); // Track context (explorer/search state)
     setSelectedUsername(username);
     // If viewing own profile, go to profile page, otherwise go to public profile page
     if (username === currentUser?.username) {
@@ -260,6 +289,11 @@ function AppContent() {
     <div className="h-screen bg-black overflow-hidden">
       {/* Header is now completely hidden - all roles have their own navigation */}
       {renderPage()}
+
+      {/* Warning banner for users with warnings (only show for regular users, not staff/admin) */}
+      {currentUser?.role === 'user' && currentUser?.warnings > 0 && (
+        <WarningBanner warnings={currentUser.warnings} username={currentUser.username} />
+      )}
     </div>
   );
 }
