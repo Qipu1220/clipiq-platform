@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle, UserCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, UserCircle, ShieldAlert, Ban } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { UserReport } from '../../api/reports';
@@ -9,13 +9,17 @@ interface UserReportsProps {
   onViewUserProfile: (username: string) => void;
   onResolveReport: (reportId: string, username: string, shouldWarn: boolean) => void;
   getReportTypeName: (type: string) => string;
+  onWarnUser?: (username: string, reportId: string) => void;
+  onBanUser?: (username: string, reportId: string) => void;
 }
 
 export function UserReports({
   apiUserReports,
   onViewUserProfile,
   onResolveReport,
-  getReportTypeName
+  getReportTypeName,
+  onWarnUser,
+  onBanUser
 }: UserReportsProps) {
   const [userReportsSubTab, setUserReportsSubTab] = useState<'pending' | 'resolved'>('pending');
 
@@ -25,22 +29,20 @@ export function UserReports({
       <div className="flex gap-2 mb-6">
         <Button
           onClick={() => setUserReportsSubTab('pending')}
-          className={`h-10 px-6 rounded-lg transition-all ${
-            userReportsSubTab === 'pending'
-              ? 'bg-[#ff3b5c] text-white'
-              : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-          }`}
+          className={`h-10 px-6 rounded-lg transition-all ${userReportsSubTab === 'pending'
+            ? 'bg-[#ff3b5c] text-white'
+            : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+            }`}
         >
           <AlertTriangle className="w-4 h-4 mr-2" />
           Chưa xử lý ({apiUserReports.filter((r: UserReport) => r.status === 'pending').length})
         </Button>
         <Button
           onClick={() => setUserReportsSubTab('resolved')}
-          className={`h-10 px-6 rounded-lg transition-all ${
-            userReportsSubTab === 'resolved'
-              ? 'bg-[#ff3b5c] text-white'
-              : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-          }`}
+          className={`h-10 px-6 rounded-lg transition-all ${userReportsSubTab === 'resolved'
+            ? 'bg-[#ff3b5c] text-white'
+            : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+            }`}
         >
           <CheckCircle className="w-4 h-4 mr-2" />
           Đã xử lý ({apiUserReports.filter((r: UserReport) => r.status === 'resolved').length})
@@ -67,24 +69,46 @@ export function UserReports({
                 </div>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 size="sm"
-                onClick={() => onViewUserProfile(report.reported_username || '', 'user-reports')}
+                onClick={() => onViewUserProfile(report.reported_username || '')}
                 className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30 h-9 rounded-lg"
               >
                 <UserCircle className="w-4 h-4 mr-2" />
                 Xem profile
               </Button>
               {report.status === 'pending' && (
-                <Button
-                  size="sm"
-                  onClick={() => onResolveReport(report.id, report.reported_username || '', false)}
-                  className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Bỏ qua
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => onResolveReport(report.id, report.reported_username || '', false)}
+                    className="bg-zinc-900/50 hover:bg-zinc-800 text-white border-zinc-800/50 h-9 rounded-lg"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Bỏ qua
+                  </Button>
+                  {onWarnUser && (
+                    <Button
+                      size="sm"
+                      onClick={() => onWarnUser(report.reported_username || '', report.id)}
+                      className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30 h-9 rounded-lg"
+                    >
+                      <ShieldAlert className="w-4 h-4 mr-2" />
+                      Cảnh báo
+                    </Button>
+                  )}
+                  {onBanUser && (
+                    <Button
+                      size="sm"
+                      onClick={() => onBanUser(report.reported_username || '', report.id)}
+                      className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 h-9 rounded-lg"
+                    >
+                      <Ban className="w-4 h-4 mr-2" />
+                      Cấm
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </CardContent>
@@ -100,8 +124,8 @@ export function UserReports({
             )}
           </div>
           <p className="text-zinc-500 text-sm">
-            {userReportsSubTab === 'pending' 
-              ? 'Không có báo cáo chưa xử lý' 
+            {userReportsSubTab === 'pending'
+              ? 'Không có báo cáo chưa xử lý'
               : 'Không có báo cáo đã xử lý'}
           </p>
         </div>
@@ -109,3 +133,4 @@ export function UserReports({
     </div>
   );
 }
+

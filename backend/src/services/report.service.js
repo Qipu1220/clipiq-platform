@@ -14,35 +14,35 @@ import ApiError from '../utils/apiError.js';
  */
 export async function createVideoReport(data) {
   const { videoId, reportedById, reason, description } = data;
-  
+
   // Check if video exists
   const videoQuery = 'SELECT id, uploader_id FROM videos WHERE id = $1';
   const videoResult = await pool.query(videoQuery, [videoId]);
-  
+
   if (videoResult.rows.length === 0) {
     throw new ApiError(404, 'Video not found');
   }
-  
+
   const video = videoResult.rows[0];
-  
+
   // Prevent users from reporting their own videos
   if (video.uploader_id === reportedById) {
     throw new ApiError(400, 'You cannot report your own video');
   }
-  
+
   // Check if user already has a pending report for this video
   const hasReported = await VideoReportModel.hasUserReportedVideo(videoId, reportedById);
-  
+
   if (hasReported) {
     throw new ApiError(409, 'You already have a pending report for this video');
   }
-  
+
   // Validate reason
   const validReasons = ['spam', 'harassment', 'hate', 'violence', 'nudity', 'copyright', 'misleading', 'other'];
   if (!validReasons.includes(reason)) {
     throw new ApiError(400, 'Invalid report reason');
   }
-  
+
   // Create the report
   const report = await VideoReportModel.createVideoReport({
     videoId,
@@ -50,7 +50,7 @@ export async function createVideoReport(data) {
     reason,
     description
   });
-  
+
   return report;
 }
 
@@ -59,11 +59,11 @@ export async function createVideoReport(data) {
  */
 export async function getVideoReportById(reportId) {
   const report = await VideoReportModel.getVideoReportById(reportId);
-  
+
   if (!report) {
     throw new ApiError(404, 'Report not found');
   }
-  
+
   return report;
 }
 
@@ -81,21 +81,21 @@ export async function getAllVideoReports(filters) {
 export async function resolveVideoReport(reportId, action, reviewedById, note) {
   // Get the report
   const report = await VideoReportModel.getVideoReportById(reportId);
-  
+
   if (!report) {
     throw new ApiError(404, 'Report not found');
   }
-  
+
   if (report.status === 'resolved') {
     throw new ApiError(400, 'Report already resolved');
   }
-  
+
   // Validate action
   const validActions = ['dismiss', 'warn_user', 'ban_user', 'delete_content'];
   if (!validActions.includes(action)) {
     throw new ApiError(400, 'Invalid action');
   }
-  
+
   // Update report status
   const updatedReport = await VideoReportModel.updateVideoReportStatus(
     reportId,
@@ -103,7 +103,7 @@ export async function resolveVideoReport(reportId, action, reviewedById, note) {
     reviewedById,
     note || `Action taken: ${action}`
   );
-  
+
   // Perform the action based on the decision
   if (action === 'delete_content') {
     // Delete the video (soft delete - set status to 'deleted')
@@ -122,7 +122,7 @@ export async function resolveVideoReport(reportId, action, reviewedById, note) {
     );
   }
   // If 'dismiss', no additional action needed
-  
+
   return updatedReport;
 }
 
@@ -131,33 +131,33 @@ export async function resolveVideoReport(reportId, action, reviewedById, note) {
  */
 export async function createUserReport(data) {
   const { reportedUserId, reportedById, reason, description } = data;
-  
+
   // Check if reported user exists
   const userQuery = 'SELECT id, username FROM users WHERE id = $1';
   const userResult = await pool.query(userQuery, [reportedUserId]);
-  
+
   if (userResult.rows.length === 0) {
     throw new ApiError(404, 'User not found');
   }
-  
+
   // Prevent users from reporting themselves
   if (reportedUserId === reportedById) {
     throw new ApiError(400, 'You cannot report yourself');
   }
-  
+
   // Check if user already has a pending report for this user
   const hasReported = await UserReportModel.hasUserReportedUser(reportedUserId, reportedById);
-  
+
   if (hasReported) {
     throw new ApiError(409, 'You already have a pending report for this user');
   }
-  
+
   // Validate reason
   const validReasons = ['spam', 'harassment', 'hate', 'violence', 'nudity', 'impersonation', 'fake_account', 'other'];
   if (!validReasons.includes(reason)) {
     throw new ApiError(400, 'Invalid report reason');
   }
-  
+
   // Create the report
   const report = await UserReportModel.createUserReport({
     reportedUserId,
@@ -165,7 +165,7 @@ export async function createUserReport(data) {
     reason,
     description
   });
-  
+
   return report;
 }
 
@@ -174,11 +174,11 @@ export async function createUserReport(data) {
  */
 export async function getUserReportById(reportId) {
   const report = await UserReportModel.getUserReportById(reportId);
-  
+
   if (!report) {
     throw new ApiError(404, 'Report not found');
   }
-  
+
   return report;
 }
 
@@ -196,21 +196,21 @@ export async function getAllUserReports(filters) {
 export async function resolveUserReport(reportId, action, reviewedById, note) {
   // Get the report
   const report = await UserReportModel.getUserReportById(reportId);
-  
+
   if (!report) {
     throw new ApiError(404, 'Report not found');
   }
-  
+
   if (report.status === 'resolved') {
     throw new ApiError(400, 'Report already resolved');
   }
-  
+
   // Validate action
   const validActions = ['dismiss', 'warn_user', 'ban_user', 'delete_content'];
   if (!validActions.includes(action)) {
     throw new ApiError(400, 'Invalid action');
   }
-  
+
   // Update report status
   const updatedReport = await UserReportModel.updateUserReportStatus(
     reportId,
@@ -218,7 +218,7 @@ export async function resolveUserReport(reportId, action, reviewedById, note) {
     reviewedById,
     note || `Action taken: ${action}`
   );
-  
+
   // Perform the action based on the decision
   if (action === 'ban_user') {
     // Ban the reported user
@@ -237,7 +237,7 @@ export async function resolveUserReport(reportId, action, reviewedById, note) {
     await pool.query('DELETE FROM videos WHERE uploader_id = $1', [report.reported_user_id]);
   }
   // If 'dismiss', no additional action needed
-  
+
   return updatedReport;
 }
 
@@ -246,37 +246,37 @@ export async function resolveUserReport(reportId, action, reviewedById, note) {
  */
 export async function createCommentReport(data) {
   const { commentId, reportedById, reason, description } = data;
-  
+
   // Check if comment exists
   const commentQuery = 'SELECT id, user_id FROM comments WHERE id = $1';
   const commentResult = await pool.query(commentQuery, [commentId]);
-  
+
   if (commentResult.rows.length === 0) {
     throw new ApiError(404, 'Comment not found');
   }
-  
+
   const comment = commentResult.rows[0];
-  
+
   // Prevent users from reporting their own comments
   if (comment.user_id === reportedById) {
     throw new ApiError(400, 'You cannot report your own comment');
   }
-  
+
   // Check if user already has a pending report for this comment
   const hasReported = await CommentReportModel.hasUserReportedComment(commentId, reportedById);
-  
+
   if (hasReported) {
     throw new ApiError(409, 'You already have a pending report for this comment');
   }
-  
+
   // Validate reason
   const validReasons = ['spam', 'harassment', 'hate_speech', 'violence_threat', 'sexual_content', 'misinformation', 'impersonation', 'off_topic', 'other'];
   const reasonType = reason.split(':')[0].trim(); // Extract type from "type: details"
-  
+
   if (!validReasons.includes(reasonType)) {
     throw new ApiError(400, 'Invalid report reason');
   }
-  
+
   // Create the report
   const report = await CommentReportModel.createCommentReport({
     commentId,
@@ -284,7 +284,7 @@ export async function createCommentReport(data) {
     reason,
     description
   });
-  
+
   return report;
 }
 
@@ -293,11 +293,11 @@ export async function createCommentReport(data) {
  */
 export async function getCommentReportById(reportId) {
   const report = await CommentReportModel.getCommentReportById(reportId);
-  
+
   if (!report) {
     throw new ApiError(404, 'Report not found');
   }
-  
+
   return report;
 }
 
@@ -315,32 +315,43 @@ export async function getAllCommentReports(filters) {
 export async function resolveCommentReport(reportId, action, reviewedById, note) {
   // Get the report
   const report = await CommentReportModel.getCommentReportById(reportId);
-  
+
   if (!report) {
     throw new ApiError(404, 'Report not found');
   }
-  
+
   if (report.status === 'resolved') {
     throw new ApiError(400, 'Report already resolved');
   }
-  
+
   // Validate action
   const validActions = ['dismiss', 'warn_user', 'ban_user', 'delete_content'];
   if (!validActions.includes(action)) {
     throw new ApiError(400, 'Invalid action');
   }
-  
-  // Update report status
+
+  // IMPORTANT: Update report status FIRST before deleting comment
+  // Because comment_reports has ON DELETE CASCADE, deleting comment would also delete the report
+  const resolutionNote = action === 'delete_content'
+    ? `${note || 'Bình luận đã bị xóa'} | Nội dung gốc: "${report.comment_text || 'N/A'}"`
+    : note || `Action taken: ${action}`;
+
   const updatedReport = await CommentReportModel.updateCommentReportStatus(
     reportId,
     'resolved',
     reviewedById,
-    note || `Action taken: ${action}`
+    resolutionNote
   );
-  
-  // TODO: Execute the action (warn, ban, delete comment)
-  // This will be implemented when we add staff/admin features
-  
+
+  // Execute delete_content action - SOFT DELETE the comment to preserve report FK
+  if (action === 'delete_content') {
+    // Instead of hard DELETE (which triggers CASCADE), soft-delete by updating the text
+    // This preserves the FK relationship and keeps the report in 'resolved' status
+    const softDeleteQuery = "UPDATE comments SET text = '[Đã bị xóa bởi Staff]' WHERE id = $1";
+    await pool.query(softDeleteQuery, [report.comment_id]);
+    console.log(`[ReportService] Soft-deleted comment ${report.comment_id} for report ${reportId}`);
+  }
+
   return updatedReport;
 }
 
@@ -349,11 +360,11 @@ export async function resolveCommentReport(reportId, action, reviewedById, note)
  */
 export async function getVideoReportDetailsService(videoId) {
   const details = await VideoReportModel.getVideoReportDetails(videoId);
-  
+
   if (!details) {
     throw new ApiError(404, 'Video not found');
   }
-  
+
   return details;
 }
 

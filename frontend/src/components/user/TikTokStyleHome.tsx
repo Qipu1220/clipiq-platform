@@ -33,7 +33,7 @@ import {
   AlertDialogTitle,
 } from '../ui/alert-dialog';
 import { toast } from 'sonner';
-import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
+import { reportVideoApi, reportCommentApi } from '../../api/reports';
 import { SearchResults } from './SearchResults';
 import { ExplorerTab } from './ExplorerTab';
 import { copyVideoLink, shareVideoApi, generateShareUrl } from '../../api/share';
@@ -177,7 +177,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
     if (focusedVideoId && videos.length > 0) {
       const index = videos.findIndex(v => v.id === focusedVideoId);
       console.log('[Feed] Handling focusedVideoId:', focusedVideoId, 'found at index:', index);
-      
+
       if (index !== -1) {
         setCurrentVideoIndex(index);
         // Scroll to it after a small delay
@@ -185,10 +185,10 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
           videoRefs.current[index]?.scrollIntoView({ behavior: 'auto' });
         }, 100);
       }
-      
+
       // Clear focusedVideoId in Redux (but keep isProfileNavigation true)
       dispatch(setFocusedVideoId(null));
-      
+
       // Reset isProfileNavigation after navigation is complete
       setTimeout(() => {
         dispatch(setProfileNavigation(false));
@@ -278,7 +278,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
           if (isProfileNavigationRef.current) {
             return;
           }
-          
+
           const index = videoRefs.current.findIndex(ref => ref === entry.target);
           if (index !== -1 && index !== currentVideoIndex) {
             setCurrentVideoIndex(index);
@@ -1142,7 +1142,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
 
           {/* Share */}
           <div className="relative share-menu-container">
-            <button 
+            <button
               onClick={() => setShowShareMenu(!showShareMenu)}
               className="flex flex-col items-center gap-1 group"
             >
@@ -1400,12 +1400,7 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                     )}
                     {currentVideoComments && currentVideoComments.length > 0 && (
                       currentVideoComments.map(comment => {
-                        console.log('Comment Debug:', {
-                          commentId: comment.id,
-                          commentUserId: comment.userId,
-                          currentUserId: currentUser?.id,
-                          isMatch: currentUser?.id === comment.userId
-                        });
+                        const isOwnComment = currentUser?.id === comment.userId;
                         return (
                           <div key={comment.id} className="flex gap-3 group hover:bg-zinc-900/30 p-2 -mx-2 rounded-lg transition-colors">
                             {comment.userAvatarUrl ? (
@@ -1444,31 +1439,38 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                                     <Copy className="w-4 h-4 mr-2" />
                                     Copy bình luận
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setSelectedComment({
-                                        id: comment.id,
-                                        text: comment.text,
-                                        username: comment.username
-                                      });
-                                      setShowCommentReportModal(true);
-                                    }}
-                                    className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
-                                  >
-                                    <Flag className="w-4 h-4 mr-2" />
-                                    Báo cáo
-                                  </DropdownMenuItem>
-                                  {/* Force show delete for debugging */}
-                                  <>
-                                    <DropdownMenuSeparator className="bg-zinc-800" />
+
+                                  {/* Chỉ hiển thị Báo cáo cho bình luận của người khác */}
+                                  {!isOwnComment && (
                                     <DropdownMenuItem
-                                      onClick={() => handleDeleteComment(comment.id)}
-                                      className="text-red-400 hover:text-red-300 hover:bg-zinc-800 focus:text-red-300 focus:bg-zinc-800 cursor-pointer"
+                                      onClick={() => {
+                                        setSelectedComment({
+                                          id: comment.id,
+                                          text: comment.text,
+                                          username: comment.username
+                                        });
+                                        setShowCommentReportModal(true);
+                                      }}
+                                      className="text-zinc-300 hover:text-white hover:bg-zinc-800 focus:text-white focus:bg-zinc-800 cursor-pointer"
                                     >
-                                      <Trash2 className="w-4 h-4 mr-2" />
-                                      Xóa (Debug)
+                                      <Flag className="w-4 h-4 mr-2" />
+                                      Báo cáo
                                     </DropdownMenuItem>
-                                  </>
+                                  )}
+
+                                  {/* Chỉ hiển thị Xóa cho bình luận của chính mình */}
+                                  {isOwnComment && (
+                                    <>
+                                      <DropdownMenuSeparator className="bg-zinc-800" />
+                                      <DropdownMenuItem
+                                        onClick={() => handleDeleteComment(comment.id)}
+                                        className="text-red-400 hover:text-red-300 hover:bg-zinc-800 focus:text-red-300 focus:bg-zinc-800 cursor-pointer"
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Xóa
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
@@ -1521,35 +1523,35 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
                 <ScrollArea className="h-full">
                   <div className="p-4 space-y-2">
                     {videos.filter(v => v.id !== currentVideo.id).slice(0, 12).map((video) => {
-                    const uploader = users.find(u => u.username === video.uploaderUsername);
-                    return (
-                      <button
-                        key={video.id}
-                        onClick={() => setCurrentVideoIndex(videos.findIndex(v => v.id === video.id))}
-                        className="w-full flex gap-3 p-2 rounded-lg hover:bg-zinc-900 transition-colors group"
-                      >
-                        <div className="w-20 h-28 bg-zinc-800 rounded-md overflow-hidden flex-shrink-0">
-                          <ImageWithFallback
-                            src={video.thumbnailUrl || `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=200&h=300&fit=crop`}
-                            alt={video.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          />
-                        </div>
-                        <div className="flex-1 text-left min-w-0">
-                          <p className="text-white text-sm line-clamp-2 mb-1 font-medium">{video.title}</p>
-                          <p className="text-zinc-400 text-xs mb-2">{uploader?.displayName || video.uploaderUsername}</p>
-                          <div className="flex items-center gap-3 text-zinc-500 text-xs">
-                            <span className="flex items-center gap-1">
-                              <Heart className="w-3 h-3" />
-                              {formatCount(video.likes.length)}
-                            </span>
-                            <span>{formatCount(video.views)} views</span>
+                      const uploader = users.find(u => u.username === video.uploaderUsername);
+                      return (
+                        <button
+                          key={video.id}
+                          onClick={() => setCurrentVideoIndex(videos.findIndex(v => v.id === video.id))}
+                          className="w-full flex gap-3 p-2 rounded-lg hover:bg-zinc-900 transition-colors group"
+                        >
+                          <div className="w-20 h-28 bg-zinc-800 rounded-md overflow-hidden flex-shrink-0">
+                            <ImageWithFallback
+                              src={video.thumbnailUrl || `https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=200&h=300&fit=crop`}
+                              alt={video.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
                           </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="text-white text-sm line-clamp-2 mb-1 font-medium">{video.title}</p>
+                            <p className="text-zinc-400 text-xs mb-2">{uploader?.displayName || video.uploaderUsername}</p>
+                            <div className="flex items-center gap-3 text-zinc-500 text-xs">
+                              <span className="flex items-center gap-1">
+                                <Heart className="w-3 h-3" />
+                                {formatCount(video.likes.length)}
+                              </span>
+                              <span>{formatCount(video.views)} views</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </ScrollArea>
               </div>
             )}
@@ -1727,12 +1729,14 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
               <Flag className="w-5 h-5 text-red-500" />
               Xác nhận báo cáo video
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-zinc-400">
-              Bạn có chắc chắn muốn gửi báo cáo này không? Hành động này không thể hoàn tác.
-              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                <p className="text-yellow-500 text-sm">
-                  ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai sự thật có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn. Staff sẽ xem xét kỹ lưỡng báo cáo này.
-                </p>
+            <AlertDialogDescription className="text-zinc-400" asChild>
+              <div>
+                Bạn có chắc chắn muốn gửi báo cáo này không? Hành động này không thể hoàn tác.
+                <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <p className="text-yellow-500 text-sm">
+                    ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai sự thật có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn. Staff sẽ xem xét kỹ lưỡng báo cáo này.
+                  </p>
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1741,18 +1745,27 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                dispatch(addVideoReport({
-                  videoId: currentVideo.id,
-                  userId: currentUser.id,
-                  type: reportType,
-                  reason: reportReason,
-                }));
-                toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
-                setShowReportModal(false);
-                setShowVideoReportConfirm(false);
-                setReportReason('');
-                setReportType('spam');
+              onClick={async () => {
+                try {
+                  const reasonMap: { [key: string]: string } = {
+                    'spam': 'spam',
+                    'inappropriate': 'other',
+                    'violence': 'violence',
+                    'harassment': 'harassment',
+                    'copyright': 'copyright',
+                    'other': 'other'
+                  };
+                  const validReason = reasonMap[reportType] || 'other';
+                  await reportVideoApi(currentVideo.id, validReason, reportReason);
+                  toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
+                  setShowReportModal(false);
+                  setShowVideoReportConfirm(false);
+                  setReportReason('');
+                  setReportType('spam');
+                } catch (error: any) {
+                  const errorMessage = error.response?.data?.message || 'Không thể gửi báo cáo. Vui lòng thử lại.';
+                  toast.error(errorMessage);
+                }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
@@ -1770,12 +1783,14 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
               <Flag className="w-5 h-5 text-red-500" />
               Xác nhận báo cáo bình luận
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-zinc-400">
-              Bạn có chắc chắn muốn báo cáo bình luận của <strong className="text-white">{selectedComment?.username}</strong> không? Hành động này không thể hoàn tác.
-              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                <p className="text-yellow-500 text-sm">
-                  ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn. Hãy chắc chắn rằng bình luận này thực sự vi phạm quy định.
-                </p>
+            <AlertDialogDescription className="text-zinc-400" asChild>
+              <div>
+                Bạn có chắc chắn muốn báo cáo bình luận của <strong className="text-white">{selectedComment?.username}</strong> không? Hành động này không thể hoàn tác.
+                <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <p className="text-yellow-500 text-sm">
+                    ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn. Hãy chắc chắn rằng bình luận này thực sự vi phạm quy định.
+                  </p>
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1784,26 +1799,19 @@ export function TikTokStyleHome({ onViewUserProfile, onNavigate, initialTab = 'f
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
                 if (selectedComment && currentVideo) {
-                  dispatch(addCommentReport({
-                    id: Date.now().toString(),
-                    commentId: selectedComment.id,
-                    commentText: selectedComment.text,
-                    commentUsername: selectedComment.username,
-                    videoId: currentVideo.id,
-                    videoTitle: currentVideo.title,
-                    reportedBy: currentUser!.id,
-                    reportedByUsername: currentUser!.username,
-                    reason: commentReportReason,
-                    timestamp: Date.now(),
-                    status: 'pending',
-                  }));
-                  toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
-                  setShowCommentReportModal(false);
-                  setShowCommentReportConfirm(false);
-                  setSelectedComment(null);
-                  setCommentReportReason('');
+                  try {
+                    await reportCommentApi(selectedComment.id, `other: ${commentReportReason}`, commentReportReason);
+                    toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
+                    setShowCommentReportModal(false);
+                    setShowCommentReportConfirm(false);
+                    setSelectedComment(null);
+                    setCommentReportReason('');
+                  } catch (error: any) {
+                    const errorMessage = error.response?.data?.message || 'Không thể gửi báo cáo. Vui lòng thử lại.';
+                    toast.error(errorMessage);
+                  }
                 }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
 import { likeVideo, addComment, incrementViewCount, fetchVideoByIdThunk } from '../../store/videosSlice';
-import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
+import { reportVideoApi, reportCommentApi } from '../../api/reports';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
 import { Heart, Eye, MessageCircle, Flag, ArrowLeft, User, Bell, BellOff, MoreVertical, Copy, X } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -62,14 +62,14 @@ const fallbackCopy = (text: string) => {
   document.body.appendChild(textArea);
   textArea.focus();
   textArea.select();
-  
+
   try {
     document.execCommand('copy');
     toast.success('Đã copy bình luận');
   } catch (err) {
     toast.error('Không thể copy bình luận');
   }
-  
+
   document.body.removeChild(textArea);
 };
 
@@ -81,14 +81,14 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerProps) {
   const dispatch = useDispatch<AppDispatch>();
-  
+
   // Try to find video in videos array first, fallback to selectedVideo
   const videoFromList = useSelector((state: RootState) =>
     state.videos.videos.find(v => v.id === videoId)
   );
   const selectedVideo = useSelector((state: RootState) => state.videos.selectedVideo);
   const video = videoFromList || (selectedVideo?.id === videoId ? selectedVideo : null);
-  
+
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const users = useSelector((state: RootState) => state.users.allUsers);
   const loading = useSelector((state: RootState) => state.videos.loading);
@@ -139,7 +139,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
         <div className="text-center">
           <p className="text-white text-xl mb-4">Video không tìm thấy</p>
           {onBack && (
-            <button 
+            <button
               onClick={onBack}
               className="px-4 py-2 bg-[#ff3b5c] text-white rounded-lg hover:bg-[#ff1744] transition-colors"
             >
@@ -179,20 +179,18 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
     setShowVideoReportConfirm(true);
   };
 
-  const submitVideoReport = () => {
-    dispatch(addVideoReport({
-      id: Date.now().toString(),
-      videoId,
-      videoTitle: video.title,
-      reportedBy: currentUser.username,
-      reason: reportReason,
-      timestamp: Date.now(),
-      status: 'pending',
-    }));
-    toast.success('Báo cáo video đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
-    setReportReason('');
-    setReportOpen(false);
-    setShowVideoReportConfirm(false);
+  const submitVideoReport = async () => {
+    try {
+      // Call backend API to persist the report
+      await reportVideoApi(videoId, 'other', reportReason);
+      toast.success('Báo cáo video đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
+      setReportReason('');
+      setReportOpen(false);
+      setShowVideoReportConfirm(false);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Không thể gửi báo cáo. Vui lòng thử lại.';
+      toast.error(errorMessage);
+    }
   };
 
   const formatViews = (views: number) => {
@@ -203,7 +201,7 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
 
   const handleSubscribe = () => {
     if (!currentUser || currentUser.username === video.uploader) return;
-    
+
     if (isSubscribed) {
       dispatch(unsubscribeFromUser({
         follower: currentUser.username,
@@ -303,13 +301,13 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
 
                 <div className="p-4 bg-zinc-900 rounded-lg">
                   <div className="flex items-center justify-between mb-3">
-                    <div 
+                    <div
                       className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
                       onClick={() => onViewUserProfile?.(video.uploader)}
                     >
                       {uploaderInfo?.avatarUrl ? (
-                        <img 
-                          src={uploaderInfo.avatarUrl} 
+                        <img
+                          src={uploaderInfo.avatarUrl}
                           alt={video.uploader}
                           className="w-10 h-10 rounded-full object-cover border-2 border-red-600"
                         />
@@ -322,11 +320,11 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
                         {uploaderInfo?.displayName || video.uploader}
                       </p>
                     </div>
-                    
+
                     {currentUser.username !== video.uploader && (
                       <Button
                         onClick={handleSubscribe}
-                        className={isSubscribed 
+                        className={isSubscribed
                           ? "bg-zinc-700 hover:bg-zinc-600 text-white"
                           : "bg-red-600 hover:bg-red-700 text-white"
                         }
@@ -509,26 +507,20 @@ export function VideoPlayer({ videoId, onBack, onViewUserProfile }: VideoPlayerP
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
                 if (selectedComment && video) {
-                  dispatch(addCommentReport({
-                    id: Date.now().toString(),
-                    commentId: selectedComment.id,
-                    commentText: selectedComment.text,
-                    commentUsername: selectedComment.username,
-                    videoId: video.id,
-                    videoTitle: video.title,
-                    reportedBy: currentUser!.id,
-                    reportedByUsername: currentUser!.username,
-                    reason: commentReportReason,
-                    timestamp: Date.now(),
-                    status: 'pending',
-                  }));
-                  toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
-                  setShowCommentReportModal(false);
-                  setShowCommentReportConfirm(false);
-                  setSelectedComment(null);
-                  setCommentReportReason('');
+                  try {
+                    // Call backend API to persist the comment report
+                    await reportCommentApi(selectedComment.id, `other: ${commentReportReason}`, commentReportReason);
+                    toast.success('Báo cáo bình luận đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
+                    setShowCommentReportModal(false);
+                    setShowCommentReportConfirm(false);
+                    setSelectedComment(null);
+                    setCommentReportReason('');
+                  } catch (error: any) {
+                    const errorMessage = error.response?.data?.message || 'Không thể gửi báo cáo. Vui lòng thử lại.';
+                    toast.error(errorMessage);
+                  }
                 }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"

@@ -50,6 +50,7 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
   const [showWarnModal, setShowWarnModal] = useState(false);
   const [warnUsername, setWarnUsername] = useState('');
   const [warnReason, setWarnReason] = useState('');
+  const [pendingUserReportId, setPendingUserReportId] = useState<string | null>(null);
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
@@ -402,12 +403,32 @@ export function StaffDashboard({ onVideoClick, onViewUserProfile }: StaffDashboa
         setIsProcessingAction(true);
         try {
           await staffBanUserApi(banUsername, banReason, durationValue);
+
+          // Auto-resolve the user report if we came from user reports
+          if (pendingUserReportId) {
+            try {
+              await resolveUserReportApi(pendingUserReportId, 'ban_user', `Đã cấm người dùng: ${banReason}`);
+              console.log('✅ Report auto-resolved after ban');
+            } catch (resolveError) {
+              console.error('Failed to auto-resolve report:', resolveError);
+            }
+          }
+
           toast.success(isPermanent ? `Đã cấm vĩnh viễn người dùng ${banUsername}` : `Đã cấm người dùng ${banUsername} trong ${durationValue} ngày`);
           const response = await getAllUsersApi({ page: 1, limit: 100 });
           setApiUsers(response.users);
+
+          // Refresh user reports
+          const [pendingResponse, resolvedResponse] = await Promise.all([
+            getUserReportsApi('pending', 1, 100),
+            getUserReportsApi('resolved', 1, 100)
+          ]);
+          setApiUserReports([...pendingResponse.data.reports, ...resolvedResponse.data.reports]);
+
           setBanUsername('');
           setBanDuration('');
           setBanReason('');
+          setPendingUserReportId(null);
           setShowConfirmModal(false);
           setShowBanModal(false);
         } catch (error: any) {
@@ -459,11 +480,31 @@ Thời hạn: ${durationValue} ngày`,
         try {
           await staffWarnUserApi(warnUsername, warnReason, durationValue);
           console.log('✅ Warning successful');
+
+          // Auto-resolve the user report if we came from user reports
+          if (pendingUserReportId) {
+            try {
+              await resolveUserReportApi(pendingUserReportId, 'warn_user', `Đã cảnh báo người dùng: ${warnReason}`);
+              console.log('✅ Report auto-resolved');
+            } catch (resolveError) {
+              console.error('Failed to auto-resolve report:', resolveError);
+            }
+          }
+
           toast.success(`Đã cảnh báo người dùng ${warnUsername}`);
           const response = await getAllUsersApi({ page: 1, limit: 100 });
           setApiUsers(response.users);
+
+          // Refresh user reports
+          const [pendingResponse, resolvedResponse] = await Promise.all([
+            getUserReportsApi('pending', 1, 100),
+            getUserReportsApi('resolved', 1, 100)
+          ]);
+          setApiUserReports([...pendingResponse.data.reports, ...resolvedResponse.data.reports]);
+
           setWarnUsername('');
           setWarnReason('');
+          setPendingUserReportId(null);
           setShowConfirmModal(false);
           setShowWarnModal(false);
         } catch (error: any) {
@@ -538,6 +579,19 @@ Thời hạn: ${durationValue} ngày`,
                 onViewUserProfile={onViewUserProfile}
                 onResolveReport={handleResolveUserReport}
                 getReportTypeName={getReportTypeName}
+                onWarnUser={(username, reportId) => {
+                  setWarnUsername(username);
+                  setWarnReason('');
+                  setPendingUserReportId(reportId);
+                  setShowWarnModal(true);
+                }}
+                onBanUser={(username, reportId) => {
+                  setBanUsername(username);
+                  setBanReason('');
+                  setBanDuration('');
+                  setPendingUserReportId(reportId);
+                  setShowBanModal(true);
+                }}
               />
             )}
 

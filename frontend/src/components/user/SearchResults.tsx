@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '../ui/dropdown-menu';
-import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
+import { reportVideoApi, reportCommentApi } from '../../api/reports';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -67,13 +67,13 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [isLiking, setIsLiking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // Report states
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportType, setReportType] = useState('spam');
   const [reportReason, setReportReason] = useState('');
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
-  
+
   // Comment report states
   const [showCommentReportModal, setShowCommentReportModal] = useState(false);
   const [selectedComment, setSelectedComment] = useState<any>(null);
@@ -90,12 +90,12 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
   // Handle wheel event to change videos in modal
   const handleWheel = (e: WheelEvent) => {
     if (!showVideoModal || searchResults.length === 0) return;
-    
+
     const target = e.target as HTMLElement;
     if (target.closest('.sidebar-scroll')) return;
-    
+
     e.preventDefault();
-    
+
     if (e.deltaY > 0) {
       const nextIndex = (currentVideoIndex + 1) % searchResults.length;
       setCurrentVideoIndex(nextIndex);
@@ -149,15 +149,15 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
 
   const handleLike = async () => {
     if (!selectedVideo || !currentUser || isLiking) return;
-    
+
     setIsLiking(true);
     setLikeAnimation(true);
     setTimeout(() => setLikeAnimation(false), 500);
-    
+
     // Get fresh state from Redux to avoid stale local state
     const videoFromRedux = searchResults.find((v: any) => v.id === selectedVideo.id);
     const currentIsLiked = !!(videoFromRedux?.isLiked || selectedVideo.isLiked);
-    
+
     try {
       await dispatch(toggleLikeVideoThunk({ videoId: selectedVideo.id, isLiked: currentIsLiked })).unwrap();
       // No need for optimistic update - useEffect will sync selectedVideo from searchResults
@@ -170,11 +170,11 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
 
   const handleSave = async () => {
     if (!selectedVideo || !currentUser || isSaving) return;
-    
+
     setIsSaving(true);
     setBookmarkAnimation(true);
     setTimeout(() => setBookmarkAnimation(false), 500);
-    
+
     try {
       await dispatch(toggleSaveVideoThunk(selectedVideo.id)).unwrap();
       const wasSaved = !!selectedVideo.isSaved;
@@ -189,7 +189,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
 
   const handleComment = async () => {
     if (!commentText.trim() || !selectedVideo || !currentUser) return;
-    
+
     try {
       await dispatch(addCommentThunk({
         videoId: selectedVideo.id,
@@ -204,7 +204,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
 
   const handleDeleteComment = async (commentId: string) => {
     if (!selectedVideo) return;
-    
+
     try {
       await dispatch(deleteCommentThunk({ videoId: selectedVideo.id, commentId })).unwrap();
       toast.success('Đã xóa bình luận');
@@ -217,7 +217,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
     if (!currentUser || !selectedVideo || currentUser.username === selectedVideo.uploaderUsername) return;
 
     const isSubscribed = subscriptions[currentUser.username]?.includes(selectedVideo.uploaderUsername);
-    
+
     setFollowAnimation(true);
     setTimeout(() => setFollowAnimation(false), 500);
 
@@ -553,7 +553,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                 <div className="p-4 space-y-4 pb-20">
                   {/* User Info */}
                   <div className="flex items-center justify-between">
-                    <div 
+                    <div
                       className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
                       onClick={() => handleUserClickFromModal(selectedVideo.uploaderUsername)}
                     >
@@ -580,11 +580,10 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                       <Button
                         onClick={handleSubscribe}
                         size="sm"
-                        className={`${
-                          isSubscribed
+                        className={`${isSubscribed
                             ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
                             : 'bg-[#ff3b5c] hover:bg-[#e6344f] text-white'
-                        } transition-all ${followAnimation ? 'scale-110' : 'scale-100'}`}
+                          } transition-all ${followAnimation ? 'scale-110' : 'scale-100'}`}
                       >
                         {isSubscribed ? 'Đang follow' : 'Follow'}
                       </Button>
@@ -601,9 +600,8 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                   <div className="flex items-center gap-3 py-2 border-y border-zinc-800">
                     <button
                       onClick={handleLike}
-                      className={`flex items-center gap-1.5 transition-all ${
-                        selectedVideo.isLiked ? 'text-[#ff3b5c]' : 'text-zinc-400 hover:text-white'
-                      } ${likeAnimation ? 'scale-125' : 'scale-100'}`}
+                      className={`flex items-center gap-1.5 transition-all ${selectedVideo.isLiked ? 'text-[#ff3b5c]' : 'text-zinc-400 hover:text-white'
+                        } ${likeAnimation ? 'scale-125' : 'scale-100'}`}
                     >
                       <Heart className={`w-5 h-5 ${selectedVideo.isLiked ? 'fill-current' : ''}`} />
                       <span className="text-sm font-medium">{formatCount(selectedVideo.likes || 0)}</span>
@@ -617,9 +615,8 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                     <button
                       onClick={handleSave}
                       title="Lưu video"
-                      className={`flex items-center gap-1.5 transition-all ${
-                        selectedVideo.isSaved ? 'text-yellow-500' : 'text-zinc-400 hover:text-white'
-                      } ${bookmarkAnimation ? 'scale-125' : 'scale-100'}`}
+                      className={`flex items-center gap-1.5 transition-all ${selectedVideo.isSaved ? 'text-yellow-500' : 'text-zinc-400 hover:text-white'
+                        } ${bookmarkAnimation ? 'scale-125' : 'scale-100'}`}
                     >
                       <Bookmark className={`w-5 h-5 ${selectedVideo.isSaved ? 'fill-current' : ''}`} />
                     </button>
@@ -705,7 +702,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                                   onClick={() => handleUserClickFromModal(comment.username)}
                                 />
                               ) : (
-                                <div 
+                                <div
                                   className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 cursor-pointer"
                                   onClick={() => handleUserClickFromModal(comment.username)}
                                 >
@@ -714,7 +711,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                               )}
                               <div className="flex-1">
                                 <div className="bg-zinc-800 rounded-lg p-2">
-                                  <p 
+                                  <p
                                     className="text-white text-sm font-medium cursor-pointer hover:text-[#ff3b5c]"
                                     onClick={() => handleUserClickFromModal(comment.username)}
                                   >
@@ -732,7 +729,7 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
                                     <Copy className="w-3 h-3" />
                                     Copy
                                   </button>
-                                  
+
                                   {currentUser?.username === comment.username ? (
                                     <button
                                       onClick={() => handleDeleteComment(comment.id)}
@@ -940,12 +937,14 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
               <Flag className="w-5 h-5 text-red-500" />
               Xác nhận báo cáo video
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-zinc-400">
-              Bạn có chắc chắn muốn gửi báo cáo này không? Hành động này không thể hoàn tác.
-              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                <p className="text-yellow-500 text-sm">
-                  ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai sự thật có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn.
-                </p>
+            <AlertDialogDescription className="text-zinc-400" asChild>
+              <div>
+                Bạn có chắc chắn muốn gửi báo cáo này không? Hành động này không thể hoàn tác.
+                <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <p className="text-yellow-500 text-sm">
+                    ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai sự thật có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn.
+                  </p>
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -954,19 +953,30 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
                 if (currentUser && selectedVideo) {
-                  dispatch(addVideoReport({
-                    videoId: selectedVideo.id,
-                    userId: currentUser.id,
-                    type: reportType,
-                    reason: reportReason,
-                  }));
-                  toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
-                  setShowReportModal(false);
-                  setShowVideoReportConfirm(false);
-                  setReportReason('');
-                  setReportType('spam');
+                  try {
+                    const reasonMap: { [key: string]: string } = {
+                      'spam': 'spam',
+                      'harassment': 'harassment',
+                      'hate': 'hate',
+                      'violence': 'violence',
+                      'nudity': 'other',
+                      'copyright': 'copyright',
+                      'misleading': 'misleading',
+                      'other': 'other'
+                    };
+                    const validReason = reasonMap[reportType] || 'other';
+                    await reportVideoApi(selectedVideo.id, validReason, reportReason);
+                    toast.success('Báo cáo đã được gửi thành công! Staff sẽ xem xét trong 24-48 giờ.');
+                    setShowReportModal(false);
+                    setShowVideoReportConfirm(false);
+                    setReportReason('');
+                    setReportType('spam');
+                  } catch (error: any) {
+                    const errorMessage = error.response?.data?.message || 'Không thể gửi báo cáo. Vui lòng thử lại.';
+                    toast.error(errorMessage);
+                  }
                 }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"
@@ -985,12 +995,14 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
               <Flag className="w-5 h-5 text-red-500" />
               Xác nhận báo cáo bình luận
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-zinc-400">
-              Bạn có chắc chắn muốn báo cáo bình luận của <strong className="text-white">{selectedComment?.username}</strong> không?
-              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                <p className="text-yellow-500 text-sm">
-                  ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn.
-                </p>
+            <AlertDialogDescription className="text-zinc-400" asChild>
+              <div>
+                Bạn có chắc chắn muốn báo cáo bình luận của <strong className="text-white">{selectedComment?.username}</strong> không?
+                <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <p className="text-yellow-500 text-sm">
+                    ⚠️ <strong>Cảnh báo:</strong> Báo cáo sai có thể dẫn đến việc tài khoản của bạn bị hạn chế hoặc khóa vĩnh viễn.
+                  </p>
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -999,26 +1011,19 @@ export function SearchResults({ searchQuery, onVideoClick, onUserClick }: Search
               Hủy bỏ
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
                 if (selectedComment && selectedVideo && currentUser) {
-                  dispatch(addCommentReport({
-                    id: Date.now().toString(),
-                    commentId: selectedComment.id,
-                    commentText: selectedComment.text,
-                    commentUsername: selectedComment.username,
-                    videoId: selectedVideo.id,
-                    videoTitle: selectedVideo.title,
-                    reporterId: currentUser.id,
-                    reporterUsername: currentUser.username,
-                    reason: commentReportReason,
-                    timestamp: new Date().toISOString(),
-                    status: 'pending',
-                  }));
-                  toast.success('Báo cáo bình luận đã được gửi!');
-                  setShowCommentReportModal(false);
-                  setShowCommentReportConfirm(false);
-                  setSelectedComment(null);
-                  setCommentReportReason('');
+                  try {
+                    await reportCommentApi(selectedComment.id, `other: ${commentReportReason}`, commentReportReason);
+                    toast.success('Báo cáo bình luận đã được gửi!');
+                    setShowCommentReportModal(false);
+                    setShowCommentReportConfirm(false);
+                    setSelectedComment(null);
+                    setCommentReportReason('');
+                  } catch (error: any) {
+                    const errorMessage = error.response?.data?.message || 'Không thể gửi báo cáo. Vui lòng thử lại.';
+                    toast.error(errorMessage);
+                  }
                 }
               }}
               className="bg-red-600 hover:bg-red-700 text-white"

@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
-import { getVideoReportDetailsApi, banUserApi, warnUserApi } from '../../api/admin';
+import { getVideoReportDetailsApi, staffBanUserApi, staffWarnUserApi } from '../../api/admin';
 import { toast } from 'sonner';
 
 interface VideoReportReviewProps {
@@ -65,15 +65,15 @@ export function VideoReportReview({ videoId, onBack }: VideoReportReviewProps) {
   const [details, setDetails] = useState<VideoDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [videoError, setVideoError] = useState(false);
-  
+
   // Modal states
   const [showBanModal, setShowBanModal] = useState(false);
   const [banDuration, setBanDuration] = useState('');
   const [banReason, setBanReason] = useState('');
-  
+
   const [showWarnModal, setShowWarnModal] = useState(false);
   const [warnReason, setWarnReason] = useState('');
-  
+
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     type: string;
@@ -128,30 +128,30 @@ export function VideoReportReview({ videoId, onBack }: VideoReportReviewProps) {
 
   const handleBanUser = async () => {
     if (!details) return;
-    
+
     if (!banReason) {
       toast.error('Vui lòng nhập lý do cấm!');
       return;
     }
-    
+
     const durationValue = banDuration ? parseInt(banDuration, 10) : null;
     if (durationValue !== null && (Number.isNaN(durationValue) || durationValue <= 0)) {
       toast.error('Thời hạn cấm phải là số ngày hợp lệ!');
       return;
     }
     const isPermanent = !durationValue;
-    
+
     setConfirmAction({
       type: isPermanent ? 'ban-permanent' : 'ban-temp',
       title: isPermanent ? 'Cấm vĩnh viễn người dùng' : 'Cấm tạm thời người dùng',
-      message: isPermanent 
+      message: isPermanent
         ? `Bạn có chắc muốn cấm vĩnh viễn người dùng ${details.uploader.username}?`
         : `Bạn có chắc muốn cấm người dùng ${details.uploader.username} trong ${durationValue} ngày?`,
       confirmText: isPermanent ? 'Cấm vĩnh viễn' : 'Cấm tạm thời',
       confirmColor: '#ff3b5c',
       onConfirm: async () => {
         try {
-          await banUserApi(details.uploader.username, banReason, durationValue);
+          await staffBanUserApi(details.uploader.username, banReason, durationValue || undefined);
           toast.success(isPermanent ? `Đã cấm vĩnh viễn người dùng ${details.uploader.username}` : `Đã cấm người dùng ${details.uploader.username} trong ${durationValue} ngày`);
           setBanDuration('');
           setBanReason('');
@@ -173,16 +173,16 @@ export function VideoReportReview({ videoId, onBack }: VideoReportReviewProps) {
 
   const handleWarnUser = async () => {
     if (!details) return;
-    
+
     if (!warnReason) {
       toast.error('Vui lòng nhập lý do cảnh báo!');
       return;
     }
-    
+
     const currentWarnings = details.uploader.warnings || 0;
     const durationValue = currentWarnings === 0 ? 30 : currentWarnings === 1 ? 60 : 90;
     const warningLevel = currentWarnings + 1;
-    
+
     setConfirmAction({
       type: 'warn-user',
       title: 'Cảnh báo người dùng',
@@ -191,7 +191,7 @@ export function VideoReportReview({ videoId, onBack }: VideoReportReviewProps) {
       confirmColor: '#eab308',
       onConfirm: async () => {
         try {
-          await warnUserApi(details.uploader.username, warnReason, durationValue);
+          await staffWarnUserApi(details.uploader.username, warnReason, durationValue);
           toast.success(`Đã cảnh báo người dùng ${details.uploader.username}`);
           setWarnReason('');
           setShowConfirmModal(false);
@@ -324,11 +324,17 @@ export function VideoReportReview({ videoId, onBack }: VideoReportReviewProps) {
                     <div key={report.id} className="bg-zinc-900/50 rounded-lg p-4 border border-red-900/30 hover:border-red-800/50 transition-all">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <ImageWithFallback
-                            src={report.reporter.avatarUrl}
-                            alt={report.reporter.username}
-                            className="w-6 h-6 rounded-full"
-                          />
+                          {report.reporter.avatarUrl ? (
+                            <img
+                              src={report.reporter.avatarUrl}
+                              alt={report.reporter.username}
+                              className="w-6 h-6 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center">
+                              <User className="w-3 h-3 text-zinc-500" />
+                            </div>
+                          )}
                           <span className="text-zinc-300 text-sm font-medium">
                             @{report.reporter.username}
                           </span>
@@ -341,11 +347,10 @@ export function VideoReportReview({ videoId, onBack }: VideoReportReviewProps) {
                         <span className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded">
                           {getReportTypeName(report.reason)}
                         </span>
-                        <span className={`text-xs px-2 py-1 rounded ${
-                          report.status === 'pending' 
-                            ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-green-500/20 text-green-400'
-                        }`}>
+                        <span className={`text-xs px-2 py-1 rounded ${report.status === 'pending'
+                          ? 'bg-yellow-500/20 text-yellow-400'
+                          : 'bg-green-500/20 text-green-400'
+                          }`}>
                           {report.status === 'pending' ? 'Chờ xử lý' : 'Đã xử lý'}
                         </span>
                       </div>
@@ -379,11 +384,17 @@ export function VideoReportReview({ videoId, onBack }: VideoReportReviewProps) {
                     details.comments.map((comment) => (
                       <div key={comment.id} className="bg-zinc-800/30 rounded-lg p-3">
                         <div className="flex items-start gap-3">
-                          <ImageWithFallback
-                            src={comment.user.avatarUrl}
-                            alt={comment.user.username}
-                            className="w-8 h-8 rounded-full"
-                          />
+                          {comment.user.avatarUrl ? (
+                            <img
+                              src={comment.user.avatarUrl}
+                              alt={comment.user.username}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
+                              <User className="w-4 h-4 text-zinc-500" />
+                            </div>
+                          )}
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-white text-sm font-medium">
@@ -420,11 +431,17 @@ export function VideoReportReview({ videoId, onBack }: VideoReportReviewProps) {
                 </div>
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
-                    <ImageWithFallback
-                      src={details.uploader.avatarUrl}
-                      alt={details.uploader.username}
-                      className="w-16 h-16 rounded-full border-2 border-zinc-700"
-                    />
+                    {details.uploader.avatarUrl ? (
+                      <img
+                        src={details.uploader.avatarUrl}
+                        alt={details.uploader.username}
+                        className="w-16 h-16 rounded-full border-2 border-zinc-700 object-cover"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full border-2 border-zinc-700 bg-zinc-800 flex items-center justify-center">
+                        <User className="w-8 h-8 text-zinc-500" />
+                      </div>
+                    )}
                     <div className="flex-1">
                       <h3 className="text-white font-semibold">
                         {details.uploader.displayName || details.uploader.username}

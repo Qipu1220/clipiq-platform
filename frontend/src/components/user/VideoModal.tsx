@@ -32,7 +32,7 @@ import {
   deleteCommentThunk
 } from '../../store/videosSlice';
 import { subscribeToUser, unsubscribeFromUser } from '../../store/notificationsSlice';
-import { addVideoReport, addCommentReport } from '../../store/reportsSlice';
+import { reportVideoApi, reportCommentApi } from '../../api/reports';
 import { copyVideoLink, shareVideoApi, generateShareUrl } from '../../api/share';
 import { toast } from 'sonner';
 
@@ -84,7 +84,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
   const [reportType, setReportType] = useState('spam');
   const [reportReason, setReportReason] = useState('');
   const [showVideoReportConfirm, setShowVideoReportConfirm] = useState(false);
-  
+
   // Comment report states
   const [showCommentReportModal, setShowCommentReportModal] = useState(false);
   const [selectedComment, setSelectedComment] = useState<any>(null);
@@ -123,9 +123,9 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
     const handleWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('.sidebar-scroll')) return;
-      
+
       e.preventDefault();
-      
+
       if (e.deltaY > 0) {
         const nextIndex = (currentIndex + 1) % videos.length;
         setCurrentIndex(nextIndex);
@@ -187,9 +187,9 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
     }));
 
     try {
-      await dispatch(toggleLikeVideoThunk({ 
-        videoId: selectedVideo.id, 
-        isLiked: currentIsLiked 
+      await dispatch(toggleLikeVideoThunk({
+        videoId: selectedVideo.id,
+        isLiked: currentIsLiked
       })).unwrap();
     } catch (error) {
       // Revert on error
@@ -250,7 +250,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
 
   const handleDeleteComment = async (commentId: string) => {
     if (!selectedVideo) return;
-    
+
     try {
       await dispatch(deleteCommentThunk({ videoId: selectedVideo.id, commentId })).unwrap();
       toast.success('Đã xóa bình luận');
@@ -317,28 +317,39 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
   };
 
   // Handle video report
-  const handleVideoReport = () => {
+  const handleVideoReport = async () => {
     if (!selectedVideo || !currentUser) return;
-    dispatch(addVideoReport({
-      videoId: selectedVideo.id,
-      reporterUsername: currentUser.username,
-      type: reportType,
-      reason: reportReason
-    }));
-    setShowReportModal(false);
-    setShowVideoReportConfirm(true);
+    try {
+      // Map frontend reportType to backend valid reasons
+      const reasonMap: { [key: string]: string } = {
+        'spam': 'spam',
+        'inappropriate': 'other',
+        'violence': 'violence',
+        'harassment': 'harassment',
+        'copyright': 'copyright',
+        'other': 'other'
+      };
+      const validReason = reasonMap[reportType] || 'other';
+      await reportVideoApi(selectedVideo.id, validReason, reportReason);
+      setShowReportModal(false);
+      setShowVideoReportConfirm(true);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Không thể gửi báo cáo. Vui lòng thử lại.';
+      toast.error(errorMessage);
+    }
   };
 
   // Handle comment report
-  const handleCommentReport = () => {
+  const handleCommentReport = async () => {
     if (!selectedComment || !currentUser) return;
-    dispatch(addCommentReport({
-      commentId: selectedComment.id,
-      reporterUsername: currentUser.username,
-      reason: commentReportReason
-    }));
-    setShowCommentReportModal(false);
-    setShowCommentReportConfirm(true);
+    try {
+      await reportCommentApi(selectedComment.id, `other: ${commentReportReason}`, commentReportReason);
+      setShowCommentReportModal(false);
+      setShowCommentReportConfirm(true);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Không thể gửi báo cáo. Vui lòng thử lại.';
+      toast.error(errorMessage);
+    }
   };
 
   // Handle user click - close modal and navigate
@@ -410,7 +421,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
             <div className="p-4 space-y-4 pb-20">
               {/* User Info */}
               <div className="flex items-center justify-between">
-                <div 
+                <div
                   className="flex items-center gap-3 cursor-pointer"
                   onClick={() => {
                     handleClose();
@@ -440,11 +451,10 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
                   <Button
                     onClick={handleSubscribe}
                     size="sm"
-                    className={`${
-                      isSubscribed
-                        ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
-                        : 'bg-[#ff3b5c] hover:bg-[#e6344f] text-white'
-                    } transition-all ${followAnimation ? 'scale-110' : 'scale-100'}`}
+                    className={`${isSubscribed
+                      ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                      : 'bg-[#ff3b5c] hover:bg-[#e6344f] text-white'
+                      } transition-all ${followAnimation ? 'scale-110' : 'scale-100'}`}
                   >
                     {isSubscribed ? 'Đang follow' : 'Follow'}
                   </Button>
@@ -461,9 +471,8 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
               <div className="flex items-center gap-4 py-2 border-y border-zinc-800">
                 <button
                   onClick={handleLike}
-                  className={`flex items-center gap-2 transition-all ${
-                    localVideoState.isLiked ? 'text-[#ff3b5c]' : 'text-zinc-400 hover:text-white'
-                  } ${likeAnimation ? 'scale-125' : 'scale-100'}`}
+                  className={`flex items-center gap-2 transition-all ${localVideoState.isLiked ? 'text-[#ff3b5c]' : 'text-zinc-400 hover:text-white'
+                    } ${likeAnimation ? 'scale-125' : 'scale-100'}`}
                 >
                   <Heart className={`w-5 h-5 ${localVideoState.isLiked ? 'fill-current' : ''}`} />
                   <span className="text-sm font-medium">{formatCount(localVideoState.likes)}</span>
@@ -478,9 +487,8 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
 
                 <button
                   onClick={handleSave}
-                  className={`flex items-center gap-2 transition-all ${
-                    localVideoState.isSaved ? 'text-yellow-500' : 'text-zinc-400 hover:text-white'
-                  } ${bookmarkAnimation ? 'scale-125' : 'scale-100'}`}
+                  className={`flex items-center gap-2 transition-all ${localVideoState.isSaved ? 'text-yellow-500' : 'text-zinc-400 hover:text-white'
+                    } ${bookmarkAnimation ? 'scale-125' : 'scale-100'}`}
                 >
                   <Bookmark className={`w-5 h-5 ${localVideoState.isSaved ? 'fill-current' : ''}`} />
                 </button>
@@ -570,7 +578,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
                               onClick={() => handleUserClick(comment.username)}
                             />
                           ) : (
-                            <div 
+                            <div
                               className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 cursor-pointer"
                               onClick={() => handleUserClick(comment.username)}
                             >
@@ -579,7 +587,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
                           )}
                           <div className="flex-1">
                             <div className="bg-zinc-800 rounded-lg p-2">
-                              <p 
+                              <p
                                 className="text-white text-sm font-medium cursor-pointer hover:text-[#ff3b5c]"
                                 onClick={() => handleUserClick(comment.username)}
                               >
@@ -639,7 +647,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
               <AlertTriangle className="w-5 h-5 text-yellow-500" />
               Báo cáo video
             </h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="text-zinc-400 text-sm mb-2 block">Loại vi phạm</label>
@@ -656,7 +664,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
                   <option value="other">Khác</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="text-zinc-400 text-sm mb-2 block">Chi tiết (tùy chọn)</label>
                 <Textarea
@@ -668,7 +676,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
                 />
               </div>
             </div>
-            
+
             <div className="flex gap-3 mt-6">
               <Button
                 onClick={() => setShowReportModal(false)}
@@ -696,12 +704,12 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
               <AlertTriangle className="w-5 h-5 text-yellow-500" />
               Báo cáo bình luận
             </h3>
-            
+
             <div className="bg-zinc-800 rounded-lg p-3 mb-4">
               <p className="text-zinc-400 text-sm">Bình luận của @{selectedComment.username}:</p>
               <p className="text-white text-sm mt-1">"{selectedComment.text}"</p>
             </div>
-            
+
             <div>
               <label className="text-zinc-400 text-sm mb-2 block">Lý do báo cáo</label>
               <Textarea
@@ -712,7 +720,7 @@ export function VideoModal({ videos, initialIndex, isOpen, onClose, onUserClick 
                 rows={3}
               />
             </div>
-            
+
             <div className="flex gap-3 mt-6">
               <Button
                 onClick={() => {

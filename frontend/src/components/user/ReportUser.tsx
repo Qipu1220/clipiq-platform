@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { addUserReport } from '../../store/reportsSlice';
+import { reportUserApi } from '../../api/reports';
 import { RootState } from '../../store/store';
 import { Flag, AlertTriangle } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -40,22 +40,21 @@ export function ReportUser() {
     setShowConfirm(true);
   };
 
-  const confirmSubmit = () => {
-    dispatch(addUserReport({
-      id: Date.now().toString(),
-      reportedUser,
-      reportedBy: currentUser!.username,
-      reason,
-      timestamp: Date.now(),
-      status: 'pending',
-    }));
-
-    toast.success('Báo cáo người dùng đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
-    setReportedUser('');
-    setReason('');
-    setSuccess(true);
-    setShowConfirm(false);
-    setTimeout(() => setSuccess(false), 3000);
+  const confirmSubmit = async () => {
+    try {
+      // Map reason to a valid backend reason type
+      await reportUserApi(reportedUser, 'other', reason);
+      toast.success('Báo cáo người dùng đã được gửi! Staff sẽ xem xét trong 24-48 giờ.');
+      setReportedUser('');
+      setReason('');
+      setSuccess(true);
+      setShowConfirm(false);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Không thể gửi báo cáo. Vui lòng thử lại.';
+      toast.error(errorMessage);
+      setShowConfirm(false);
+    }
   };
 
   return (
