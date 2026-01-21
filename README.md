@@ -71,7 +71,31 @@
 
 ---
 
-## 🛠️ Tech Stack
+## � UI Showcase
+
+### User Interface
+<p align="center">
+  <img src="images/User_Home.png" alt="User Home Feed" width="100%">
+  <br>
+  <em>Personalized Home Feed</em>
+</p>
+
+<p align="center">
+  <img src="images/User_Profile.png" alt="User Profile" width="100%">
+  <br>
+  <em>User Profile & Video Management</em>
+</p>
+
+### Staff & Admin Interface
+<p align="center">
+  <img src="images/Staff.png" alt="Staff Dashboard" width="100%">
+  <br>
+  <em>Staff Dashboard for Content Moderation</em>
+</p>
+
+---
+
+## �🛠️ Tech Stack
 
 ### Backend
 | Technology | Purpose |
