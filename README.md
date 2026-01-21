@@ -71,7 +71,7 @@
 
 ---
 
-## � UI Showcase
+## UI Showcase
 
 ### User Interface
 <p align="center">
@@ -95,7 +95,7 @@
 
 ---
 
-## �🛠️ Tech Stack
+## 🛠️ Tech Stack
 
 ### Backend
 | Technology | Purpose |
